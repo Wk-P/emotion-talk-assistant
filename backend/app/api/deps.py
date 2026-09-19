@@ -29,7 +29,13 @@ async def get_current_user_optional(
     if not user_id:
         return None
     result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    # A disabled account's still-valid JWT (up to 30 days old, see
+    # app/services/auth.py) must stop working immediately, not just at their
+    # next login — treat it the same as no credential at all.
+    if user is not None and not user.is_active:
+        return None
+    return user
 
 
 async def get_current_user_required(user: User | None = Depends(get_current_user_optional)) -> User:

@@ -28,6 +28,7 @@ onMounted(async () => {
 
     <section>
       <h2>{{ t('help.resourcesTitle') }}</h2>
+      <p v-if="resources.length === 0" class="empty">{{ t('help.resourcesEmpty') }}</p>
       <div v-for="r in resources" :key="r.id" class="resource">
         <div class="name">{{ r.name[locale] ?? r.name.ko }}</div>
         <div class="desc">{{ r.description[locale] ?? r.description.ko }}</div>
@@ -89,5 +90,9 @@ p {
 }
 .contact a {
   color: var(--accent);
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
 }
 </style>

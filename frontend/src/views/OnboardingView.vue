@@ -40,7 +40,7 @@ async function start() {
 
     <h1 class="reveal" style="animation-delay: 0.06s">{{ t('app.title') }}</h1>
 
-    <p v-if="auth.user" class="welcome reveal" style="animation-delay: 0.08s">
+    <p v-if="auth.user" class="welcome reveal" style="animation-delay: 0.08s" :title="auth.user.email">
       {{ t('onboarding.welcomeBack', { email: auth.user.email }) }}
     </p>
 
@@ -63,19 +63,33 @@ async function start() {
       </button>
     </div>
 
-    <p class="intro reveal" style="animation-delay: 0.14s">{{ t('onboarding.intro') }}</p>
-    <p class="note reveal" style="animation-delay: 0.18s">{{ t('onboarding.consentNote') }}</p>
-
-    <div class="cta reveal" style="animation-delay: 0.22s">
-      <template v-if="auth.user">
+    <!-- Returning user: they've already read the full disclaimer once, so
+         skip straight to the actions instead of re-showing both long
+         paragraphs above the fold every time. Full text stays one tap away
+         via 帮助. -->
+    <template v-if="auth.user">
+      <div class="cta reveal" style="animation-delay: 0.14s">
         <button class="btn-primary start" type="button" :disabled="starting" @click="start">
           {{ t('onboarding.start') }}
         </button>
         <button class="btn-outline" type="button" @click="router.push('/history')">
           {{ t('toolbar.history') }}
         </button>
-      </template>
-      <template v-else>
+      </div>
+      <button
+        type="button"
+        class="btn-text about-link reveal"
+        style="animation-delay: 0.18s"
+        @click="router.push('/help')"
+      >
+        {{ t('onboarding.aboutLink') }}
+      </button>
+    </template>
+    <template v-else>
+      <p class="intro reveal" style="animation-delay: 0.14s">{{ t('onboarding.intro') }}</p>
+      <p class="note reveal" style="animation-delay: 0.18s">{{ t('onboarding.consentNote') }}</p>
+
+      <div class="cta reveal" style="animation-delay: 0.22s">
         <p class="login-hint">{{ t('onboarding.loginHint') }}</p>
         <button class="btn-primary start" type="button" @click="router.push('/login')">
           {{ t('toolbar.login') }}
@@ -83,8 +97,8 @@ async function start() {
         <button class="btn-text register-link" type="button" @click="router.push('/register')">
           {{ t('auth.needAccount') }}
         </button>
-      </template>
-    </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -112,11 +126,19 @@ h1 {
   font-size: 20px;
 }
 .welcome {
+  align-self: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: center;
   font-size: 13px;
   color: var(--accent);
   font-weight: 500;
   margin: -6px 0 0;
+}
+.about-link {
+  align-self: center;
 }
 .lang-picker {
   display: flex;

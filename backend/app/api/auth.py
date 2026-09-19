@@ -96,6 +96,8 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
         raise HTTPException(status_code=401, detail="invalid email or password")
     if not user.email_verified:
         raise HTTPException(status_code=403, detail="email not verified")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="account disabled")
 
     token = create_access_token(user.id, get_settings().jwt_secret)
     return TokenResponse(

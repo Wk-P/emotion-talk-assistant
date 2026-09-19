@@ -18,7 +18,10 @@ async function submit() {
   error.value = null
   try {
     await auth.login(email.value, password.value)
-    router.push('/chat')
+    // Not '/chat' — there's no active session yet right after login, so
+    // ChatView's own guard would immediately bounce back to '/' anyway,
+    // flashing an empty chat shell in between. Go straight there instead.
+    router.push('/')
   } catch (e: unknown) {
     const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
     error.value = detail ?? t('auth.loginFailed')

@@ -10,19 +10,28 @@ const auth = useAuthStore()
 const open = ref(false)
 const toggleEl = ref<HTMLButtonElement | null>(null)
 const panelPos = ref({ top: 0, left: 0 })
+const PANEL_WIDTH = 220
+const VIEWPORT_MARGIN = 8
 
 // The panel is teleported to <body> (see template) so it isn't clipped by
 // an ancestor's `overflow: hidden` — every top-level view gets that on wide
 // screens for the floating-card look (see main.css), which would otherwise
 // cut this dropdown off. Since it's no longer positioned relative to
-// `.app-menu`, its coordinates are computed from the toggle button instead.
+// `.app-menu`, its coordinates are computed from the toggle button instead —
+// and clamped to the viewport, since a right-aligned toggle on a narrow
+// phone screen otherwise pushes `left: rect.right - 200` past the left edge
+// with no matching clamp on the right, exactly the case that let this panel
+// run off-screen when the account email was long enough to need the full
+// panel width (see PANEL_WIDTH below).
 async function toggle() {
   open.value = !open.value
   if (open.value) {
     await nextTick()
     const rect = toggleEl.value?.getBoundingClientRect()
     if (rect) {
-      panelPos.value = { top: rect.bottom + 8, left: Math.max(8, rect.right - 200) }
+      const maxLeft = window.innerWidth - PANEL_WIDTH - VIEWPORT_MARGIN
+      const left = Math.min(Math.max(VIEWPORT_MARGIN, rect.right - PANEL_WIDTH), maxLeft)
+      panelPos.value = { top: rect.bottom + 8, left }
     }
   }
 }
@@ -134,7 +143,7 @@ function logout() {
 .panel {
   position: fixed;
   z-index: 1001;
-  min-width: 180px;
+  width: 220px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);

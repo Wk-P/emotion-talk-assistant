@@ -214,3 +214,50 @@ export async function getAdminSessionMessages(sessionId: string) {
   const { data } = await api.get<HistoryMessageItem[]>(`/api/admin/sessions/${sessionId}/messages`)
   return data
 }
+
+export interface AdminSessionExport {
+  session_id: string
+  participant_label: string
+  language: Language
+  created_at: string
+  ended_at: string | null
+  messages: HistoryMessageItem[]
+}
+
+export async function exportAdminSessions() {
+  const { data } = await api.get<AdminSessionExport[]>('/api/admin/export')
+  return data
+}
+
+export async function deleteAdminSession(sessionId: string) {
+  await api.delete(`/api/admin/sessions/${sessionId}`)
+}
+
+export interface AdminUserItem {
+  id: string
+  email: string
+  email_verified: boolean
+  role: UserRole
+  is_active: boolean
+  created_at: string
+  session_count: number
+}
+
+export async function listAdminUsers() {
+  const { data } = await api.get<AdminUserItem[]>('/api/admin/users')
+  return data
+}
+
+export async function deleteAdminUser(userId: string) {
+  await api.delete(`/api/admin/users/${userId}`)
+}
+
+export async function setAdminUserActive(userId: string, isActive: boolean) {
+  const { data } = await api.patch<AdminUserItem>(`/api/admin/users/${userId}/active`, { is_active: isActive })
+  return data
+}
+
+export async function setAdminUserRole(userId: string, role: UserRole) {
+  const { data } = await api.patch<AdminUserItem>(`/api/admin/users/${userId}/role`, { role })
+  return data
+}

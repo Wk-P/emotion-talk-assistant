@@ -15,6 +15,7 @@ const messages = {
       startNeedsLogin: '登录后开始',
       loginHint: '登录后即可开始对话，历史记录会保存在你的账号下。',
       welcomeBack: '欢迎回来，{email}',
+      aboutLink: '关于这个工具',
     },
     chat: {
       placeholder: '在这里输入你想说的话...',
@@ -54,6 +55,12 @@ const messages = {
       note: '仅展示用户已同意保留的对话内容，参与者以匿名编号显示，不含邮箱等身份信息。',
       empty: '暂时没有可查看的对话。',
       entry: '管理后台',
+      statParticipants: '参与者',
+      statSessions: '对话数',
+      statMessages: '消息总数',
+      export: '导出 JSON',
+      exporting: '导出中…',
+      groupMeta: '{sessions} 次对话 · {messages} 条消息',
     },
     records: {
       title: '我的记录',
@@ -77,6 +84,7 @@ const messages = {
       roleTitle: '关于这个工具',
       roleText: '本工具是情绪支持与自我反思的辅助工具，不提供心理诊断或治疗，不替代专业咨询。',
       resourcesTitle: '支持资源',
+      resourcesEmpty: '暂时还没有收录支持资源。',
       back: '返回对话',
     },
     crisis: {
@@ -123,6 +131,7 @@ const messages = {
       startNeedsLogin: '로그인 후 시작하기',
       loginHint: '로그인하면 대화를 시작할 수 있고, 기록은 계정에 저장됩니다.',
       welcomeBack: '다시 오신 것을 환영해요, {email}',
+      aboutLink: '이 도구에 대하여',
     },
     chat: {
       placeholder: '하고 싶은 말을 입력하세요...',
@@ -162,6 +171,12 @@ const messages = {
       note: '사용자가 보관에 동의한 대화만 표시되며, 참여자는 익명 코드로 표시되고 이메일 등 신원 정보는 포함되지 않습니다.',
       empty: '아직 볼 수 있는 대화가 없어요.',
       entry: '관리자 페이지',
+      statParticipants: '참여자',
+      statSessions: '대화 수',
+      statMessages: '총 메시지',
+      export: 'JSON 내보내기',
+      exporting: '내보내는 중…',
+      groupMeta: '대화 {sessions}개 · 메시지 {messages}개',
     },
     records: {
       title: '내 기록',
@@ -185,6 +200,7 @@ const messages = {
       roleTitle: '이 도구에 대하여',
       roleText: '이 도구는 정서 지원과 자기성찰을 돕는 보조 도구이며, 진단이나 치료를 제공하지 않고 전문 상담을 대체하지 않습니다.',
       resourcesTitle: '지원 자원',
+      resourcesEmpty: '아직 등록된 지원 자원이 없습니다.',
       back: '대화로 돌아가기',
     },
     crisis: {
