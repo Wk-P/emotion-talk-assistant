@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, chat, consent, records, resources, session
+from app.api import admin, auth, chat, consent, records, resources, session
 from app.core.config import get_settings
 from app.db.session import init_db
 
@@ -27,6 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(session.router)
 app.include_router(chat.router)
 app.include_router(consent.router)

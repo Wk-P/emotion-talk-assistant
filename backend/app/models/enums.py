@@ -57,3 +57,15 @@ class RiskLevel(str, enum.Enum):
 class AuthTokenPurpose(str, enum.Enum):
     VERIFY_EMAIL = "verify_email"
     RESET_PASSWORD = "reset_password"
+
+
+class UserRole(str, enum.Enum):
+    """ADMIN/SUPERADMIN can read de-identified conversation content for
+    research analysis (see app/api/admin.py) — everyone starts as USER.
+    There's no in-app role management; promoting someone is a direct DB
+    update, on purpose, since it's rare and should stay a deliberate,
+    out-of-band action rather than something reachable from the UI."""
+
+    USER = "user"
+    ADMIN = "admin"
+    SUPERADMIN = "superadmin"

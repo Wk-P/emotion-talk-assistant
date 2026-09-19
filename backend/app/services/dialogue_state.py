@@ -263,9 +263,17 @@ async def _continue_flow(
     history = await _load_recent_history(db, session.id)
 
     llm_response = await generate_turn(system_prompt, history, synthetic_text)
+    candidates = llm_response.candidates
+    if ctx.get("seb_entries"):
+        # The situation-emotion-behavior summary card is a one-time checkpoint
+        # (BUG 反馈, documents/Modified_Log.md): once the user has confirmed
+        # one, the model re-proposing another is a prompt-following slip, not
+        # something the session should surface again. This must be enforced
+        # here rather than left to the prompt (see module docstring).
+        candidates = [c for c in candidates if c.get("type") != "seb_summary"]
     return TurnResult(
         reply_text=llm_response.reply_text,
-        candidates=llm_response.candidates,
+        candidates=candidates,
         risk_level=risk,
         intent=intent,
     )

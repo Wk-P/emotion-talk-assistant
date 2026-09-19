@@ -46,7 +46,7 @@ const { t } = useI18n()
 }
 .desc {
   font-size: 13px;
-  color: #555;
+  color: var(--text-muted);
   margin: 2px 0;
 }
 .contact {
@@ -56,7 +56,7 @@ const { t } = useI18n()
 }
 .verified {
   font-size: 11px;
-  color: #999;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 </style>

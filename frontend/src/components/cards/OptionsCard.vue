@@ -55,7 +55,13 @@ function submit() {
       :placeholder="t('chat.customOption')"
     />
 
-    <button v-if="multiSelect || customText" class="submit" type="button" :disabled="disabled" @click="submit">
+    <button
+      v-if="multiSelect || customText"
+      class="btn-primary submit"
+      type="button"
+      :disabled="disabled"
+      @click="submit"
+    >
       {{ t('chat.submit') }}
     </button>
   </div>
@@ -75,8 +81,8 @@ function submit() {
 .option {
   padding: 8px 14px;
   border-radius: 999px;
-  border: 1px solid var(--card-border, #d8d3ea);
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   cursor: pointer;
   font-size: 14px;
   transition:
@@ -91,33 +97,22 @@ function submit() {
   cursor: not-allowed;
 }
 .option.selected {
-  background: #6c5ce7;
+  background: var(--accent);
   color: #fff;
-  border-color: #6c5ce7;
+  border-color: var(--accent);
 }
 .option.ghost {
   border-style: dashed;
-  color: #666;
+  color: var(--text-muted);
 }
 .custom-input {
   flex: 1 1 100%;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid #d8d3ea;
+  border: 1px solid var(--border);
 }
 .submit {
   flex-basis: 100%;
   margin-top: 4px;
-  padding: 8px;
-  border-radius: 8px;
-  border: none;
-  background: #6c5ce7;
-  color: #fff;
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-}
-.submit:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 </style>

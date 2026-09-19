@@ -3,25 +3,27 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
-  clearHistory,
-  getSessionMessages,
-  listHistory,
+  getAdminSessionMessages,
+  listAdminSessions,
+  type AdminSessionItem,
   type HistoryMessageItem,
-  type SessionHistoryItem,
 } from '@/api/client'
-import { useSessionStore } from '@/stores/session'
 
 const { t } = useI18n()
 const router = useRouter()
-const session = useSessionStore()
 
-const items = ref<SessionHistoryItem[]>([])
+const items = ref<AdminSessionItem[]>([])
 const openId = ref<string | null>(null)
 const openMessages = ref<HistoryMessageItem[]>([])
-const confirmingClear = ref(false)
+const loading = ref(true)
 
 async function load() {
-  items.value = await listHistory()
+  loading.value = true
+  try {
+    items.value = await listAdminSessions()
+  } finally {
+    loading.value = false
+  }
 }
 
 async function toggle(sessionId: string) {
@@ -29,19 +31,8 @@ async function toggle(sessionId: string) {
     openId.value = null
     return
   }
-  openMessages.value = await getSessionMessages(sessionId)
+  openMessages.value = await getAdminSessionMessages(sessionId)
   openId.value = sessionId
-}
-
-async function doClear() {
-  await clearHistory()
-  confirmingClear.value = false
-  openId.value = null
-  // Clearing history deletes every session, including whichever one is
-  // still open in ChatView — drop that reference too so the next message
-  // send doesn't 404 against a session id that no longer exists.
-  session.reset()
-  await load()
 }
 
 onMounted(load)
@@ -50,22 +41,23 @@ onMounted(load)
 <template>
   <div class="history-view">
     <header class="header">
-      <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('history.back') }}</button>
+      <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('admin.back') }}</button>
     </header>
 
-    <h1 class="page-title">{{ t('history.title') }}</h1>
+    <h1 class="page-title">{{ t('admin.title') }}</h1>
+    <p class="note">{{ t('admin.note') }}</p>
 
-    <p v-if="items.length === 0" class="empty">{{ t('history.empty') }}</p>
+    <p v-if="!loading && items.length === 0" class="empty">{{ t('admin.empty') }}</p>
 
     <TransitionGroup name="entry" tag="div">
       <div v-for="item in items" :key="item.session_id" class="entry">
         <button type="button" class="entry-head" @click="toggle(item.session_id)">
+          <span class="participant">{{ item.participant_label }}</span>
           <span>{{ new Date(item.created_at).toLocaleString() }}</span>
           <span class="count">{{ t('history.messageCount', { n: item.message_count }) }}</span>
         </button>
         <Transition name="expand">
           <div v-if="openId === item.session_id" class="messages">
-            <p v-if="openMessages.length === 0" class="empty">{{ t('history.noMessages') }}</p>
             <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
               {{ m.content }}
             </div>
@@ -73,19 +65,6 @@ onMounted(load)
         </Transition>
       </div>
     </TransitionGroup>
-
-    <div class="clear-zone">
-      <button v-if="!confirmingClear" type="button" class="btn-danger clear" @click="confirmingClear = true">
-        {{ t('history.clear') }}
-      </button>
-      <div v-else class="confirm">
-        <p>{{ t('history.clearConfirm') }}</p>
-        <div class="confirm-actions">
-          <button type="button" class="btn-danger" @click="doClear">{{ t('history.clearConfirmYes') }}</button>
-          <button type="button" class="btn-outline" @click="confirmingClear = false">{{ t('history.clearConfirmNo') }}</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -99,7 +78,13 @@ onMounted(load)
 .page-title {
   font-size: 17px;
   font-weight: 700;
-  margin-bottom: 20px;
+  margin-bottom: 6px;
+}
+.note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+  line-height: 1.5;
 }
 .empty {
   color: var(--text-muted);
@@ -115,14 +100,23 @@ onMounted(load)
   width: 100%;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   padding: 12px;
   background: var(--bg);
   border: none;
   font-size: 13px;
   color: var(--text);
 }
+.participant {
+  font-weight: 600;
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
 .count {
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 .messages {
   padding: 10px 12px;
@@ -143,26 +137,6 @@ onMounted(load)
 .message.assistant {
   background: var(--bg);
   align-self: flex-start;
-}
-.clear-zone {
-  margin-top: 24px;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-}
-.clear {
-  width: 100%;
-}
-.confirm p {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-.confirm-actions {
-  display: flex;
-  gap: 8px;
-}
-.confirm-actions button {
-  flex: 1;
 }
 .entry-enter-active,
 .entry-leave-active {
@@ -192,6 +166,6 @@ onMounted(load)
 .expand-enter-to,
 .expand-leave-from {
   opacity: 1;
-  max-height: 400px;
+  max-height: 600px;
 }
 </style>

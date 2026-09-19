@@ -26,9 +26,10 @@ async function submit() {
 <template>
   <div class="auth-view">
     <header class="header">
-      <button type="button" @click="router.push('/login')">← {{ t('auth.back') }}</button>
-      <h1>{{ t('auth.forgotTitle') }}</h1>
+      <button type="button" class="btn-back" @click="router.push('/login')"><span class="arrow">&lt;</span> {{ t('auth.back') }}</button>
     </header>
+
+    <h1 class="page-title">{{ t('auth.forgotTitle') }}</h1>
 
     <div v-if="done" class="done">
       <p>{{ t('auth.forgotDone') }}</p>
@@ -39,27 +40,22 @@ async function submit() {
         {{ t('auth.email') }}
         <input v-model="email" type="email" required autocomplete="email" />
       </label>
-      <button class="primary" type="submit" :disabled="submitting">{{ t('auth.sendResetLink') }}</button>
+      <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.sendResetLink') }}</button>
     </form>
   </div>
 </template>
 
 <style scoped>
 .auth-view {
-  max-width: 420px;
-  margin: 0 auto;
   padding: 16px;
 }
 .header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
-.header button {
-  border: none;
-  background: none;
-  color: #6c5ce7;
+.page-title {
+  font-size: 19px;
+  text-align: center;
+  margin-bottom: 20px;
 }
 .form {
   display: flex;
@@ -71,29 +67,18 @@ label {
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
-  color: #555;
+  color: var(--text-muted);
 }
 input {
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #d8d3ea;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
   font-size: 14px;
-}
-.primary {
-  padding: 12px;
-  border-radius: 10px;
-  border: none;
-  background: #6c5ce7;
-  color: #fff;
-  font-size: 15px;
-}
-.primary:disabled {
-  opacity: 0.6;
 }
 .done {
   text-align: center;
   padding: 24px 0;
-  color: #444;
+  color: var(--text);
   font-size: 14px;
 }
 </style>

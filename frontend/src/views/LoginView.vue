@@ -31,9 +31,11 @@ async function submit() {
 <template>
   <div class="auth-view">
     <header class="header">
-      <button type="button" @click="router.push('/chat')">← {{ t('auth.back') }}</button>
-      <h1>{{ t('auth.loginTitle') }}</h1>
+      <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('auth.back') }}</button>
     </header>
+
+    <img class="logo" src="/emotion-talk.png" :alt="t('app.title')" />
+    <h1>{{ t('auth.loginTitle') }}</h1>
 
     <form class="form" @submit.prevent="submit">
       <label>
@@ -45,20 +47,20 @@ async function submit() {
         <input v-model="password" type="password" required autocomplete="current-password" />
       </label>
       <p v-if="error" class="error">{{ error }}</p>
-      <button class="primary" type="submit" :disabled="submitting">{{ t('auth.login') }}</button>
+      <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.login') }}</button>
     </form>
 
     <div class="links">
-      <button type="button" @click="router.push('/forgot-password')">{{ t('auth.forgotPassword') }}</button>
-      <button type="button" @click="router.push('/register')">{{ t('auth.needAccount') }}</button>
+      <button type="button" class="btn-text" @click="router.push('/forgot-password')">
+        {{ t('auth.forgotPassword') }}
+      </button>
+      <button type="button" class="btn-text" @click="router.push('/register')">{{ t('auth.needAccount') }}</button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .auth-view {
-  max-width: 420px;
-  margin: 0 auto;
   padding: 16px;
 }
 .header {
@@ -66,11 +68,6 @@ async function submit() {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-}
-.header button {
-  border: none;
-  background: none;
-  color: #6c5ce7;
 }
 .form {
   display: flex;
@@ -82,27 +79,16 @@ label {
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
-  color: #555;
+  color: var(--text-muted);
 }
 input {
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #d8d3ea;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
   font-size: 14px;
 }
-.primary {
-  padding: 12px;
-  border-radius: 10px;
-  border: none;
-  background: #6c5ce7;
-  color: #fff;
-  font-size: 15px;
-}
-.primary:disabled {
-  opacity: 0.6;
-}
 .error {
-  color: #c0392b;
+  color: var(--danger);
   font-size: 13px;
 }
 .links {
@@ -110,10 +96,17 @@ input {
   justify-content: space-between;
   margin-top: 16px;
 }
-.links button {
-  border: none;
-  background: none;
-  color: #6c5ce7;
-  font-size: 13px;
+.logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: block;
+  margin: 0 auto 4px;
+  box-shadow: var(--shadow-sm);
+}
+h1 {
+  text-align: center;
+  font-size: 19px;
+  margin-bottom: 20px;
 }
 </style>

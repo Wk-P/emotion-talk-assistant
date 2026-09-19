@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_optional, get_session_or_404
+from app.api.deps import get_current_user_required, get_session_or_404
 from app.db.session import get_db
 from app.models.message import Message
 from app.models.record import SavedRecord
@@ -17,12 +17,11 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 async def start_session(
     payload: SessionCreateRequest,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> SessionResponse:
     session = ConversationSession(
         language=payload.language,
-        device_id=payload.device_id,
-        user_id=user.id if user else None,
+        user_id=user.id,
         consent={},
         confirmed_context={},
     )
@@ -34,28 +33,22 @@ async def start_session(
 
 @router.get("/history", response_model=list[SessionHistoryItem])
 async def list_history(
-    device_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> list[SessionHistoryItem]:
-    """History is scoped by account when logged in (works across devices),
-    otherwise falls back to the client-generated, no-login device_id (see
-    ConversationSession.device_id) — anyone who knows a device_id can read
-    its history, which is acceptable only because it isn't a real identity."""
-
-    if user is None and not device_id:
-        raise HTTPException(status_code=400, detail="device_id is required when not logged in")
+    """No more anonymous, device_id-scoped history: every session now
+    requires a logged-in account (see start_session), so history is always
+    scoped by user_id."""
 
     count_subq = (
         select(Message.session_id, func.count(Message.id).label("message_count"))
         .group_by(Message.session_id)
         .subquery()
     )
-    owner_filter = ConversationSession.user_id == user.id if user else ConversationSession.device_id == device_id
     result = await db.execute(
         select(ConversationSession, func.coalesce(count_subq.c.message_count, 0))
         .outerjoin(count_subq, count_subq.c.session_id == ConversationSession.id)
-        .where(owner_filter)
+        .where(ConversationSession.user_id == user.id)
         .order_by(ConversationSession.created_at.desc())
     )
     return [
@@ -86,20 +79,15 @@ async def get_session_messages(
 
 @router.delete("/history", status_code=204)
 async def clear_history(
-    device_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> None:
-    """User-facing 'clear my records' control — see list_history for how the
-    owner (account vs device_id) is determined. Deletes everything owned:
-    messages, saved records, and the sessions themselves. SQLite's ON DELETE
-    CASCADE is not reliable via aiosqlite here, so each table is cleared
-    explicitly rather than relying on FK cascade."""
+    """User-facing 'clear my records' control. Deletes everything owned by
+    this account: messages, saved records, and the sessions themselves.
+    SQLite's ON DELETE CASCADE is not reliable via aiosqlite here, so each
+    table is cleared explicitly rather than relying on FK cascade."""
 
-    if user is None and not device_id:
-        raise HTTPException(status_code=400, detail="device_id is required when not logged in")
-
-    owner_filter = ConversationSession.user_id == user.id if user else ConversationSession.device_id == device_id
+    owner_filter = ConversationSession.user_id == user.id
     session_ids_subq = select(ConversationSession.id).where(owner_filter).subquery()
     await db.execute(delete(Message).where(Message.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(select(session_ids_subq))))

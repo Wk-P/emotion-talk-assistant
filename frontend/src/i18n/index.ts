@@ -12,6 +12,9 @@ const messages = {
       chooseLanguage: '请选择语言',
       consentNote: '继续即表示你了解以上说明。是否保存记录由你在对话中随时选择。',
       start: '开始',
+      startNeedsLogin: '登录后开始',
+      loginHint: '登录后即可开始对话，历史记录会保存在你的账号下。',
+      welcomeBack: '欢迎回来，{email}',
     },
     chat: {
       placeholder: '在这里输入你想说的话...',
@@ -35,6 +38,22 @@ const messages = {
       history: '历史对话',
       login: '登录',
       logout: '退出',
+      menu: '菜单',
+    },
+    sidebar: {
+      newChat: '+ 开始新对话',
+    },
+    fieldsCard: {
+      seb_summary: '这是根据你刚才说的整理出的一个小结（情境-情绪-行为），看看对不对，需要的话可以直接改。',
+      plan_form: '这是根据你们聊的内容整理出的一份行动计划草稿，确认前可以随时修改。',
+      generic: '这是根据你们的对话整理出的内容，确认前可以修改。',
+    },
+    admin: {
+      back: '返回',
+      title: '研究数据（管理员）',
+      note: '仅展示用户已同意保留的对话内容，参与者以匿名编号显示，不含邮箱等身份信息。',
+      empty: '暂时没有可查看的对话。',
+      entry: '管理后台',
     },
     records: {
       title: '我的记录',
@@ -101,6 +120,9 @@ const messages = {
       chooseLanguage: '언어를 선택하세요',
       consentNote: '계속 진행하면 위 안내를 이해한 것으로 간주합니다. 기록 저장 여부는 대화 중 언제든 선택할 수 있습니다.',
       start: '시작하기',
+      startNeedsLogin: '로그인 후 시작하기',
+      loginHint: '로그인하면 대화를 시작할 수 있고, 기록은 계정에 저장됩니다.',
+      welcomeBack: '다시 오신 것을 환영해요, {email}',
     },
     chat: {
       placeholder: '하고 싶은 말을 입력하세요...',
@@ -124,6 +146,22 @@ const messages = {
       history: '대화 기록',
       login: '로그인',
       logout: '로그아웃',
+      menu: '메뉴',
+    },
+    sidebar: {
+      newChat: '+ 새 대화 시작',
+    },
+    fieldsCard: {
+      seb_summary: '방금 이야기한 내용을 정리한 요약이에요（상황-감정-행동）. 맞는지 확인하고 필요하면 직접 고칠 수 있어요.',
+      plan_form: '지금까지 나눈 이야기를 바탕으로 정리한 실행 계획 초안이에요. 확인하기 전에 언제든 수정할 수 있어요.',
+      generic: '지금까지의 대화를 바탕으로 정리한 내용이에요. 확인하기 전에 수정할 수 있어요.',
+    },
+    admin: {
+      back: '뒤로',
+      title: '연구 데이터 (관리자)',
+      note: '사용자가 보관에 동의한 대화만 표시되며, 참여자는 익명 코드로 표시되고 이메일 등 신원 정보는 포함되지 않습니다.',
+      empty: '아직 볼 수 있는 대화가 없어요.',
+      entry: '관리자 페이지',
     },
     records: {
       title: '내 기록',

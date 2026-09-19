@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr
 
+from app.models.enums import UserRole
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -28,6 +30,7 @@ class UserResponse(BaseModel):
     id: str
     email: str
     email_verified: bool
+    role: UserRole
 
 
 class TokenResponse(BaseModel):

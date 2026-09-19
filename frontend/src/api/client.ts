@@ -59,11 +59,8 @@ export interface ConfirmationPayload {
   fields?: Record<string, unknown>
 }
 
-export async function startSession(language: Language, deviceId?: string) {
-  const { data } = await api.post<{ session_id: string; language: Language }>('/api/session/start', {
-    language,
-    device_id: deviceId ?? null,
-  })
+export async function startSession(language: Language) {
+  const { data } = await api.post<{ session_id: string; language: Language }>('/api/session/start', { language })
   return data
 }
 
@@ -81,10 +78,8 @@ export interface HistoryMessageItem {
   created_at: string
 }
 
-export async function listHistory(deviceId?: string) {
-  const { data } = await api.get<SessionHistoryItem[]>('/api/session/history', {
-    params: deviceId ? { device_id: deviceId } : {},
-  })
+export async function listHistory() {
+  const { data } = await api.get<SessionHistoryItem[]>('/api/session/history')
   return data
 }
 
@@ -93,8 +88,8 @@ export async function getSessionMessages(sessionId: string) {
   return data
 }
 
-export async function clearHistory(deviceId?: string) {
-  await api.delete('/api/session/history', { params: deviceId ? { device_id: deviceId } : {} })
+export async function clearHistory() {
+  await api.delete('/api/session/history')
 }
 
 export async function sendChat(sessionId: string, message?: string, confirmation?: ConfirmationPayload) {
@@ -103,14 +98,6 @@ export async function sendChat(sessionId: string, message?: string, confirmation
     message: message ?? null,
     confirmation: confirmation ?? null,
   })
-  return data
-}
-
-export async function updateLanguage(sessionId: string, language: Language) {
-  const { data } = await api.put<{ session_id: string; language: Language }>(
-    `/api/session/${sessionId}/language`,
-    { language },
-  )
   return data
 }
 
@@ -167,10 +154,13 @@ export async function listResources() {
   return data
 }
 
+export type UserRole = 'user' | 'admin' | 'superadmin'
+
 export interface AuthUser {
   id: string
   email: string
   email_verified: boolean
+  role: UserRole
 }
 
 export async function register(email: string, password: string) {
@@ -203,5 +193,24 @@ export async function resetPassword(token: string, newPassword: string) {
 
 export async function fetchMe() {
   const { data } = await api.get<AuthUser>('/api/auth/me')
+  return data
+}
+
+export interface AdminSessionItem {
+  session_id: string
+  participant_label: string
+  language: Language
+  created_at: string
+  ended_at: string | null
+  message_count: number
+}
+
+export async function listAdminSessions() {
+  const { data } = await api.get<AdminSessionItem[]>('/api/admin/sessions')
+  return data
+}
+
+export async function getAdminSessionMessages(sessionId: string) {
+  const { data } = await api.get<HistoryMessageItem[]>(`/api/admin/sessions/${sessionId}/messages`)
   return data
 }

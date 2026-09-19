@@ -3,11 +3,14 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import type { Language } from '@/api/client'
+import AppMenu from '@/components/AppMenu.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 
 const { t, locale } = useI18n()
 const router = useRouter()
 const session = useSessionStore()
+const auth = useAuthStore()
 const selected = ref<Language>('zh')
 const starting = ref(false)
 
@@ -29,62 +32,127 @@ async function start() {
 
 <template>
   <div class="onboarding">
-    <h1>{{ t('app.title') }}</h1>
-
-    <div class="lang-picker">
-      <button :class="{ active: selected === 'zh' }" type="button" @click="choose('zh')">中文</button>
-      <button :class="{ active: selected === 'ko' }" type="button" @click="choose('ko')">한국어</button>
+    <div class="account-bar">
+      <AppMenu v-if="auth.user" />
     </div>
 
-    <p class="intro">{{ t('onboarding.intro') }}</p>
-    <p class="note">{{ t('onboarding.consentNote') }}</p>
+    <img class="logo reveal" style="animation-delay: 0.02s" src="/emotion-talk.png" :alt="t('app.title')" />
 
-    <button class="start" type="button" :disabled="starting" @click="start">
-      {{ t('onboarding.start') }}
-    </button>
+    <h1 class="reveal" style="animation-delay: 0.06s">{{ t('app.title') }}</h1>
+
+    <p v-if="auth.user" class="welcome reveal" style="animation-delay: 0.08s">
+      {{ t('onboarding.welcomeBack', { email: auth.user.email }) }}
+    </p>
+
+    <div class="lang-picker reveal" style="animation-delay: 0.1s">
+      <button
+        class="btn-outline"
+        :class="{ active: selected === 'zh' }"
+        type="button"
+        @click="choose('zh')"
+      >
+        中文
+      </button>
+      <button
+        class="btn-outline"
+        :class="{ active: selected === 'ko' }"
+        type="button"
+        @click="choose('ko')"
+      >
+        한국어
+      </button>
+    </div>
+
+    <p class="intro reveal" style="animation-delay: 0.14s">{{ t('onboarding.intro') }}</p>
+    <p class="note reveal" style="animation-delay: 0.18s">{{ t('onboarding.consentNote') }}</p>
+
+    <div class="cta reveal" style="animation-delay: 0.22s">
+      <template v-if="auth.user">
+        <button class="btn-primary start" type="button" :disabled="starting" @click="start">
+          {{ t('onboarding.start') }}
+        </button>
+        <button class="btn-outline" type="button" @click="router.push('/history')">
+          {{ t('toolbar.history') }}
+        </button>
+      </template>
+      <template v-else>
+        <p class="login-hint">{{ t('onboarding.loginHint') }}</p>
+        <button class="btn-primary start" type="button" @click="router.push('/login')">
+          {{ t('toolbar.login') }}
+        </button>
+        <button class="btn-text register-link" type="button" @click="router.push('/register')">
+          {{ t('auth.needAccount') }}
+        </button>
+      </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .onboarding {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 24px 16px;
+  padding: 20px 20px 28px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+}
+.account-bar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 20px;
+}
+.logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  align-self: center;
+  box-shadow: var(--shadow-md);
+}
+h1 {
+  text-align: center;
+  font-size: 20px;
+}
+.welcome {
+  text-align: center;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+  margin: -6px 0 0;
 }
 .lang-picker {
   display: flex;
   gap: 8px;
+  align-self: center;
 }
 .lang-picker button {
-  flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #d8d3ea;
-  background: #fff;
-}
-.lang-picker button.active {
-  background: #6c5ce7;
-  color: #fff;
-  border-color: #6c5ce7;
+  min-width: 100px;
 }
 .intro,
 .note {
   font-size: 14px;
-  line-height: 1.6;
-  color: #444;
+  line-height: 1.65;
+  color: var(--text-muted);
+  text-align: center;
+}
+.cta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.login-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.register-link {
+  align-self: center;
 }
 .start {
-  padding: 12px;
-  border-radius: 10px;
-  border: none;
-  background: #6c5ce7;
-  color: #fff;
   font-size: 16px;
 }
-.start:disabled {
-  opacity: 0.6;
+.reveal {
+  opacity: 0;
+  animation: fade-up 0.5s ease forwards;
 }
 </style>

@@ -58,8 +58,8 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     await run_in_threadpool(
         send_email,
         user.email,
-        "验证你的邮箱 / Verify your email",
-        f"<p>点击链接验证邮箱(24小时内有效):</p><p><a href='{link}'>{link}</a></p>",
+        "Emotion-AI - 验证你的邮箱 / Verify your email",
+        f"<p><strong>Emotion-AI</strong></p><p>点击链接验证邮箱(24小时内有效):</p><p><a href='{link}'>{link}</a></p>",
     )
     return MessageResponse(message="registered, check your email to verify")
 
@@ -98,7 +98,10 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
         raise HTTPException(status_code=403, detail="email not verified")
 
     token = create_access_token(user.id, get_settings().jwt_secret)
-    return TokenResponse(access_token=token, user=UserResponse(id=user.id, email=user.email, email_verified=True))
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(id=user.id, email=user.email, email_verified=True, role=user.role),
+    )
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
@@ -121,8 +124,8 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
         await run_in_threadpool(
             send_email,
             user.email,
-            "重置密码 / Reset your password",
-            f"<p>点击链接重置密码(1小时内有效):</p><p><a href='{link}'>{link}</a></p>",
+            "Emotion-AI - 重置密码 / Reset your password",
+            f"<p><strong>Emotion-AI</strong></p><p>点击链接重置密码(1小时内有效):</p><p><a href='{link}'>{link}</a></p>",
         )
 
     return MessageResponse(message="if that email exists, a reset link was sent")
@@ -156,4 +159,4 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
 
 @router.get("/me", response_model=UserResponse)
 async def me(user: User = Depends(get_current_user_required)) -> UserResponse:
-    return UserResponse(id=user.id, email=user.email, email_verified=user.email_verified)
+    return UserResponse(id=user.id, email=user.email, email_verified=user.email_verified, role=user.role)

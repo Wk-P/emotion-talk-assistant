@@ -16,9 +16,10 @@ onMounted(async () => {
 <template>
   <div class="help-view">
     <header class="header">
-      <button type="button" @click="router.push('/chat')">← {{ t('help.back') }}</button>
-      <h1>{{ t('help.title') }}</h1>
+      <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('help.back') }}</button>
     </header>
+
+    <h1 class="page-title">{{ t('help.title') }}</h1>
 
     <section>
       <h2>{{ t('help.roleTitle') }}</h2>
@@ -41,37 +42,36 @@ onMounted(async () => {
 
 <style scoped>
 .help-view {
-  max-width: 480px;
-  margin: 0 auto;
   padding: 16px;
 }
 .header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
-.header button {
-  border: none;
-  background: none;
-  color: #6c5ce7;
-}
-section {
+.page-title {
+  font-size: 17px;
+  font-weight: 700;
   margin-bottom: 20px;
 }
+section {
+  margin-bottom: 22px;
+}
 h2 {
-  font-size: 15px;
-  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 p {
   font-size: 14px;
-  color: #444;
-  line-height: 1.6;
+  color: var(--text);
+  line-height: 1.65;
 }
 .resource {
-  border: 1px solid #eee;
-  border-radius: 10px;
-  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
   margin-bottom: 8px;
 }
 .name {
@@ -79,12 +79,15 @@ p {
 }
 .desc {
   font-size: 13px;
-  color: #555;
+  color: var(--text-muted);
   margin: 4px 0;
 }
 .contact {
   display: flex;
   gap: 12px;
   font-size: 13px;
+}
+.contact a {
+  color: var(--accent);
 }
 </style>

@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
-import { endSession, sendChat, startSession, updateConsent, updateLanguage } from '@/api/client'
-import { getDeviceId } from '@/utils/device'
+import { endSession, sendChat, startSession, updateConsent } from '@/api/client'
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -27,7 +26,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function begin(lang: Language) {
     language.value = lang
-    const res = await startSession(lang, getDeviceId())
+    const res = await startSession(lang)
     sessionId.value = res.session_id
     turns.value = []
     answeredTurnIndices.value = new Set()
@@ -66,12 +65,6 @@ export const useSessionStore = defineStore('session', () => {
     await send(message, confirmation, { skipBubble: true })
   }
 
-  async function switchLanguage(lang: Language) {
-    if (!sessionId.value || lang === language.value) return
-    language.value = lang // optimistic — UI chrome switches immediately
-    await updateLanguage(sessionId.value, lang)
-  }
-
   function markAnswered(turnIndex: number) {
     answeredTurnIndices.value = new Set(answeredTurnIndices.value).add(turnIndex)
   }
@@ -87,6 +80,19 @@ export const useSessionStore = defineStore('session', () => {
     await endSession(sessionId.value)
   }
 
+  // Drops the in-memory reference to the current session without calling the
+  // backend — used after clearing history, which may delete the session
+  // that's currently open in ChatView. Without this, the next message send
+  // would 404 ("session not found") against an id that no longer exists.
+  function reset() {
+    sessionId.value = null
+    turns.value = []
+    consent.value = {}
+    answeredTurnIndices.value = new Set()
+    error.value = null
+    lastFailedSend.value = null
+  }
+
   return {
     sessionId,
     language,
@@ -98,9 +104,9 @@ export const useSessionStore = defineStore('session', () => {
     begin,
     send,
     retry,
-    switchLanguage,
     markAnswered,
     setConsent,
     finish,
+    reset,
   }
 })

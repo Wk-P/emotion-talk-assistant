@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import get_db
+from app.models.enums import UserRole
 from app.models.session import ConversationSession
 from app.models.user import User
 from app.services.auth import decode_access_token
@@ -34,4 +35,10 @@ async def get_current_user_optional(
 async def get_current_user_required(user: User | None = Depends(get_current_user_optional)) -> User:
     if user is None:
         raise HTTPException(status_code=401, detail="authentication required")
+    return user
+
+
+async def get_current_admin_required(user: User = Depends(get_current_user_required)) -> User:
+    if user.role not in (UserRole.ADMIN, UserRole.SUPERADMIN):
+        raise HTTPException(status_code=403, detail="admin access required")
     return user

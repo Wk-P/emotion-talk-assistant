@@ -3,6 +3,8 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import type { ConfirmationPayload } from '@/api/client'
+import AppMenu from '@/components/AppMenu.vue'
+import AppSidebar from '@/components/AppSidebar.vue'
 import BottomToolbar from '@/components/BottomToolbar.vue'
 import CandidateCardView from '@/components/cards/CandidateCardView.vue'
 import { useSessionStore } from '@/stores/session'
@@ -50,73 +52,140 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
 </script>
 
 <template>
-  <div class="chat-view">
-    <header class="chat-header">{{ t('app.title') }}</header>
+  <div class="chat-shell">
+    <!-- >=960px: persistent nav replaces the header's dropdown menu. Kept in
+         the DOM at all widths and toggled with CSS so there's no layout
+         flash while resizing. -->
+    <AppSidebar class="wide-only" />
 
-    <div ref="scrollEl" class="turns">
-      <div v-for="(turn, idx) in session.turns" :key="idx" class="turn" :class="turn.role">
-        <div class="bubble">{{ turn.text }}</div>
-        <CandidateCardView
-          v-for="(card, cIdx) in turn.candidates ?? []"
-          :key="cIdx"
-          :card="card"
-          :disabled="session.answeredTurnIndices.has(idx)"
-          @confirm="(payload) => onCardConfirm(idx, payload)"
-        />
+    <div class="chat-view">
+      <header class="chat-header">
+        <span class="title">{{ t('app.title') }}</span>
+        <AppMenu class="narrow-only" />
+      </header>
+
+      <div ref="scrollEl" class="turns">
+        <TransitionGroup name="turn" tag="div" class="turns-inner">
+          <div v-for="(turn, idx) in session.turns" :key="idx" class="turn" :class="turn.role">
+            <div class="bubble">{{ turn.text }}</div>
+            <CandidateCardView
+              v-for="(card, cIdx) in turn.candidates ?? []"
+              :key="cIdx"
+              :card="card"
+              :disabled="session.answeredTurnIndices.has(idx)"
+              @confirm="(payload) => onCardConfirm(idx, payload)"
+            />
+          </div>
+
+          <div v-if="session.sending" key="typing" class="turn assistant">
+            <div class="bubble typing" role="status" :aria-label="t('chat.assistant')">
+              <span class="dot" />
+              <span class="dot" />
+              <span class="dot" />
+            </div>
+          </div>
+        </TransitionGroup>
+
+        <Transition name="turn">
+          <div v-if="session.error" class="error-banner">
+            <span>{{ t('chat.sendError') }}</span>
+            <button type="button" class="btn-danger" @click="session.retry()">{{ t('chat.retry') }}</button>
+          </div>
+        </Transition>
       </div>
 
-      <div v-if="session.sending" class="turn assistant">
-        <div class="bubble typing" role="status" :aria-label="t('chat.assistant')">
-          <span class="dot" />
-          <span class="dot" />
-          <span class="dot" />
-        </div>
-      </div>
+      <div class="footer">
+        <BottomToolbar />
 
-      <div v-if="session.error" class="error-banner">
-        <span>{{ t('chat.sendError') }}</span>
-        <button type="button" @click="session.retry()">{{ t('chat.retry') }}</button>
+        <form class="composer" @submit.prevent="submit">
+          <input
+            v-model="draft"
+            :placeholder="t('chat.placeholder')"
+            :disabled="session.sending"
+            autocomplete="off"
+          />
+          <button type="submit" class="btn-primary send-btn" :disabled="session.sending || !draft.trim()">
+            <span v-if="!session.sending">{{ t('chat.send') }}</span>
+            <span v-else class="spinner" aria-hidden="true" />
+          </button>
+        </form>
       </div>
     </div>
-
-    <form class="composer" @submit.prevent="submit">
-      <input
-        v-model="draft"
-        :placeholder="t('chat.placeholder')"
-        :disabled="session.sending"
-        autocomplete="off"
-      />
-      <button type="submit" class="send-btn" :disabled="session.sending || !draft.trim()">
-        <span v-if="!session.sending">{{ t('chat.send') }}</span>
-        <span v-else class="spinner" aria-hidden="true" />
-      </button>
-    </form>
-
-    <BottomToolbar />
   </div>
 </template>
 
 <style scoped>
+.chat-shell {
+  display: flex;
+  height: 100dvh;
+  background: var(--surface);
+}
+.wide-only {
+  display: none;
+}
 .chat-view {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  max-width: 480px;
-  margin: 0 auto;
-  background: #fff;
+  height: 100%;
 }
+
+/* >=960px: real desktop layout — sidebar + a chat column that uses the
+   extra width instead of floating a phone-width card in empty space. */
+@media (min-width: 960px) {
+  .wide-only {
+    display: flex;
+  }
+  .narrow-only {
+    display: none;
+  }
+  .chat-view {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+}
+
 .chat-header {
-  padding: 12px 16px;
-  font-weight: 600;
-  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.chat-header .title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
 }
 .turns {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: 16px;
+}
+.turns-inner {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+}
+.turn-enter-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.turn-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+.turn-leave-active {
+  transition: opacity 0.15s ease;
+  position: absolute;
+}
+.turn-leave-to {
+  opacity: 0;
+}
+.turn-move {
+  transition: transform 0.2s ease;
 }
 .turn {
   display: flex;
@@ -131,33 +200,35 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
 }
 .bubble {
   max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 14px;
+  padding: 11px 15px;
+  border-radius: 16px;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-wrap;
+  box-shadow: var(--shadow-sm);
 }
 .turn.user .bubble {
-  background: #6c5ce7;
+  background: var(--accent);
   color: #fff;
   border-bottom-right-radius: 4px;
+  box-shadow: 0 6px 16px rgba(108, 92, 231, 0.25);
 }
 .turn.assistant .bubble {
-  background: #f1f0f7;
-  color: #333;
+  background: var(--bg);
+  color: var(--text);
   border-bottom-left-radius: 4px;
 }
 .bubble.typing {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 12px 16px;
+  padding: 13px 16px;
 }
 .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #9992b8;
+  background: var(--text-muted);
   animation: bounce 1.2s infinite ease-in-out;
 }
 .dot:nth-child(2) {
@@ -183,52 +254,43 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: #fdecea;
-  color: #b3261e;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
   font-size: 13px;
 }
-.error-banner button {
-  border: 1px solid #b3261e;
-  color: #b3261e;
-  background: #fff;
-  border-radius: 6px;
+.error-banner .btn-danger {
   padding: 4px 10px;
-  font-size: 12px;
   flex-shrink: 0;
+  background: var(--surface);
+}
+.footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .composer {
   display: flex;
   gap: 8px;
-  padding: 8px 12px;
-  border-top: 1px solid #eee;
+  padding: 10px 12px 12px;
 }
 .composer input {
   flex: 1;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #d8d3ea;
-  transition: opacity 0.15s ease;
+  padding: 11px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
 }
 .composer input:disabled {
   opacity: 0.6;
 }
 .composer button.send-btn {
   min-width: 64px;
-  padding: 10px 16px;
-  border-radius: 10px;
-  border: none;
-  background: #6c5ce7;
-  color: #fff;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.15s ease;
-}
-.composer button.send-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 .spinner {
   width: 14px;
