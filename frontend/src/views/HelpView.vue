@@ -15,35 +15,42 @@ onMounted(async () => {
 
 <template>
   <div class="help-view">
-    <header class="header">
-      <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('help.back') }}</button>
-    </header>
+    <div class="page-inner">
+      <header class="header">
+        <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('help.back') }}</button>
+      </header>
 
-    <h1 class="page-title">{{ t('help.title') }}</h1>
+      <h1 class="page-title">{{ t('help.title') }}</h1>
 
-    <section>
-      <h2>{{ t('help.roleTitle') }}</h2>
-      <p>{{ t('help.roleText') }}</p>
-    </section>
+      <section>
+        <h2>{{ t('help.roleTitle') }}</h2>
+        <p>{{ t('help.roleText') }}</p>
+      </section>
 
-    <section>
-      <h2>{{ t('help.resourcesTitle') }}</h2>
-      <p v-if="resources.length === 0" class="empty">{{ t('help.resourcesEmpty') }}</p>
-      <div v-for="r in resources" :key="r.id" class="resource">
-        <div class="name">{{ r.name[locale] ?? r.name.ko }}</div>
-        <div class="desc">{{ r.description[locale] ?? r.description.ko }}</div>
-        <div class="contact">
-          <a :href="`tel:${r.contact}`">{{ r.contact }}</a>
-          <a v-if="r.url" :href="r.url" target="_blank" rel="noopener">{{ r.url }}</a>
+      <section>
+        <h2>{{ t('help.resourcesTitle') }}</h2>
+        <p v-if="resources.length === 0" class="empty">{{ t('help.resourcesEmpty') }}</p>
+        <div v-for="r in resources" :key="r.id" class="resource">
+          <div class="name">{{ r.name[locale] ?? r.name.ko }}</div>
+          <div class="desc">{{ r.description[locale] ?? r.description.ko }}</div>
+          <div class="contact">
+            <a :href="`tel:${r.contact}`">{{ r.contact }}</a>
+            <a v-if="r.url" :href="r.url" target="_blank" rel="noopener">{{ r.url }}</a>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .help-view {
   padding: 16px;
+}
+@media (min-width: 640px) {
+  .help-view {
+    padding: 32px;
+  }
 }
 .header {
   margin-bottom: 14px;

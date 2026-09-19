@@ -28,13 +28,15 @@ onMounted(async () => {
 
 <template>
   <div class="auth-view">
-    <h1>{{ t('auth.verifyTitle') }}</h1>
-    <p v-if="status === 'pending'">{{ t('auth.verifying') }}</p>
-    <div v-else-if="status === 'ok'" class="done">
-      <p>{{ t('auth.verifyOk') }}</p>
-      <button class="btn-primary" type="button" @click="router.push('/login')">{{ t('auth.goLogin') }}</button>
+    <div class="page-inner">
+      <h1>{{ t('auth.verifyTitle') }}</h1>
+      <p v-if="status === 'pending'">{{ t('auth.verifying') }}</p>
+      <div v-else-if="status === 'ok'" class="done">
+        <p>{{ t('auth.verifyOk') }}</p>
+        <button class="btn-primary" type="button" @click="router.push('/login')">{{ t('auth.goLogin') }}</button>
+      </div>
+      <p v-else class="error">{{ t('auth.verifyError') }}</p>
     </div>
-    <p v-else class="error">{{ t('auth.verifyError') }}</p>
   </div>
 </template>
 
@@ -42,6 +44,11 @@ onMounted(async () => {
 .auth-view {
   padding: 24px 16px;
   text-align: center;
+}
+@media (min-width: 640px) {
+  .auth-view {
+    padding: 48px 32px;
+  }
 }
 .done p {
   margin-bottom: 16px;

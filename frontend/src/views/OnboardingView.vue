@@ -11,7 +11,11 @@ const { t, locale } = useI18n()
 const router = useRouter()
 const session = useSessionStore()
 const auth = useAuthStore()
-const selected = ref<Language>('zh')
+// Default to the visitor's own browser language instead of always
+// highlighting 中文 — this app serves both Chinese and Korean speakers.
+const browserLang: Language = navigator.language.toLowerCase().startsWith('ko') ? 'ko' : 'zh'
+const selected = ref<Language>(browserLang)
+locale.value = browserLang
 const starting = ref(false)
 
 function choose(lang: Language) {
@@ -36,6 +40,7 @@ async function start() {
       <AppMenu v-if="auth.user" />
     </div>
 
+    <div class="page-inner onboarding-inner">
     <img class="logo reveal" style="animation-delay: 0.02s" src="/emotion-talk.png" :alt="t('app.title')" />
 
     <h1 class="reveal" style="animation-delay: 0.06s">{{ t('app.title') }}</h1>
@@ -99,12 +104,20 @@ async function start() {
         </button>
       </div>
     </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .onboarding {
   padding: 20px 20px 28px;
+}
+@media (min-width: 640px) {
+  .onboarding {
+    padding: 32px;
+  }
+}
+.onboarding-inner {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -113,6 +126,7 @@ async function start() {
   display: flex;
   justify-content: flex-end;
   min-height: 20px;
+  margin-bottom: 8px;
 }
 .logo {
   width: 72px;

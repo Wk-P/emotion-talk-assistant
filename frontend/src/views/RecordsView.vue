@@ -25,20 +25,22 @@ onMounted(load)
 
 <template>
   <div class="records-view">
-    <header class="header">
-      <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('records.back') }}</button>
-    </header>
+    <div class="page-inner-wide">
+      <header class="header">
+        <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('records.back') }}</button>
+      </header>
 
-    <h1 class="page-title">{{ t('records.title') }}</h1>
+      <h1 class="page-title">{{ t('records.title') }}</h1>
 
-    <p v-if="records.length === 0" class="empty">{{ t('records.empty') }}</p>
+      <p v-if="records.length === 0" class="empty">{{ t('records.empty') }}</p>
 
-    <div v-for="record in records" :key="record.id" class="record">
-      <div class="type">{{ record.record_type }}</div>
-      <pre class="payload">{{ JSON.stringify(record.payload, null, 2) }}</pre>
-      <div class="meta">
-        <span>{{ new Date(record.created_at).toLocaleString() }}</span>
-        <button type="button" class="btn-danger" @click="remove(record.id)">{{ t('records.delete') }}</button>
+      <div v-for="record in records" :key="record.id" class="record">
+        <div class="type">{{ record.record_type }}</div>
+        <pre class="payload">{{ JSON.stringify(record.payload, null, 2) }}</pre>
+        <div class="meta">
+          <span>{{ new Date(record.created_at).toLocaleString() }}</span>
+          <button type="button" class="btn-danger" @click="remove(record.id)">{{ t('records.delete') }}</button>
+        </div>
       </div>
     </div>
   </div>
@@ -47,6 +49,11 @@ onMounted(load)
 <style scoped>
 .records-view {
   padding: 16px;
+}
+@media (min-width: 640px) {
+  .records-view {
+    padding: 32px;
+  }
 }
 .header {
   margin-bottom: 14px;

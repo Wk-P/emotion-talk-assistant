@@ -49,40 +49,42 @@ onMounted(load)
 
 <template>
   <div class="history-view">
-    <header class="header">
-      <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('history.back') }}</button>
-    </header>
+    <div class="page-inner-wide">
+      <header class="header">
+        <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('history.back') }}</button>
+      </header>
 
-    <h1 class="page-title">{{ t('history.title') }}</h1>
+      <h1 class="page-title">{{ t('history.title') }}</h1>
 
-    <p v-if="items.length === 0" class="empty">{{ t('history.empty') }}</p>
+      <p v-if="items.length === 0" class="empty">{{ t('history.empty') }}</p>
 
-    <TransitionGroup name="entry" tag="div">
-      <div v-for="item in items" :key="item.session_id" class="entry">
-        <button type="button" class="entry-head" @click="toggle(item.session_id)">
-          <span>{{ new Date(item.created_at).toLocaleString() }}</span>
-          <span class="count">{{ t('history.messageCount', { n: item.message_count }) }}</span>
-        </button>
-        <Transition name="expand">
-          <div v-if="openId === item.session_id" class="messages">
-            <p v-if="openMessages.length === 0" class="empty">{{ t('history.noMessages') }}</p>
-            <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
-              {{ m.content }}
+      <TransitionGroup name="entry" tag="div">
+        <div v-for="item in items" :key="item.session_id" class="entry">
+          <button type="button" class="entry-head" @click="toggle(item.session_id)">
+            <span>{{ new Date(item.created_at).toLocaleString() }}</span>
+            <span class="count">{{ t('history.messageCount', { n: item.message_count }) }}</span>
+          </button>
+          <Transition name="expand">
+            <div v-if="openId === item.session_id" class="messages">
+              <p v-if="openMessages.length === 0" class="empty">{{ t('history.noMessages') }}</p>
+              <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
+                {{ m.content }}
+              </div>
             </div>
-          </div>
-        </Transition>
-      </div>
-    </TransitionGroup>
+          </Transition>
+        </div>
+      </TransitionGroup>
 
-    <div class="clear-zone">
-      <button v-if="!confirmingClear" type="button" class="btn-danger clear" @click="confirmingClear = true">
-        {{ t('history.clear') }}
-      </button>
-      <div v-else class="confirm">
-        <p>{{ t('history.clearConfirm') }}</p>
-        <div class="confirm-actions">
-          <button type="button" class="btn-danger" @click="doClear">{{ t('history.clearConfirmYes') }}</button>
-          <button type="button" class="btn-outline" @click="confirmingClear = false">{{ t('history.clearConfirmNo') }}</button>
+      <div class="clear-zone">
+        <button v-if="!confirmingClear" type="button" class="btn-danger clear" @click="confirmingClear = true">
+          {{ t('history.clear') }}
+        </button>
+        <div v-else class="confirm">
+          <p>{{ t('history.clearConfirm') }}</p>
+          <div class="confirm-actions">
+            <button type="button" class="btn-danger" @click="doClear">{{ t('history.clearConfirmYes') }}</button>
+            <button type="button" class="btn-outline" @click="confirmingClear = false">{{ t('history.clearConfirmNo') }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -92,6 +94,11 @@ onMounted(load)
 <style scoped>
 .history-view {
   padding: 16px;
+}
+@media (min-width: 640px) {
+  .history-view {
+    padding: 32px;
+  }
 }
 .header {
   margin-bottom: 14px;

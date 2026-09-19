@@ -37,27 +37,29 @@ async function submit() {
       <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('auth.back') }}</button>
     </header>
 
-    <img class="logo" src="/emotion-talk.png" :alt="t('app.title')" />
-    <h1>{{ t('auth.loginTitle') }}</h1>
+    <div class="page-inner">
+      <img class="logo" src="/emotion-talk.png" :alt="t('app.title')" />
+      <h1>{{ t('auth.loginTitle') }}</h1>
 
-    <form class="form" @submit.prevent="submit">
-      <label>
-        {{ t('auth.email') }}
-        <input v-model="email" type="email" required autocomplete="email" />
-      </label>
-      <label>
-        {{ t('auth.password') }}
-        <input v-model="password" type="password" required autocomplete="current-password" />
-      </label>
-      <p v-if="error" class="error">{{ error }}</p>
-      <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.login') }}</button>
-    </form>
+      <form class="form" @submit.prevent="submit">
+        <label>
+          {{ t('auth.email') }}
+          <input v-model="email" type="email" required autocomplete="email" />
+        </label>
+        <label>
+          {{ t('auth.password') }}
+          <input v-model="password" type="password" required autocomplete="current-password" />
+        </label>
+        <p v-if="error" class="error">{{ error }}</p>
+        <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.login') }}</button>
+      </form>
 
-    <div class="links">
-      <button type="button" class="btn-text" @click="router.push('/forgot-password')">
-        {{ t('auth.forgotPassword') }}
-      </button>
-      <button type="button" class="btn-text" @click="router.push('/register')">{{ t('auth.needAccount') }}</button>
+      <div class="links">
+        <button type="button" class="btn-text" @click="router.push('/forgot-password')">
+          {{ t('auth.forgotPassword') }}
+        </button>
+        <button type="button" class="btn-text" @click="router.push('/register')">{{ t('auth.needAccount') }}</button>
+      </div>
     </div>
   </div>
 </template>
@@ -65,6 +67,11 @@ async function submit() {
 <style scoped>
 .auth-view {
   padding: 16px;
+}
+@media (min-width: 640px) {
+  .auth-view {
+    padding: 32px;
+  }
 }
 .header {
   display: flex;

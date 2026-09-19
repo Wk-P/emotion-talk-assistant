@@ -11,13 +11,18 @@ const auth = useAuthStore()
 
 const token = String(route.query.token ?? '')
 const password = ref('')
+const confirmPassword = ref('')
 const submitting = ref(false)
 const error = ref<string | null>(null)
 const done = ref(false)
 
 async function submit() {
-  submitting.value = true
   error.value = null
+  if (password.value !== confirmPassword.value) {
+    error.value = t('auth.passwordMismatch')
+    return
+  }
+  submitting.value = true
   try {
     await auth.resetPassword(token, password.value)
     done.value = true
@@ -32,31 +37,42 @@ async function submit() {
 
 <template>
   <div class="auth-view">
-    <header class="header">
-      <h1>{{ t('auth.resetTitle') }}</h1>
-    </header>
+    <div class="page-inner">
+      <header class="header">
+        <h1>{{ t('auth.resetTitle') }}</h1>
+      </header>
 
-    <p v-if="!token" class="error">{{ t('auth.resetNoToken') }}</p>
+      <p v-if="!token" class="error">{{ t('auth.resetNoToken') }}</p>
 
-    <div v-else-if="done" class="done">
-      <p>{{ t('auth.resetDone') }}</p>
-      <button class="btn-primary" type="button" @click="router.push('/login')">{{ t('auth.goLogin') }}</button>
+      <div v-else-if="done" class="done">
+        <p>{{ t('auth.resetDone') }}</p>
+        <button class="btn-primary" type="button" @click="router.push('/login')">{{ t('auth.goLogin') }}</button>
+      </div>
+
+      <form v-else class="form" @submit.prevent="submit">
+        <label>
+          {{ t('auth.newPassword') }}
+          <input v-model="password" type="password" required minlength="8" autocomplete="new-password" />
+        </label>
+        <label>
+          {{ t('auth.confirmPassword') }}
+          <input v-model="confirmPassword" type="password" required minlength="8" autocomplete="new-password" />
+        </label>
+        <p v-if="error" class="error">{{ error }}</p>
+        <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.resetSubmit') }}</button>
+      </form>
     </div>
-
-    <form v-else class="form" @submit.prevent="submit">
-      <label>
-        {{ t('auth.newPassword') }}
-        <input v-model="password" type="password" required minlength="8" autocomplete="new-password" />
-      </label>
-      <p v-if="error" class="error">{{ error }}</p>
-      <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.resetSubmit') }}</button>
-    </form>
   </div>
 </template>
 
 <style scoped>
 .auth-view {
   padding: 16px;
+}
+@media (min-width: 640px) {
+  .auth-view {
+    padding: 32px;
+  }
 }
 .header {
   margin-bottom: 20px;

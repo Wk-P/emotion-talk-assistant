@@ -122,75 +122,48 @@ textarea::placeholder {
    responsive shell) lives here ONLY — not in each view's own scoped style.
    A per-view `max-width`/`margin` rule would out-specificity these (scoped
    styles compile to `.foo[data-v-xxx]`, which beats a plain `.foo` here no
-   matter what this file says), which is exactly what silently broke the
-   wide-screen width before: every view was still rendering at its old
-   mobile-era max-width because its own scoped rule was winning. One width
-   per breakpoint, defined once. */
+   matter what this file says). One width per breakpoint, defined once.
+
+   On request, every one of these is edge-to-edge full width on wide screens
+   now — no floating card, no shadow, no margin boxing it into the middle of
+   the screen. `.page-inner` (used inside the auth/onboarding templates) is
+   the one place a narrower *reading* column still exists, because an
+   `<input>` or a paragraph stretched to the full width of an ultrawide
+   monitor is a usability problem, not a "wide screen isn't being used"
+   problem — but that column lives inside a full-width page, not as the
+   page's own boxed-in width. */
 .onboarding,
 .auth-view,
 .records-view,
 .history-view,
-.help-view {
+.help-view,
+.admin-view {
   width: 100%;
-  max-width: 480px;
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--surface);
+}
+
+.page-inner {
+  width: 100%;
+  max-width: 440px;
   margin: 0 auto;
 }
 
-@media (max-width: 639px) {
-  .onboarding,
-  .auth-view,
-  .records-view,
-  .history-view,
-  .help-view {
-    min-height: 100dvh;
-  }
+/* Wider sibling of .page-inner for list/data views (History, Records,
+   Help) — cards and rows of short text still need to stop somewhere on an
+   ultrawide monitor, just at a much more generous width than a login form. */
+.page-inner-wide {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 /* ChatView builds its own responsive shell (sidebar at >=960px) and manages
-   its own sizing — it opts out of the generic "floating card" treatment
-   below entirely. */
+   its own sizing — it's already full width/full height on its own. */
 @media (min-width: 640px) {
   body:has(.chat-view) {
     display: block;
-  }
-  .onboarding,
-  .auth-view,
-  .records-view,
-  .history-view,
-  .help-view {
-    max-width: 560px;
-    margin: 0 auto;
-    background: var(--surface);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-  }
-  /* Center the card in the viewport instead of pinning it 32px from the
-     top — a short page (e.g. the login form) was leaving a lopsided gap
-     below it otherwise. Falls back to natural top/bottom scroll room when
-     content is taller than the viewport.
-     flex-direction MUST be column: with the default row, #app (body's only
-     flex child) gets no explicit width and shrink-wraps to its content's
-     intrinsic size — collapsing every card down to ~240px (an <input>'s
-     default width) regardless of the max-width set above, since that
-     max-width has no real containing block to resolve against. Column
-     direction makes width the cross axis, where the default
-     `align-items: stretch` gives #app the full viewport width, so the
-     card's own `margin: 0 auto` can center it at its real max-width.
-     :not(:has(.chat-view)) on EVERY property here, not just `display` above
-     — ChatView already fills exactly 100dvh itself (see its own height
-     rule), so this rule's `padding: 32px` + `min-height: 100dvh` were
-     stacking on top of that and pushing 64px of it (the composer, the
-     sidebar's logout link) below the fold. A property with no competing
-     declaration still applies even when a more specific selector overrides
-     a different property on the same element — `display` was fixed by
-     `body:has(.chat-view)` above, but padding/min-height/etc weren't. */
-  body:not(:has(.chat-view)) {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    min-height: 100dvh;
-    padding: 32px 16px;
   }
 }
 
@@ -303,6 +276,7 @@ textarea::placeholder {
 .auth-view,
 .records-view,
 .history-view,
-.help-view {
+.help-view,
+.admin-view {
   animation: fade-up 0.35s ease;
 }

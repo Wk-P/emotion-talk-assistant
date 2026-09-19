@@ -29,25 +29,32 @@ async function submit() {
       <button type="button" class="btn-back" @click="router.push('/login')"><span class="arrow">&lt;</span> {{ t('auth.back') }}</button>
     </header>
 
-    <h1 class="page-title">{{ t('auth.forgotTitle') }}</h1>
+    <div class="page-inner">
+      <h1 class="page-title">{{ t('auth.forgotTitle') }}</h1>
 
-    <div v-if="done" class="done">
-      <p>{{ t('auth.forgotDone') }}</p>
+      <div v-if="done" class="done">
+        <p>{{ t('auth.forgotDone') }}</p>
+      </div>
+
+      <form v-else class="form" @submit.prevent="submit">
+        <label>
+          {{ t('auth.email') }}
+          <input v-model="email" type="email" required autocomplete="email" />
+        </label>
+        <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.sendResetLink') }}</button>
+      </form>
     </div>
-
-    <form v-else class="form" @submit.prevent="submit">
-      <label>
-        {{ t('auth.email') }}
-        <input v-model="email" type="email" required autocomplete="email" />
-      </label>
-      <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.sendResetLink') }}</button>
-    </form>
   </div>
 </template>
 
 <style scoped>
 .auth-view {
   padding: 16px;
+}
+@media (min-width: 640px) {
+  .auth-view {
+    padding: 32px;
+  }
 }
 .header {
   margin-bottom: 14px;

@@ -143,7 +143,11 @@ async def delete_admin_session(
     session: ConversationSession = Depends(get_session_or_404),
     admin: User = Depends(get_current_admin_required),
 ) -> None:
-    if session.user_id:
+    # Deleting your own conversation isn't a self-account action (no
+    # demotion/disable/deletion of the account itself), so it's exempt from
+    # _can_manage's self-guard — otherwise an admin could never clear their
+    # own test conversations.
+    if session.user_id and session.user_id != admin.id:
         owner = await db.get(User, session.user_id)
         if owner is not None:
             _can_manage(admin, owner)
