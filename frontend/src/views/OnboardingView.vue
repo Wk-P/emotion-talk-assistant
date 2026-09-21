@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import type { Language } from '@/api/client'
 import AppMenu from '@/components/AppMenu.vue'
+import { detectLang, saveLang } from '@/i18n/langPreference'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 
@@ -11,16 +12,15 @@ const { t, locale } = useI18n()
 const router = useRouter()
 const session = useSessionStore()
 const auth = useAuthStore()
-// Default to the visitor's own browser language instead of always
-// highlighting 中文 — this app serves both Chinese and Korean speakers.
-const browserLang: Language = navigator.language.toLowerCase().startsWith('ko') ? 'ko' : 'zh'
-const selected = ref<Language>(browserLang)
-locale.value = browserLang
+
+const selected = ref<Language>(detectLang())
+locale.value = selected.value
 const starting = ref(false)
 
 function choose(lang: Language) {
   selected.value = lang
   locale.value = lang
+  saveLang(lang)
 }
 
 async function start() {
@@ -93,16 +93,19 @@ async function start() {
     <template v-else>
       <p class="intro reveal" style="animation-delay: 0.14s">{{ t('onboarding.intro') }}</p>
       <p class="note reveal" style="animation-delay: 0.18s">{{ t('onboarding.consentNote') }}</p>
+      <p class="login-hint reveal" style="animation-delay: 0.2s">{{ t('onboarding.loginHint') }}</p>
 
       <div class="cta reveal" style="animation-delay: 0.22s">
-        <p class="login-hint">{{ t('onboarding.loginHint') }}</p>
-        <button class="btn-primary start" type="button" @click="router.push('/login')">
+        <button class="btn-primary start" type="button" :disabled="starting" @click="start">
+          {{ t('onboarding.start') }}
+        </button>
+        <button class="btn-outline" type="button" @click="router.push('/login')">
           {{ t('toolbar.login') }}
         </button>
-        <button class="btn-text register-link" type="button" @click="router.push('/register')">
-          {{ t('auth.needAccount') }}
-        </button>
       </div>
+      <button type="button" class="btn-text register-link reveal" style="animation-delay: 0.26s" @click="router.push('/register')">
+        {{ t('auth.needAccount') }}
+      </button>
     </template>
     </div>
   </div>

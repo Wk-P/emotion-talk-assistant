@@ -1,6 +1,23 @@
 import axios from 'axios'
 
 const AUTH_TOKEN_KEY = 'emotion-talk-auth-token'
+const DEVICE_ID_KEY = 'emotion-talk-device-id'
+
+// Only used when signed out — groups an anonymous visitor's sessions on this
+// browser so history/records work without an account. Once they log in,
+// user_id takes over and this is ignored server-side.
+export function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY)
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem(DEVICE_ID_KEY, id)
+    }
+    return id
+  } catch {
+    return crypto.randomUUID()
+  }
+}
 
 export function getAuthToken(): string | null {
   try {
@@ -60,7 +77,10 @@ export interface ConfirmationPayload {
 }
 
 export async function startSession(language: Language) {
-  const { data } = await api.post<{ session_id: string; language: Language }>('/api/session/start', { language })
+  const { data } = await api.post<{ session_id: string; language: Language }>('/api/session/start', {
+    language,
+    device_id: getAuthToken() ? undefined : getDeviceId(),
+  })
   return data
 }
 
@@ -79,7 +99,8 @@ export interface HistoryMessageItem {
 }
 
 export async function listHistory() {
-  const { data } = await api.get<SessionHistoryItem[]>('/api/session/history')
+  const params = getAuthToken() ? undefined : { device_id: getDeviceId() }
+  const { data } = await api.get<SessionHistoryItem[]>('/api/session/history', { params })
   return data
 }
 
@@ -89,7 +110,8 @@ export async function getSessionMessages(sessionId: string) {
 }
 
 export async function clearHistory() {
-  await api.delete('/api/session/history')
+  const params = getAuthToken() ? undefined : { device_id: getDeviceId() }
+  await api.delete('/api/session/history', { params })
 }
 
 export async function sendChat(sessionId: string, message?: string, confirmation?: ConfirmationPayload) {

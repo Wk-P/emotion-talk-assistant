@@ -2,9 +2,11 @@
 import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import type { Language } from '@/api/client'
+import { saveLang } from '@/i18n/langPreference'
 import { useAuthStore } from '@/stores/auth'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 const open = ref(false)
@@ -46,6 +48,11 @@ function logout() {
   auth.logout()
   router.push('/')
 }
+
+function chooseLang(lang: Language) {
+  locale.value = lang
+  saveLang(lang)
+}
 </script>
 
 <template>
@@ -79,6 +86,25 @@ function logout() {
           >
             {{ t('admin.entry') }}
           </button>
+          <div class="divider" />
+          <div class="lang-row">
+            <button
+              type="button"
+              class="lang-btn"
+              :class="{ active: locale === 'zh' }"
+              @click="chooseLang('zh')"
+            >
+              中文
+            </button>
+            <button
+              type="button"
+              class="lang-btn"
+              :class="{ active: locale === 'ko' }"
+              @click="chooseLang('ko')"
+            >
+              한국어
+            </button>
+          </div>
           <div class="divider" />
           <button v-if="!auth.user" type="button" class="item" @click="go('/login')">
             {{ t('toolbar.login') }}
@@ -178,6 +204,26 @@ function logout() {
   height: 1px;
   background: var(--border);
   margin: 6px 4px;
+}
+.lang-row {
+  display: flex;
+  gap: 6px;
+  padding: 2px 4px;
+}
+.lang-btn {
+  flex: 1;
+  padding: 7px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.lang-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-soft);
 }
 .menu-panel-enter-active,
 .menu-panel-leave-active {
