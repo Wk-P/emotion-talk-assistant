@@ -10,6 +10,7 @@ import {
   type SessionHistoryItem,
 } from '@/api/client'
 import { useSessionStore } from '@/stores/session'
+import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -31,6 +32,22 @@ async function toggle(sessionId: string) {
   }
   openMessages.value = await getSessionMessages(sessionId)
   openId.value = sessionId
+}
+
+async function continueConversation(item: SessionHistoryItem) {
+  await session.resume(item.session_id, item.language)
+  router.push('/chat')
+}
+
+async function exportConversation(item: SessionHistoryItem) {
+  const messages = openId.value === item.session_id ? openMessages.value : await getSessionMessages(item.session_id)
+  const content = buildTranscriptMarkdown(item.created_at, messages, {
+    title: t('app.title'),
+    createdAt: t('history.title'),
+    user: t('chat.you'),
+    assistant: t('chat.assistant'),
+  })
+  downloadTextFile(`conversation-${item.created_at.slice(0, 10)}.md`, content)
 }
 
 async function doClear() {
@@ -64,6 +81,14 @@ onMounted(load)
             <span>{{ new Date(item.created_at).toLocaleString() }}</span>
             <span class="count">{{ t('history.messageCount', { n: item.message_count }) }}</span>
           </button>
+          <div class="entry-actions">
+            <button type="button" class="btn-outline" @click="continueConversation(item)">
+              {{ t('history.continue') }}
+            </button>
+            <button type="button" class="btn-outline" @click="exportConversation(item)">
+              {{ t('history.export') }}
+            </button>
+          </div>
           <Transition name="expand">
             <div v-if="openId === item.session_id" class="messages">
               <p v-if="openMessages.length === 0" class="empty">{{ t('history.noMessages') }}</p>
@@ -130,6 +155,16 @@ onMounted(load)
 }
 .count {
   color: var(--text-muted);
+}
+.entry-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+.entry-actions button {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12.5px;
 }
 .messages {
   padding: 10px 12px;

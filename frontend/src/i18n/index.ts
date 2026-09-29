@@ -26,6 +26,7 @@ const messages = {
       skip: '跳过',
       sendError: '发送失败，请检查网络后重试',
       retry: '重试',
+      export: '导出对话',
     },
     toolbar: {
       pause: '中断',
@@ -42,6 +43,8 @@ const messages = {
     },
     sidebar: {
       newChat: '+ 开始新对话',
+      recent: '最近对话',
+      recentEmpty: '暂无历史对话',
     },
     fieldsCard: {
       seb_summary: '这是根据你刚才说的整理出的一个小结（情境-情绪-行为），看看对不对，需要的话可以直接改。',
@@ -103,6 +106,8 @@ const messages = {
       clearConfirm: '这会删除本设备上保存的所有历史对话和记录，且无法恢复，确定要继续吗？',
       clearConfirmYes: '确定清除',
       clearConfirmNo: '取消',
+      continue: '继续对话',
+      export: '导出为文档',
     },
     help: {
       title: '帮助与说明',
@@ -169,6 +174,7 @@ const messages = {
       skip: '건너뛰기',
       sendError: '전송에 실패했어요. 네트워크를 확인하고 다시 시도해 주세요',
       retry: '다시 시도',
+      export: '대화 내보내기',
     },
     toolbar: {
       pause: '중단',
@@ -185,6 +191,8 @@ const messages = {
     },
     sidebar: {
       newChat: '+ 새 대화 시작',
+      recent: '최근 대화',
+      recentEmpty: '아직 대화 기록이 없습니다',
     },
     fieldsCard: {
       seb_summary: '방금 이야기한 내용을 정리한 요약이에요（상황-감정-행동）. 맞는지 확인하고 필요하면 직접 고칠 수 있어요.',
@@ -246,6 +254,8 @@ const messages = {
       clearConfirm: '이 기기에 저장된 모든 대화 기록과 기록물이 삭제되며 복구할 수 없습니다. 계속하시겠어요?',
       clearConfirmYes: '삭제 확인',
       clearConfirmNo: '취소',
+      continue: '계속 대화하기',
+      export: '문서로 내보내기',
     },
     help: {
       title: '도움말 및 안내',

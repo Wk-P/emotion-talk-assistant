@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { listHistory, type SessionHistoryItem } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 
@@ -9,15 +11,30 @@ const router = useRouter()
 const auth = useAuthStore()
 const session = useSessionStore()
 
-function newChat() {
+const recent = ref<SessionHistoryItem[]>([])
+
+async function loadRecent() {
+  recent.value = await listHistory()
+}
+
+async function openConversation(item: SessionHistoryItem) {
+  if (item.session_id === session.sessionId) return
+  await session.resume(item.session_id, item.language)
+  router.push('/chat')
+}
+
+async function newChat() {
   session.reset()
   router.push('/')
+  await loadRecent()
 }
 
 function logout() {
   auth.logout()
   router.push('/')
 }
+
+onMounted(loadRecent)
 </script>
 
 <template>
@@ -28,6 +45,22 @@ function logout() {
     </div>
 
     <button type="button" class="btn-primary new-chat" @click="newChat">{{ t('sidebar.newChat') }}</button>
+
+    <div class="recent">
+      <div class="recent-label">{{ t('sidebar.recent') }}</div>
+      <p v-if="recent.length === 0" class="recent-empty">{{ t('sidebar.recentEmpty') }}</p>
+      <button
+        v-for="item in recent"
+        :key="item.session_id"
+        type="button"
+        class="recent-item"
+        :class="{ active: item.session_id === session.sessionId }"
+        :title="new Date(item.created_at).toLocaleString()"
+        @click="openConversation(item)"
+      >
+        {{ new Date(item.created_at).toLocaleString() }}
+      </button>
+    </div>
 
     <nav class="side-nav">
       <button type="button" @click="router.push('/history')">{{ t('toolbar.history') }}</button>
@@ -79,10 +112,55 @@ function logout() {
   font-size: 14px;
   padding: 10px 14px;
 }
+.recent {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.recent-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px 6px;
+}
+.recent-empty {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 0 10px;
+}
+.recent-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.recent-item:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  transform: none;
+}
+.recent-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
 .side-nav {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex-shrink: 0;
 }
 .side-nav button {
   text-align: left;

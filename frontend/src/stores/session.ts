@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
-import { endSession, sendChat, startSession, updateConsent } from '@/api/client'
+import { endSession, getSessionMessages, sendChat, startSession, updateConsent } from '@/api/client'
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -30,6 +30,25 @@ export const useSessionStore = defineStore('session', () => {
     sessionId.value = res.session_id
     turns.value = []
     answeredTurnIndices.value = new Set()
+  }
+
+  // Re-opens a past conversation instead of starting a new one — the
+  // backend chat endpoint already accepts further messages against an
+  // existing session_id (there is no "closed" state that blocks it), so
+  // this only needs to rehydrate local state from the stored history.
+  // Replayed turns never carry candidate cards (history only stores
+  // role/content), so they render as plain bubbles, same as a live reply
+  // once its card has been confirmed.
+  async function resume(id: string, lang: Language) {
+    const messages = await getSessionMessages(id)
+    sessionId.value = id
+    language.value = lang
+    turns.value = messages
+      .filter((m): m is typeof m & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role, text: m.content }))
+    answeredTurnIndices.value = new Set()
+    error.value = null
+    lastFailedSend.value = null
   }
 
   async function send(message?: string, confirmation?: ConfirmationPayload, opts?: { skipBubble?: boolean }) {
@@ -102,6 +121,7 @@ export const useSessionStore = defineStore('session', () => {
     answeredTurnIndices,
     error,
     begin,
+    resume,
     send,
     retry,
     markAnswered,

@@ -8,12 +8,22 @@ import AppSidebar from '@/components/AppSidebar.vue'
 import BottomToolbar from '@/components/BottomToolbar.vue'
 import CandidateCardView from '@/components/cards/CandidateCardView.vue'
 import { useSessionStore } from '@/stores/session'
+import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
 
 const { t } = useI18n()
 const router = useRouter()
 const session = useSessionStore()
 const draft = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
+
+function exportConversation() {
+  const content = buildTranscriptMarkdown(
+    new Date().toISOString(),
+    session.turns.map((turn) => ({ role: turn.role, content: turn.text, created_at: '' })),
+    { title: t('app.title'), createdAt: t('history.title'), user: t('chat.you'), assistant: t('chat.assistant') },
+  )
+  downloadTextFile(`conversation-${new Date().toISOString().slice(0, 10)}.md`, content)
+}
 
 onMounted(() => {
   if (!session.sessionId) {
@@ -61,7 +71,17 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
     <div class="chat-view">
       <header class="chat-header">
         <span class="title">{{ t('app.title') }}</span>
-        <AppMenu class="narrow-only" />
+        <div class="header-actions">
+          <button
+            v-if="session.turns.length > 0"
+            type="button"
+            class="btn-text export-btn"
+            @click="exportConversation"
+          >
+            {{ t('chat.export') }}
+          </button>
+          <AppMenu class="narrow-only" />
+        </div>
       </header>
 
       <div ref="scrollEl" class="turns">
@@ -157,6 +177,15 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.01em;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.export-btn {
+  font-size: 12.5px;
+  padding: 6px 8px;
 }
 .turns {
   flex: 1;
