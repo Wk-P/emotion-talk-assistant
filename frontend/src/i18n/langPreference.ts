@@ -4,7 +4,7 @@ const STORAGE_KEY = 'emotion-ai-lang'
 
 // Only fall back to the browser's language when the visitor has never
 // picked one themselves — components that call this on every mount (e.g.
-// OnboardingView) would otherwise stomp on an explicit choice each time.
+// ConsentDialog) would otherwise stomp on an explicit choice each time.
 export function detectLang(): Language {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)

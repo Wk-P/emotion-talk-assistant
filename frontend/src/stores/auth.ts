@@ -15,6 +15,10 @@ import {
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
   const ready = ref(false)
+  // Drives the full-screen sign-out transition (components/SignOutOverlay.vue):
+  // 'leaving' while it fades in, 'done' once signed out (check mark), then
+  // back to 'idle' as it fades away.
+  const signOutPhase = ref<'idle' | 'leaving' | 'done'>('idle')
 
   async function init() {
     if (getAuthToken()) {
@@ -55,5 +59,33 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
-  return { user, ready, init, login, register, verifyEmail, forgotPassword, resetPassword, logout }
+  // Signing out is instant; this just paces it so it reads as a deliberate
+  // step instead of the page silently flipping. `afterSignOut` runs while
+  // the overlay covers the screen (clear the open chat, navigate).
+  async function signOut(afterSignOut: () => unknown) {
+    if (signOutPhase.value !== 'idle') return
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, reduced ? Math.min(ms, 150) : ms))
+    signOutPhase.value = 'leaving'
+    await wait(450)
+    logout()
+    await afterSignOut()
+    signOutPhase.value = 'done'
+    await wait(800)
+    signOutPhase.value = 'idle'
+  }
+
+  return {
+    user,
+    ready,
+    signOutPhase,
+    init,
+    login,
+    register,
+    verifyEmail,
+    forgotPassword,
+    resetPassword,
+    logout,
+    signOut,
+  }
 })

@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import type { ConfirmationPayload } from '@/api/client'
+import type { ConfirmationPayload, Language } from '@/api/client'
 import AppMenu from '@/components/AppMenu.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import BottomToolbar from '@/components/BottomToolbar.vue'
 import CandidateCardView from '@/components/cards/CandidateCardView.vue'
+import ConsentDialog from '@/components/ConsentDialog.vue'
 import { useSessionStore } from '@/stores/session'
 import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
 
 const { t } = useI18n()
-const router = useRouter()
 const session = useSessionStore()
 const draft = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
@@ -25,13 +24,19 @@ function exportConversation() {
   downloadTextFile(`conversation-${new Date().toISOString().slice(0, 10)}.md`, content)
 }
 
-onMounted(() => {
-  if (!session.sessionId && !session.pending) {
-    router.replace('/')
-    return
-  }
-  // New chat: show the opening (deterministic, no LLM call, nothing stored).
+// Neither a resumed conversation nor an acknowledged new one — i.e. a fresh
+// visit, or "new chat" from the sidebar (which resets the store). The notice
+// dialog shows every time; nothing is stored until the first send.
+const needsAck = computed(() => !session.sessionId && !session.pending)
+
+function onAcknowledge(lang: Language) {
+  session.begin(lang)
+  // Opening: deterministic, no LLM call, nothing stored.
   session.loadOpening()
+}
+
+onMounted(() => {
+  if (!needsAck.value) session.loadOpening()
 })
 
 function scrollToBottom() {
@@ -119,16 +124,18 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
           <input
             v-model="draft"
             :placeholder="t('chat.placeholder')"
-            :disabled="session.sending"
+            :disabled="session.sending || needsAck"
             autocomplete="off"
           />
-          <button type="submit" class="btn-primary send-btn" :disabled="session.sending || !draft.trim()">
+          <button type="submit" class="btn-primary send-btn" :disabled="session.sending || needsAck || !draft.trim()">
             <span v-if="!session.sending">{{ t('chat.send') }}</span>
             <span v-else class="spinner" aria-hidden="true" />
           </button>
         </form>
       </div>
     </div>
+
+    <ConsentDialog v-if="needsAck" @start="onAcknowledge" />
   </div>
 </template>
 

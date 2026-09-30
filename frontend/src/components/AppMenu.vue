@@ -5,10 +5,12 @@ import { useRouter } from 'vue-router'
 import type { Language } from '@/api/client'
 import { saveLang } from '@/i18n/langPreference'
 import { useAuthStore } from '@/stores/auth'
+import { useSessionStore } from '@/stores/session'
 
 const { t, locale } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const session = useSessionStore()
 const open = ref(false)
 const toggleEl = ref<HTMLButtonElement | null>(null)
 const panelPos = ref({ top: 0, left: 0 })
@@ -45,8 +47,11 @@ function go(path: string) {
 
 function logout() {
   open.value = false
-  auth.logout()
-  router.push('/')
+  // Clear the open chat too — it belongs to the account being signed out.
+  auth.signOut(() => {
+    session.reset()
+    return router.push('/')
+  })
 }
 
 function chooseLang(lang: Language) {

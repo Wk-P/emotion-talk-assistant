@@ -20,7 +20,7 @@ async function loadRecent() {
 async function openConversation(item: SessionHistoryItem) {
   if (item.session_id === session.sessionId) return
   await session.resume(item.session_id, item.language)
-  router.push('/chat')
+  router.push('/')
 }
 
 async function newChat() {
@@ -30,8 +30,11 @@ async function newChat() {
 }
 
 function logout() {
-  auth.logout()
-  router.push('/')
+  // Clear the open chat too — it belongs to the account being signed out.
+  auth.signOut(() => {
+    session.reset()
+    return router.push('/')
+  })
 }
 
 // A new chat only exists once its first message has gone through — refresh

@@ -16,8 +16,8 @@ app.use(router)
 app.use(i18n)
 
 // Otherwise every page renders in i18n's hardcoded 'zh' default until
-// OnboardingView happens to mount and fix it — which never happens for a
-// logged-in user landing straight on /chat, /history, etc. via a saved link.
+// ConsentDialog happens to mount and fix it — which never happens for a
+// visitor landing straight on /history, /help, etc. via a saved link.
 i18n.global.locale.value = detectLang()
 
 useAuthStore().init()

@@ -17,7 +17,7 @@ onMounted(async () => {
   <div class="help-view">
     <div class="page-inner">
       <header class="header">
-        <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('help.back') }}</button>
+        <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('help.back') }}</button>
       </header>
 
       <h1 class="page-title">{{ t('help.title') }}</h1>

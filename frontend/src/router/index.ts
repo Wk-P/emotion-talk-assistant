@@ -4,9 +4,11 @@ import { useAuthStore } from '@/stores/auth'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'onboarding', component: () => import('@/views/OnboardingView.vue') },
+    // No separate landing page: '/' is the chat itself, with an informed-
+    // notice dialog before every new conversation (components/ConsentDialog.vue).
     // Anonymous (device_id-scoped) use is allowed here — see app/api/session.py.
-    { path: '/chat', name: 'chat', component: () => import('@/views/ChatView.vue') },
+    { path: '/', name: 'chat', component: () => import('@/views/ChatView.vue') },
+    { path: '/chat', redirect: '/' },
     { path: '/records', name: 'records', component: () => import('@/views/RecordsView.vue') },
     { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue') },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },

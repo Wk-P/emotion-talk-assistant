@@ -27,7 +27,7 @@ onMounted(load)
   <div class="records-view">
     <div class="page-inner-wide">
       <header class="header">
-        <button type="button" class="btn-back" @click="router.push('/chat')"><span class="arrow">&lt;</span> {{ t('records.back') }}</button>
+        <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('records.back') }}</button>
       </header>
 
       <h1 class="page-title">{{ t('records.title') }}</h1>
