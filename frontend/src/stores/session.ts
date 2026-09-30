@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
-import { endSession, getSessionMessages, sendChat, startSession, updateConsent } from '@/api/client'
+import { endSession, getOpening, getSessionMessages, sendChat, startSession, updateConsent } from '@/api/client'
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -12,6 +12,10 @@ export interface ChatTurn {
 
 export const useSessionStore = defineStore('session', () => {
   const sessionId = ref<string | null>(null)
+  // A new chat is open but nothing has been sent yet, so no session exists
+  // on the backend — like ChatGPT, the conversation is only created on the
+  // first send (see send()). Starting and walking away leaves no record.
+  const pending = ref(false)
   const language = ref<Language>('zh')
   const turns = ref<ChatTurn[]>([])
   const sending = ref(false)
@@ -24,12 +28,22 @@ export const useSessionStore = defineStore('session', () => {
   const error = ref<string | null>(null)
   const lastFailedSend = ref<{ message?: string; confirmation?: ConfirmationPayload } | null>(null)
 
-  async function begin(lang: Language) {
+  function begin(lang: Language) {
+    reset()
     language.value = lang
-    const res = await startSession(lang)
-    sessionId.value = res.session_id
-    turns.value = []
-    answeredTurnIndices.value = new Set()
+    pending.value = true
+  }
+
+  // Shows the disclaimer + intent question without creating anything.
+  async function loadOpening() {
+    if (sessionId.value || turns.value.length > 0) return
+    sending.value = true
+    try {
+      const res = await getOpening(language.value)
+      turns.value.push({ role: 'assistant', text: res.reply_text, candidates: res.candidates, riskLevel: res.risk_level })
+    } finally {
+      sending.value = false
+    }
   }
 
   // Re-opens a past conversation instead of starting a new one — the
@@ -41,6 +55,7 @@ export const useSessionStore = defineStore('session', () => {
   // once its card has been confirmed.
   async function resume(id: string, lang: Language) {
     const messages = await getSessionMessages(id)
+    pending.value = false
     sessionId.value = id
     language.value = lang
     turns.value = messages
@@ -52,11 +67,16 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function send(message?: string, confirmation?: ConfirmationPayload, opts?: { skipBubble?: boolean }) {
-    if (!sessionId.value || sending.value) return
+    if ((!sessionId.value && !pending.value) || sending.value) return
     error.value = null
     if (message && !opts?.skipBubble) turns.value.push({ role: 'user', text: message })
     sending.value = true
     try {
+      if (!sessionId.value) {
+        const started = await startSession(language.value)
+        sessionId.value = started.session_id
+        pending.value = false
+      }
       const res = await sendChat(sessionId.value, message, confirmation)
       turns.value.push({
         role: 'assistant',
@@ -105,6 +125,7 @@ export const useSessionStore = defineStore('session', () => {
   // would 404 ("session not found") against an id that no longer exists.
   function reset() {
     sessionId.value = null
+    pending.value = false
     turns.value = []
     consent.value = {}
     answeredTurnIndices.value = new Set()
@@ -114,6 +135,7 @@ export const useSessionStore = defineStore('session', () => {
 
   return {
     sessionId,
+    pending,
     language,
     turns,
     sending,
@@ -121,6 +143,7 @@ export const useSessionStore = defineStore('session', () => {
     answeredTurnIndices,
     error,
     begin,
+    loadOpening,
     resume,
     send,
     retry,

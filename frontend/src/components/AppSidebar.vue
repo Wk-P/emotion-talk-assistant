@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { listHistory, type SessionHistoryItem } from '@/api/client'
@@ -33,6 +33,16 @@ function logout() {
   auth.logout()
   router.push('/')
 }
+
+// A new chat only exists once its first message has gone through — refresh
+// after that send finishes, instead of waiting for a reload.
+watch(
+  () => session.sending,
+  (sending) => {
+    const id = session.sessionId
+    if (!sending && id && !recent.value.some((item) => item.session_id === id)) loadRecent()
+  },
+)
 
 onMounted(loadRecent)
 </script>

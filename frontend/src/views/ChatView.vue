@@ -26,14 +26,12 @@ function exportConversation() {
 }
 
 onMounted(() => {
-  if (!session.sessionId) {
+  if (!session.sessionId && !session.pending) {
     router.replace('/')
     return
   }
-  if (session.turns.length === 0) {
-    // Kick off the flow — deterministic intent_options card, no LLM call.
-    session.send()
-  }
+  // New chat: show the opening (deterministic, no LLM call, nothing stored).
+  session.loadOpening()
 })
 
 function scrollToBottom() {

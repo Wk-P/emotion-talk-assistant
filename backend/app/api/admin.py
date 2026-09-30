@@ -61,7 +61,8 @@ async def list_all_sessions(
     """De-identified, for research analysis (see documents/Modified_Log.md).
     No email or other directly-identifying field is returned — each
     participant is a short, non-reversible-in-the-UI label derived from
-    their user_id. Only sessions with at least one message are listed:
+    their user_id. Only sessions the user took part in (see
+    ConversationSession.participated) and that still have messages are listed:
     a session with none either never had a message, or had DIALOGUE_HISTORY
     consent revoked/never granted, and its messages were already purged
     (see app/api/chat.py, app/api/consent.py) — this endpoint doesn't
@@ -75,6 +76,7 @@ async def list_all_sessions(
     result = await db.execute(
         select(ConversationSession, count_subq.c.message_count)
         .join(count_subq, count_subq.c.session_id == ConversationSession.id)
+        .where(ConversationSession.participated.is_(True))
         .order_by(ConversationSession.created_at.desc())
     )
     return [
@@ -114,6 +116,7 @@ async def export_all_sessions(
     sessions_result = await db.execute(
         select(ConversationSession)
         .join(Message, Message.session_id == ConversationSession.id)
+        .where(ConversationSession.participated.is_(True))
         .distinct()
         .order_by(ConversationSession.created_at.desc())
     )
@@ -173,6 +176,7 @@ async def list_users(
     )
     count_subq = (
         select(ConversationSession.user_id, func.count(ConversationSession.id).label("session_count"))
+        .where(ConversationSession.participated.is_(True))
         .group_by(ConversationSession.user_id)
         .subquery()
     )
@@ -223,7 +227,9 @@ async def set_user_active(
     await db.commit()
     await db.refresh(target)
     session_count_result = await db.execute(
-        select(func.count(ConversationSession.id)).where(ConversationSession.user_id == user_id)
+        select(func.count(ConversationSession.id)).where(
+            ConversationSession.user_id == user_id, ConversationSession.participated.is_(True)
+        )
     )
     return AdminUserItem(
         id=target.id,
@@ -255,7 +261,9 @@ async def set_user_role(
     await db.commit()
     await db.refresh(target)
     session_count_result = await db.execute(
-        select(func.count(ConversationSession.id)).where(ConversationSession.user_id == user_id)
+        select(func.count(ConversationSession.id)).where(
+            ConversationSession.user_id == user_id, ConversationSession.participated.is_(True)
+        )
     )
     return AdminUserItem(
         id=target.id,

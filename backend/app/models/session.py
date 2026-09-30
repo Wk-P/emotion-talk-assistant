@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -30,6 +30,14 @@ class ConversationSession(Base):
     language: Mapped[Language] = mapped_column(default=Language.ZH)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set on the first user message (typed or a picked option). Starting a
+    # chat saves the session and the code-sent opening message right away, so
+    # sessions still False were opened but never used — hidden from every
+    # list/count/export and cleaned up on the owner's next start (see
+    # app/api/session.py). A flag rather than "has a user message" because
+    # messages get purged at session end without DIALOGUE_HISTORY consent,
+    # and such a session was still a real conversation.
+    participated: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     # Rolling self-criticism signal in [0, 1], used to prioritize acceptance support
     # over exploration/action planning (design principle 4, 9.3).

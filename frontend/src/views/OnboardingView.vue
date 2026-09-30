@@ -26,8 +26,8 @@ function choose(lang: Language) {
 async function start() {
   starting.value = true
   try {
-    await session.begin(selected.value)
-    router.push('/chat')
+    session.begin(selected.value)
+    await router.push('/chat')
   } finally {
     starting.value = false
   }

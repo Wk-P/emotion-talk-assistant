@@ -4,13 +4,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_optional, get_session_or_404
 from app.db.session import get_db
+from app.models.enums import Language, MessageRole
 from app.models.message import Message
 from app.models.record import SavedRecord
 from app.models.session import ConversationSession
 from app.models.user import User
-from app.schemas.chat import HistoryMessageItem, SessionCreateRequest, SessionHistoryItem, SessionResponse
+from app.schemas.chat import ChatResponse, HistoryMessageItem, SessionCreateRequest, SessionHistoryItem, SessionResponse
+from app.services.dialogue_state import opening_turn
 
 router = APIRouter(prefix="/api/session", tags=["session"])
+
+
+@router.get("/opening", response_model=ChatResponse)
+async def get_opening(language: Language = Language.ZH, db: AsyncSession = Depends(get_db)) -> ChatResponse:
+    """What a new chat shows before the user has said anything — read-only,
+    nothing is stored. Like ChatGPT, a conversation only gets created
+    (POST /start) once the user sends their first message or picks an option."""
+
+    turn = await opening_turn(db, language)
+    return ChatResponse(reply_text=turn.reply_text, candidates=turn.candidates, risk_level=turn.risk_level)
 
 
 @router.post("/start", response_model=SessionResponse)
@@ -21,14 +33,41 @@ async def start_session(
 ) -> SessionResponse:
     if user is None and not payload.device_id:
         raise HTTPException(status_code=400, detail="device_id required when not logged in")
+
+    # Clean up this owner's earlier chats that were started but never used
+    # (no user message) — they're hidden everywhere already, this just keeps
+    # them from piling up in the database.
+    owner_filter = (
+        ConversationSession.user_id == user.id if user else ConversationSession.device_id == payload.device_id
+    )
+    blank_ids = select(ConversationSession.id).where(owner_filter, ConversationSession.participated.is_(False))
+    blank = list((await db.execute(blank_ids)).scalars().all())
+    if blank:
+        await db.execute(delete(Message).where(Message.session_id.in_(blank)))
+        await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(blank)))
+        await db.execute(delete(ConversationSession).where(ConversationSession.id.in_(blank)))
+
     session = ConversationSession(
         language=payload.language,
         user_id=user.id if user else None,
         device_id=None if user else payload.device_id,
         consent={},
-        confirmed_context={},
+        confirmed_context={"disclaimer_shown": True},
     )
     db.add(session)
+    await db.flush()
+    # The client already showed this opening from GET /opening before the
+    # session existed; record it here so the stored transcript starts where
+    # the conversation the user saw did.
+    opening = await opening_turn(db, session.language)
+    db.add(
+        Message(
+            session_id=session.id,
+            role=MessageRole.ASSISTANT,
+            content=opening.reply_text,
+            meta={"candidates": opening.candidates, "risk_level": opening.risk_level.value, "prompt_versions": opening.prompt_versions},
+        )
+    )
     await db.commit()
     await db.refresh(session)
     return SessionResponse(session_id=session.id, language=session.language)
@@ -59,7 +98,7 @@ async def list_history(
     result = await db.execute(
         select(ConversationSession, func.coalesce(count_subq.c.message_count, 0))
         .outerjoin(count_subq, count_subq.c.session_id == ConversationSession.id)
-        .where(owner_filter)
+        .where(owner_filter, ConversationSession.participated.is_(True))
         .order_by(ConversationSession.created_at.desc())
     )
     return [

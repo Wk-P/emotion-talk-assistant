@@ -196,6 +196,27 @@ def _describe_confirmation(confirmation: dict[str, Any], language: Language) -> 
     return None
 
 
+async def opening_turn(db: AsyncSession, language: Language, with_disclaimer: bool = True) -> TurnResult:
+    """The fixed, code-sent opening: disclaimer (optional) + intent question
+    + intent option card. No LLM call. Also served read-only before any
+    session exists (app/api/session.py), so a chat is only created once the
+    user actually sends something."""
+
+    question = (await registry.resolve(db, [registry.ASSISTANT_INTENT_QUESTION], language))[
+        registry.ASSISTANT_INTENT_QUESTION
+    ]
+    reply_text = question.content
+    if with_disclaimer:
+        # Modified_Log.md "系统提示：开始之前加入免责声明" — sent once, verbatim,
+        # by code rather than left to the model (design principle 8.1).
+        reply_text = f"{_DISCLAIMER[language]}\n\n{reply_text}"
+    return TurnResult(
+        reply_text=reply_text,
+        candidates=[{"type": "intent_options", "items": _INTENT_OPTION_COPY[language]["items"]}],
+        prompt_versions={registry.ASSISTANT_INTENT_QUESTION: question.version},
+    )
+
+
 async def handle_turn(
     db: AsyncSession,
     session: ConversationSession,
@@ -216,25 +237,13 @@ async def handle_turn(
 
     ctx = session.confirmed_context or {}
     if not ctx.get("last_intent"):
-        # Covers both the very first turn (no user_text yet, deterministic —
-        # no LLM call) and any later turn where the user still hasn't picked
-        # an intent (e.g. they replied before confirming the card).
-        copy = _INTENT_OPTION_COPY[language]
-        question = (await registry.resolve(db, [registry.ASSISTANT_INTENT_QUESTION], language))[
-            registry.ASSISTANT_INTENT_QUESTION
-        ]
-        reply_text = question.content
-        if not ctx.get("disclaimer_shown"):
-            # Modified_Log.md "系统提示：开始之前加入免责声明" — sent once, verbatim,
-            # by code rather than left to the model (design principle 8.1).
-            reply_text = f"{_DISCLAIMER[language]}\n\n{reply_text}"
-            ctx = {**ctx, "disclaimer_shown": True}
-            session.confirmed_context = ctx
-        return TurnResult(
-            reply_text=reply_text,
-            candidates=[{"type": "intent_options", "items": copy["items"]}],
-            prompt_versions={registry.ASSISTANT_INTENT_QUESTION: question.version},
-        )
+        # Covers the very first turn (no user_text yet, deterministic — no
+        # LLM call) and any later turn where the user still hasn't picked an
+        # intent (e.g. they replied before confirming the card).
+        with_disclaimer = not ctx.get("disclaimer_shown")
+        if with_disclaimer:
+            session.confirmed_context = {**ctx, "disclaimer_shown": True}
+        return await opening_turn(db, language, with_disclaimer=with_disclaimer)
 
     confirmation_description = _describe_confirmation(confirmation, language) if confirmation else None
     synthetic_text = (

@@ -23,6 +23,7 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> Chat
 
     if payload.message:
         db.add(Message(session_id=session.id, role=MessageRole.USER, content=payload.message))
+        session.participated = True
 
     result = await handle_turn(db, session, payload.message, confirmation)
 
@@ -32,6 +33,7 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> Chat
     # history reconstruction still shows what was picked, not just this reply.
     if not payload.message and result.user_text_used:
         db.add(Message(session_id=session.id, role=MessageRole.USER, content=result.user_text_used))
+        session.participated = True
 
     db.add(
         Message(

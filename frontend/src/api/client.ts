@@ -98,6 +98,13 @@ export interface HistoryMessageItem {
   created_at: string
 }
 
+// The opening shown on a new chat before anything is stored — the session
+// itself is only created (startSession) on the user's first send.
+export async function getOpening(language: Language) {
+  const { data } = await api.get<ChatResponse>('/api/session/opening', { params: { language } })
+  return data
+}
+
 export async function listHistory() {
   const params = getAuthToken() ? undefined : { device_id: getDeviceId() }
   const { data } = await api.get<SessionHistoryItem[]>('/api/session/history', { params })
