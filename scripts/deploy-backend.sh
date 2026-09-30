@@ -18,9 +18,11 @@ rsync -av --delete \
 # The backend migrates/cleans the DB on startup (app/db/session.py), so keep
 # a copy from before each deploy. Keeps the 10 most recent.
 echo "==> backing up database"
-ssh "$SSH_HOST" "mkdir -p ~/emotion-talk-backups \
-  && sqlite3 $REMOTE_DIR/data/app.db \".backup ~/emotion-talk-backups/app-\$(date +%Y%m%d-%H%M%S).db\" \
-  && ls -1t ~/emotion-talk-backups/app-*.db | tail -n +11 | xargs -r rm --"
+# \$HOME, not ~: the path sits inside quotes on the remote side, where ~
+# is not expanded (sqlite3 then looks for a literal "~" directory).
+ssh "$SSH_HOST" "mkdir -p \$HOME/emotion-talk-backups \
+  && sqlite3 $REMOTE_DIR/data/app.db \".backup \$HOME/emotion-talk-backups/app-\$(date +%Y%m%d-%H%M%S).db\" \
+  && ls -1t \$HOME/emotion-talk-backups/app-*.db | tail -n +11 | xargs -r rm --"
 
 echo "==> building image on server"
 ssh "$SSH_HOST" "cd $REMOTE_DIR/backend && docker build -t $DOCKERHUB_IMAGE ."

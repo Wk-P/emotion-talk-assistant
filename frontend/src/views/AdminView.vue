@@ -396,7 +396,7 @@ onMounted(load)
 }
 @media (min-width: 640px) {
   .admin-view {
-    padding: 24px 32px;
+    padding: 24px 32px 40px;
   }
 }
 .header {
@@ -799,5 +799,59 @@ onMounted(load)
 .expand-leave-from {
   opacity: 1;
   max-height: 600px;
+}
+/* Kept last on purpose: these wide-screen overrides must come after the
+   base .header/.tabs/.page-title rules above, or those win on order.
+   Wide: full width edge to edge, with real vertical breathing room —
+   generous top/bottom page padding and a clear header → tabs → content
+   rhythm instead of everything stacked tight against the top. */
+@media (min-width: 1024px) {
+  .admin-view {
+    padding: 36px 48px 64px;
+  }
+  .header {
+    margin-bottom: 20px;
+  }
+  .page-title {
+    font-size: 22px;
+    margin-bottom: 8px;
+  }
+  .note {
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .tabs {
+    gap: 4px;
+    margin-bottom: 32px;
+    padding-bottom: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  /* Underline tabs rather than three stretched buttons across a 2000px row. */
+  .tabs button {
+    flex: 0 0 auto;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    padding: 12px 20px;
+    margin-bottom: -1px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .tabs button:not(:disabled):hover {
+    transform: none;
+    color: var(--accent);
+  }
+  .tabs button.active,
+  .tabs button.active:hover {
+    background: transparent;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+}
+@media (min-width: 1600px) {
+  .admin-view {
+    padding: 40px 64px 72px;
+  }
 }
 </style>

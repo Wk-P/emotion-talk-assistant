@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   listPromptVersions,
   listPrompts,
   previewPrompt,
   savePrompt,
+  type CandidateCard,
   type Language,
   type PreviewIntent,
   type PromptItem,
@@ -132,7 +133,9 @@ function loadVersion(v: PromptVersionItem) {
 interface TestTurn {
   role: 'user' | 'assistant'
   content: string
+  candidates?: CandidateCard[]
 }
+const INTENTS: PreviewIntent[] = ['vent', 'organize', 'stabilize', 'method']
 const testIntent = ref<PreviewIntent>('vent')
 const testSelfKindness = ref(false)
 const testTurns = ref<TestTurn[]>([])
@@ -140,6 +143,8 @@ const testInput = ref('')
 const testSending = ref(false)
 const testError = ref('')
 const testSystemPrompt = ref('')
+const showSystemPrompt = ref(false)
+const testLogEl = ref<HTMLElement | null>(null)
 
 const draftOverrides = computed(() => {
   const out: Record<string, string> = {}
@@ -152,9 +157,28 @@ const draftCount = computed(() => Object.keys(draftOverrides.value).length)
 
 watch(lang, () => clearTest())
 
+function scrollTestLog() {
+  nextTick(() => testLogEl.value?.scrollTo({ top: testLogEl.value.scrollHeight, behavior: 'smooth' }))
+}
+watch(() => testTurns.value.length, scrollTestLog)
+watch(testSending, scrollTestLog)
+
+// Candidate cards come back either as selectable items or as a fields form
+// (seb_summary / plan_form) — shown read-only here, just so the researcher
+// sees what the model proposed.
+function candidateLines(card: CandidateCard): string[] {
+  if (card.items?.length) return card.items.map((i) => i.label)
+  return Object.entries(card.fields ?? {})
+    .filter(([, v]) => v !== null && v !== '')
+    .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+}
+
 async function sendTest() {
   const message = testInput.value.trim()
   if (!message || testSending.value) return
+  const history = testTurns.value.map(({ role, content }) => ({ role, content }))
+  testTurns.value = [...testTurns.value, { role: 'user', content: message }]
+  testInput.value = ''
   testSending.value = true
   testError.value = ''
   try {
@@ -163,13 +187,15 @@ async function sendTest() {
       intent: testIntent.value,
       self_kindness: testSelfKindness.value,
       overrides: draftOverrides.value,
-      history: testTurns.value,
+      history,
       message,
     })
-    testTurns.value = [...testTurns.value, { role: 'user', content: message }, { role: 'assistant', content: res.reply_text }]
+    testTurns.value = [...testTurns.value, { role: 'assistant', content: res.reply_text, candidates: res.candidates }]
     testSystemPrompt.value = res.system_prompt
-    testInput.value = ''
   } catch {
+    // Put the message back so it can be resent as-is.
+    testTurns.value = testTurns.value.slice(0, -1)
+    testInput.value = message
     testError.value = t('prompts.testFailed')
   } finally {
     testSending.value = false
@@ -179,6 +205,7 @@ async function sendTest() {
 function clearTest() {
   testTurns.value = []
   testSystemPrompt.value = ''
+  showSystemPrompt.value = false
   testError.value = ''
 }
 
@@ -187,14 +214,22 @@ onMounted(load)
 
 <template>
   <div class="prompt-editor">
-    <p class="intro">{{ t('prompts.intro') }}</p>
-
-    <div class="lang-switch">
-      <button type="button" class="btn-outline" :class="{ active: lang === 'zh' }" @click="lang = 'zh'">中文</button>
-      <button type="button" class="btn-outline" :class="{ active: lang === 'ko' }" @click="lang = 'ko'">한국어</button>
+    <div class="toolbar">
+      <p class="intro">{{ t('prompts.intro') }}</p>
+      <div class="segmented" role="radiogroup">
+        <button type="button" role="radio" :aria-checked="lang === 'zh'" :class="{ on: lang === 'zh' }" @click="lang = 'zh'">
+          中文
+        </button>
+        <button type="button" role="radio" :aria-checked="lang === 'ko'" :class="{ on: lang === 'ko' }" @click="lang = 'ko'">
+          한국어
+        </button>
+      </div>
     </div>
 
-    <div v-if="!loading" class="layout">
+    <!-- Narrow: stacked. >=1024px: list | editor, test panel below.
+         >=1360px: full-width three-column workspace — list | editor | a
+         sticky, full-height test chat on the right. -->
+    <div v-if="!loading" class="workspace">
       <nav class="block-list">
         <button
           v-for="item in langItems"
@@ -214,9 +249,9 @@ onMounted(load)
         </button>
       </nav>
 
-      <section v-if="current" class="editor">
-        <h2 class="editor-title">{{ t(`prompts.keys.${current.key}.name`) }}</h2>
-        <p class="editor-desc">{{ t(`prompts.keys.${current.key}.desc`) }}</p>
+      <section v-if="current" class="editor panel">
+        <h2 class="panel-title">{{ t(`prompts.keys.${current.key}.name`) }}</h2>
+        <p class="panel-desc">{{ t(`prompts.keys.${current.key}.desc`) }}</p>
         <p class="editor-meta">
           <template v-if="current.version > 0">
             {{ t('prompts.inEffect', { v: current.version }) }}
@@ -269,87 +304,209 @@ onMounted(load)
           <pre>{{ outputFormat }}</pre>
         </details>
       </section>
-    </div>
 
-    <section v-if="!loading" class="test">
-      <h2 class="editor-title">{{ t('prompts.testTitle') }}</h2>
-      <p class="editor-desc">
-        {{ t('prompts.testDesc') }}
-        <strong v-if="draftCount > 0">{{ t('prompts.testDrafts', { n: draftCount }) }}</strong>
-      </p>
-      <div class="test-controls">
-        <select v-model="testIntent">
-          <option value="vent">{{ t('prompts.intent.vent') }}</option>
-          <option value="organize">{{ t('prompts.intent.organize') }}</option>
-          <option value="stabilize">{{ t('prompts.intent.stabilize') }}</option>
-          <option value="method">{{ t('prompts.intent.method') }}</option>
-        </select>
-        <label class="check">
-          <input v-model="testSelfKindness" type="checkbox" />
-          {{ t('prompts.forceSelfKindness') }}
-        </label>
-        <button type="button" class="btn-text" :disabled="testTurns.length === 0" @click="clearTest">
-          {{ t('prompts.testClear') }}
-        </button>
-      </div>
-      <div class="test-log">
-        <p v-if="testTurns.length === 0" class="muted">{{ t('prompts.testEmpty') }}</p>
-        <div v-for="(m, i) in testTurns" :key="i" class="message" :class="m.role">{{ m.content }}</div>
-      </div>
-      <div class="save-row">
-        <input
-          v-model="testInput"
-          class="note-input"
-          :placeholder="t('chat.placeholder')"
-          :disabled="testSending"
-          @keydown.enter.prevent="sendTest"
-        />
-        <button type="button" class="btn-primary" :disabled="testSending || !testInput.trim()" @click="sendTest">
-          {{ testSending ? '…' : t('chat.send') }}
-        </button>
-      </div>
-      <p v-if="testError" class="error">{{ testError }}</p>
-      <details v-if="testSystemPrompt" class="locked">
-        <summary>{{ t('prompts.testSystemPrompt') }}</summary>
-        <pre>{{ testSystemPrompt }}</pre>
-      </details>
-    </section>
+      <aside class="test panel">
+        <header class="test-head">
+          <div>
+            <h2 class="panel-title">{{ t('prompts.testTitle') }}</h2>
+            <p class="panel-desc">{{ t('prompts.testDesc') }}</p>
+          </div>
+          <button type="button" class="ghost-btn" :disabled="testTurns.length === 0" @click="clearTest">
+            {{ t('prompts.testClear') }}
+          </button>
+        </header>
+
+        <div class="test-options">
+          <div class="option-label">{{ t('prompts.testFlow') }}</div>
+          <div class="chips" role="radiogroup">
+            <button
+              v-for="intent in INTENTS"
+              :key="intent"
+              type="button"
+              role="radio"
+              class="chip"
+              :class="{ on: testIntent === intent }"
+              :aria-checked="testIntent === intent"
+              @click="testIntent = intent"
+            >
+              {{ t(`prompts.intent.${intent}`) }}
+            </button>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            class="switch-row"
+            :aria-checked="testSelfKindness"
+            @click="testSelfKindness = !testSelfKindness"
+          >
+            <span class="switch" :class="{ on: testSelfKindness }"><span class="knob" /></span>
+            <span>{{ t('prompts.forceSelfKindness') }}</span>
+          </button>
+          <div v-if="draftCount > 0" class="draft-banner">
+            <span class="draft-dot" />
+            {{ t('prompts.testDrafts', { n: draftCount }) }}
+          </div>
+        </div>
+
+        <div ref="testLogEl" class="test-log">
+          <div v-if="testTurns.length === 0 && !testSending" class="test-empty">
+            <div class="test-empty-icon">💬</div>
+            <p>{{ t('prompts.testEmpty') }}</p>
+          </div>
+          <div v-for="(m, i) in testTurns" :key="i" class="turn" :class="m.role">
+            <div class="bubble">{{ m.content }}</div>
+            <div v-for="(card, ci) in m.candidates ?? []" :key="ci" class="candidates">
+              <span class="candidates-label">{{ t('prompts.candidates') }}</span>
+              <span v-for="(line, li) in candidateLines(card)" :key="li" class="candidate">{{ line }}</span>
+            </div>
+          </div>
+          <div v-if="testSending" class="turn assistant">
+            <div class="bubble typing" role="status">
+              <span class="dot" />
+              <span class="dot" />
+              <span class="dot" />
+            </div>
+          </div>
+        </div>
+
+        <div v-if="testError" class="test-error">{{ testError }}</div>
+
+        <template v-if="testSystemPrompt">
+          <button type="button" class="sp-toggle" @click="showSystemPrompt = !showSystemPrompt">
+            <span class="chevron" :class="{ open: showSystemPrompt }">▸</span>
+            {{ showSystemPrompt ? t('prompts.hideSystemPrompt') : t('prompts.testSystemPrompt') }}
+          </button>
+          <pre v-if="showSystemPrompt" class="sp-body">{{ testSystemPrompt }}</pre>
+        </template>
+
+        <form class="composer" @submit.prevent="sendTest">
+          <input
+            v-model="testInput"
+            :placeholder="t('chat.placeholder')"
+            :disabled="testSending"
+            autocomplete="off"
+          />
+          <button type="submit" class="send-btn" :disabled="testSending || !testInput.trim()" :aria-label="t('chat.send')">
+            <span v-if="!testSending">{{ t('chat.send') }}</span>
+            <span v-else class="spinner" aria-hidden="true" />
+          </button>
+        </form>
+      </aside>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.intro {
-  font-size: 12.5px;
-  color: var(--text-muted);
-  line-height: 1.5;
-  margin: 0 0 12px;
-}
-.lang-switch {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-.lang-switch button {
-  padding: 7px 16px;
-  font-size: 13px;
-}
-.layout {
+/* ---- Top toolbar ---- */
+.toolbar {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 @media (min-width: 1024px) {
-  .layout {
+  .toolbar {
     flex-direction: row;
-    align-items: flex-start;
-  }
-  .block-list {
-    width: 280px;
-    flex-shrink: 0;
-    position: sticky;
-    top: 16px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+    margin-bottom: 28px;
   }
 }
+.intro {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 880px;
+}
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.segmented button {
+  border: none;
+  background: transparent;
+  padding: 7px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.segmented button.on {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.segmented button:not(:disabled):hover {
+  transform: none;
+  color: var(--accent);
+}
+
+/* ---- Workspace grid ---- */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .workspace {
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 24px;
+  }
+  .test {
+    grid-column: 1 / -1;
+    height: 640px;
+  }
+  .block-list {
+    position: sticky;
+    top: 24px;
+  }
+}
+@media (min-width: 1360px) {
+  .workspace {
+    grid-template-columns: 260px minmax(0, 1fr) minmax(380px, 440px);
+    gap: 28px;
+  }
+  .test {
+    grid-column: auto;
+    position: sticky;
+    top: 24px;
+    height: calc(100dvh - 48px);
+    max-height: 960px;
+  }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+@media (min-width: 1024px) {
+  .panel {
+    padding: 24px 28px;
+  }
+}
+.panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.panel-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ---- Block list ---- */
 .block-list {
   display: flex;
   flex-direction: column;
@@ -360,7 +517,7 @@ onMounted(load)
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -380,41 +537,37 @@ onMounted(load)
   gap: 4px;
   flex-shrink: 0;
 }
+
+/* ---- Editor ---- */
 .editor {
-  flex: 1;
   min-width: 0;
-}
-.editor-title {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.editor-desc {
-  font-size: 12.5px;
-  color: var(--text-muted);
-  margin: 0 0 6px;
-  line-height: 1.5;
 }
 .editor-meta {
   font-size: 12px;
   color: var(--text-muted);
-  margin: 0 0 10px;
+  margin: 10px 0 14px;
 }
 .content {
   width: 100%;
   min-height: 360px;
   resize: vertical;
-  padding: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  background: var(--bg);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+@media (min-width: 1360px) {
+  .content {
+    height: clamp(360px, calc(100dvh - 580px), 900px);
+  }
 }
 .save-row {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .save-row .btn-primary {
   padding: 10px 18px;
@@ -434,7 +587,7 @@ onMounted(load)
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 .btn-text:disabled {
   color: var(--text-muted);
@@ -475,7 +628,7 @@ onMounted(load)
   color: #a15c00;
 }
 .versions {
-  margin-top: 12px;
+  margin-top: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -518,59 +671,333 @@ pre {
   overflow: auto;
 }
 .locked {
-  margin-top: 16px;
+  margin-top: 20px;
 }
+
+/* ---- Test chat ---- */
 .test {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+  padding: 0;
+  overflow: hidden;
 }
-.test-controls {
+.test-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ghost-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.ghost-btn:not(:disabled):hover {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+.ghost-btn:disabled {
+  opacity: 0.45;
+}
+.test-options {
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.option-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.chips {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin: 8px 0 10px;
-  font-size: 13px;
+  gap: 6px;
 }
-.test-controls select {
-  padding: 7px 10px;
+.chip {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
   background: var(--surface);
   color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
 }
-.check {
+.chip:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.25);
+}
+.switch-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 10px;
+  border: none;
+  background: none;
+  padding: 2px 0;
+  font-size: 12.5px;
+  color: var(--text);
+  text-align: left;
+}
+.switch-row:not(:disabled):hover {
+  transform: none;
+}
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.18s ease;
+}
+.switch.on {
+  background: var(--accent);
+}
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(31, 35, 51, 0.2);
+  transition: transform 0.18s ease;
+}
+.switch.on .knob {
+  transform: translateX(14px);
+}
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: #fff4e0;
+  color: #a15c00;
+  font-size: 12px;
+  font-weight: 500;
+}
+.draft-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .test-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(var(--surface), var(--bg));
+}
+.test-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  max-width: 240px;
+  line-height: 1.6;
+}
+.test-empty-icon {
+  font-size: 26px;
+  margin-bottom: 6px;
+  opacity: 0.7;
+}
+.turn {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 12px;
-  min-height: 120px;
-  max-height: 480px;
-  overflow-y: auto;
-  background: var(--bg);
-  border-radius: var(--radius-md);
+  animation: fade-up 0.25s ease;
 }
-.message {
-  font-size: 13px;
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
-  line-height: 1.5;
-  max-width: 85%;
+.turn.user {
+  align-items: flex-end;
+}
+.turn.assistant {
+  align-items: flex-start;
+}
+.bubble {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
   white-space: pre-wrap;
+  box-shadow: var(--shadow-sm);
 }
-.message.user {
-  background: var(--accent-soft);
-  align-self: flex-end;
+.turn.user .bubble {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 6px 16px rgba(108, 92, 231, 0.25);
 }
-.message.assistant {
+.turn.assistant .bubble {
   background: var(--surface);
-  align-self: flex-start;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+.bubble.typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 15px;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: bounce 1.2s infinite ease-in-out;
+}
+.dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+.candidates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  max-width: 88%;
+}
+.candidates-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+.candidate {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+}
+.test-error {
+  margin: 0 20px 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+.sp-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  text-align: left;
+}
+.sp-toggle:not(:disabled):hover {
+  transform: none;
+  background: var(--accent-soft);
+}
+.chevron {
+  display: inline-block;
+  transition: transform 0.18s ease;
+}
+.chevron.open {
+  transform: rotate(90deg);
+}
+.sp-body {
+  margin: 0;
+  border-radius: 0;
+  max-height: 240px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+.composer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.composer input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 13.5px;
+}
+.composer input:disabled {
+  opacity: 0.6;
+}
+.send-btn {
+  min-width: 64px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(108, 92, 231, 0.28);
+}
+.send-btn:not(:disabled):hover {
+  background: var(--accent-hover);
+}
+.send-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
