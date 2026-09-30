@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 
 from app.models.enums import Language, UserRole
-from app.schemas.chat import HistoryMessageItem
 
 
 class AdminSessionItem(BaseModel):
@@ -13,13 +12,22 @@ class AdminSessionItem(BaseModel):
     message_count: int
 
 
+class AdminMessageItem(BaseModel):
+    role: str
+    content: str
+    created_at: str
+    # {prompt key: version} an assistant reply was generated with — see
+    # app/models/prompt.py. None for user messages and older replies.
+    prompt_versions: dict[str, int] | None = None
+
+
 class AdminSessionExport(BaseModel):
     session_id: str
     participant_label: str
     language: Language
     created_at: str
     ended_at: str | None
-    messages: list[HistoryMessageItem]
+    messages: list[AdminMessageItem]
 
 
 class AdminUserItem(BaseModel):

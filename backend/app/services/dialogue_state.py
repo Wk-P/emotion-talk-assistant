@@ -19,6 +19,7 @@ from app.models.enums import DialogueIntent, Language, MessageRole, RiskLevel
 from app.models.message import Message
 from app.models.resource import CrisisResource
 from app.models.session import ConversationSession
+from app.prompts import registry
 from app.prompts.router import build_prompt
 from app.services import safety
 from app.services.llm import generate_turn
@@ -39,7 +40,7 @@ _DISCLAIMER = {
 
 _INTENT_OPTION_COPY = {
     Language.ZH: {
-        "reply_text": "在开始之前，想先了解一下：你现在最需要的是什么？",
+        # The question text itself is admin-editable (registry.ASSISTANT_INTENT_QUESTION).
         "items": [
             {"id": "vent", "label": "只是想说说 / 倾诉"},
             {"id": "organize", "label": "想整理一下自己的情绪"},
@@ -49,7 +50,6 @@ _INTENT_OPTION_COPY = {
         ],
     },
     Language.KO: {
-        "reply_text": "시작하기 전에 먼저 여쭤볼게요. 지금 가장 필요한 게 무엇인가요?",
         "items": [
             {"id": "vent", "label": "그냥 이야기하고 싶어요"},
             {"id": "organize", "label": "감정을 정리하고 싶어요"},
@@ -85,6 +85,9 @@ class TurnResult:
     # was confirmed — see app/api/chat.py.
     user_text_used: str | None = None
     intent: DialogueIntent | None = None
+    # {prompt key: version} this reply was generated from (0 = code default,
+    # see app/models/prompt.py). None for turns that use no editable prompt.
+    prompt_versions: dict[str, int] | None = None
 
 
 def _intent_from_id(value: str | None) -> DialogueIntent | None:
@@ -217,7 +220,10 @@ async def handle_turn(
         # no LLM call) and any later turn where the user still hasn't picked
         # an intent (e.g. they replied before confirming the card).
         copy = _INTENT_OPTION_COPY[language]
-        reply_text = copy["reply_text"]
+        question = (await registry.resolve(db, [registry.ASSISTANT_INTENT_QUESTION], language))[
+            registry.ASSISTANT_INTENT_QUESTION
+        ]
+        reply_text = question.content
         if not ctx.get("disclaimer_shown"):
             # Modified_Log.md "系统提示：开始之前加入免责声明" — sent once, verbatim,
             # by code rather than left to the model (design principle 8.1).
@@ -227,6 +233,7 @@ async def handle_turn(
         return TurnResult(
             reply_text=reply_text,
             candidates=[{"type": "intent_options", "items": copy["items"]}],
+            prompt_versions={registry.ASSISTANT_INTENT_QUESTION: question.version},
         )
 
     confirmation_description = _describe_confirmation(confirmation, language) if confirmation else None
@@ -259,7 +266,7 @@ async def _continue_flow(
 ) -> TurnResult:
     ctx = session.confirmed_context or {}
     intent = forced_intent or _intent_from_id(ctx.get("last_intent")) or DialogueIntent.VENT
-    system_prompt = build_prompt(intent, session.language, session.self_criticism_level)
+    system_prompt, prompt_versions = await build_prompt(db, intent, session.language, session.self_criticism_level)
     history = await _load_recent_history(db, session.id)
 
     llm_response = await generate_turn(system_prompt, history, synthetic_text)
@@ -276,4 +283,5 @@ async def _continue_flow(
         candidates=candidates,
         risk_level=risk,
         intent=intent,
+        prompt_versions=prompt_versions,
     )

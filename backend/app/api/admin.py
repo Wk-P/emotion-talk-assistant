@@ -10,10 +10,18 @@ from app.models.message import Message
 from app.models.record import SavedRecord
 from app.models.session import ConversationSession
 from app.models.user import User
-from app.schemas.admin import AdminSessionExport, AdminSessionItem, AdminUserItem, SetActiveRequest, SetRoleRequest
-from app.schemas.chat import HistoryMessageItem
+from app.schemas.admin import AdminMessageItem, AdminSessionExport, AdminSessionItem, AdminUserItem, SetActiveRequest, SetRoleRequest
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _admin_message(m: Message) -> AdminMessageItem:
+    return AdminMessageItem(
+        role=m.role.value,
+        content=m.content,
+        created_at=m.created_at.isoformat(),
+        prompt_versions=(m.meta or {}).get("prompt_versions"),
+    )
 
 
 def _can_manage(actor: User, target: User) -> None:
@@ -82,19 +90,16 @@ async def list_all_sessions(
     ]
 
 
-@router.get("/sessions/{session_id}/messages", response_model=list[HistoryMessageItem])
+@router.get("/sessions/{session_id}/messages", response_model=list[AdminMessageItem])
 async def get_admin_session_messages(
     db: AsyncSession = Depends(get_db),
     session: ConversationSession = Depends(get_session_or_404),
     _admin: User = Depends(get_current_admin_required),
-) -> list[HistoryMessageItem]:
+) -> list[AdminMessageItem]:
     result = await db.execute(
         select(Message).where(Message.session_id == session.id).order_by(Message.created_at.asc())
     )
-    return [
-        HistoryMessageItem(role=m.role.value, content=m.content, created_at=m.created_at.isoformat())
-        for m in result.scalars().all()
-    ]
+    return [_admin_message(m) for m in result.scalars().all()]
 
 
 @router.get("/export", response_model=list[AdminSessionExport])
@@ -128,10 +133,7 @@ async def export_all_sessions(
             language=session.language,
             created_at=session.created_at.isoformat(),
             ended_at=session.ended_at.isoformat() if session.ended_at else None,
-            messages=[
-                HistoryMessageItem(role=m.role.value, content=m.content, created_at=m.created_at.isoformat())
-                for m in messages_by_session.get(session.id, [])
-            ],
+            messages=[_admin_message(m) for m in messages_by_session.get(session.id, [])],
         )
         for session in sessions
     ]

@@ -283,3 +283,66 @@ export async function setAdminUserRole(userId: string, role: UserRole) {
   const { data } = await api.patch<AdminUserItem>(`/api/admin/users/${userId}/role`, { role })
   return data
 }
+
+// ---- Prompt editing (see backend app/api/prompts.py) ----
+
+export interface PromptItem {
+  key: string
+  language: Language
+  version: number // 0 = code default, nothing saved yet
+  content: string
+  default_content: string
+  updated_at: string | null
+  updated_by: string | null
+}
+
+export interface PromptOverview {
+  items: PromptItem[]
+  output_format: string
+}
+
+export interface PromptVersionItem {
+  version: number
+  content: string
+  note: string | null
+  created_at: string
+  created_by: string | null
+}
+
+export type PreviewIntent = 'vent' | 'organize' | 'stabilize' | 'method'
+
+export interface PromptPreviewRequest {
+  language: Language
+  intent: PreviewIntent
+  self_kindness: boolean
+  overrides: Record<string, string>
+  history: { role: 'user' | 'assistant'; content: string }[]
+  message: string
+}
+
+export interface PromptPreviewResponse {
+  reply_text: string
+  candidates: CandidateCard[]
+  system_prompt: string
+  prompt_versions: Record<string, number>
+}
+
+export async function listPrompts() {
+  const { data } = await api.get<PromptOverview>('/api/admin/prompts')
+  return data
+}
+
+export async function listPromptVersions(key: string, language: Language) {
+  const { data } = await api.get<PromptVersionItem[]>(`/api/admin/prompts/${key}/${language}/versions`)
+  return data
+}
+
+export async function savePrompt(key: string, language: Language, content: string, note?: string) {
+  const { data } = await api.post<PromptItem>(`/api/admin/prompts/${key}/${language}`, { content, note: note || null })
+  return data
+}
+
+export async function previewPrompt(payload: PromptPreviewRequest) {
+  const { data } = await api.post<PromptPreviewResponse>('/api/admin/prompts/preview', payload)
+  return data
+}

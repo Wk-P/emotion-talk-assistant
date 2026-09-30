@@ -16,7 +16,9 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY app ./app
 RUN uv sync --frozen --no-dev
 
-RUN useradd -m appuser && mkdir -p /app/data && chown -R appuser:appuser /app
+# Only the data dir needs to be writable; a recursive chown of /app would
+# copy-up every file in .venv and makes the build crawl.
+RUN useradd -m appuser && mkdir -p /app/data && chown appuser:appuser /app/data
 USER appuser
 
 EXPOSE 8000

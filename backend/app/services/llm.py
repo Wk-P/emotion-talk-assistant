@@ -5,7 +5,7 @@ from openai import AsyncOpenAI
 
 from app.core.config import get_settings
 
-_RESPONSE_INSTRUCTIONS = (
+RESPONSE_INSTRUCTIONS = (
     "\n\n---\n"
     "输出格式 / Output format: 只返回一个 JSON 对象 / return exactly one JSON object, "
     '{"reply_text": string, "candidates": [{"type": string, "items": [{"id": string, "label": string}]?, '
@@ -31,7 +31,7 @@ async def generate_turn(
     user_message: str,
 ) -> LLMResponse:
     settings = get_settings()
-    messages = [{"role": "system", "content": system_prompt + _RESPONSE_INSTRUCTIONS}]
+    messages = [{"role": "system", "content": system_prompt + RESPONSE_INSTRUCTIONS}]
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
 

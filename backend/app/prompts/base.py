@@ -73,5 +73,8 @@ ROLE_RULES: dict[Language, str] = {
 }
 
 
-def build_system_prompt(language: Language, flow_instructions: str) -> str:
-    return f"{ROLE_RULES[language]}\n\n---\n{flow_instructions}"
+def build_system_prompt(role_rules: str, flow_instructions: str) -> str:
+    # role_rules is passed in rather than read from ROLE_RULES here because
+    # admins can override it (see app/prompts/registry.py); ROLE_RULES is
+    # only the code default.
+    return f"{role_rules}\n\n---\n{flow_instructions}"

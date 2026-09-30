@@ -15,13 +15,14 @@ import {
   type AdminUserItem,
   type HistoryMessageItem,
 } from '@/api/client'
+import PromptEditor from '@/components/admin/PromptEditor.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 
-const tab = ref<'conversations' | 'users'>('conversations')
+const tab = ref<'conversations' | 'users' | 'prompts'>('conversations')
 
 const items = ref<AdminSessionItem[]>([])
 // Doubles as "selected session" for the >=1024px master-detail layout and
@@ -162,7 +163,7 @@ async function doDeleteUser(userId: string) {
   await loadUsers()
 }
 
-function switchTab(next: 'conversations' | 'users') {
+function switchTab(next: 'conversations' | 'users' | 'prompts') {
   tab.value = next
   if (next === 'users' && users.value.length === 0 && !usersLoading.value) loadUsers()
 }
@@ -185,6 +186,9 @@ onMounted(load)
       </button>
       <button type="button" class="btn-outline" :class="{ active: tab === 'users' }" @click="switchTab('users')">
         {{ t('admin.tabUsers') }}
+      </button>
+      <button type="button" class="btn-outline" :class="{ active: tab === 'prompts' }" @click="switchTab('prompts')">
+        {{ t('admin.tabPrompts') }}
       </button>
     </div>
 
@@ -283,6 +287,8 @@ onMounted(load)
         </div>
       </div>
     </template>
+
+    <PromptEditor v-else-if="tab === 'prompts'" />
 
     <template v-else>
       <p v-if="!usersLoading && users.length === 0" class="empty">{{ t('admin.usersEmpty') }}</p>

@@ -38,7 +38,11 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> Chat
             session_id=session.id,
             role=MessageRole.ASSISTANT,
             content=result.reply_text,
-            meta={"candidates": result.candidates, "risk_level": result.risk_level.value},
+            meta={
+                "candidates": result.candidates,
+                "risk_level": result.risk_level.value,
+                "prompt_versions": result.prompt_versions,
+            },
         )
     )
     db.add(session)
