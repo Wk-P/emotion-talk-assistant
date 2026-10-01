@@ -77,25 +77,25 @@ function chooseLang(lang: Language) {
     </button>
 
     <Teleport to="body">
-      <div v-if="open" class="backdrop" @click="open = false" />
+      <div v-if="open" class="app-menu-backdrop" @click="open = false" />
       <Transition name="menu-panel">
-        <nav v-if="open" class="panel" :style="{ top: panelPos.top + 'px', left: panelPos.left + 'px' }">
-          <button type="button" class="item" @click="go('/history')">{{ t('toolbar.history') }}</button>
-          <button type="button" class="item" @click="go('/records')">{{ t('toolbar.records') }}</button>
-          <button type="button" class="item" @click="go('/help')">{{ t('toolbar.help') }}</button>
+        <nav v-if="open" class="app-menu-panel" :style="{ top: panelPos.top + 'px', left: panelPos.left + 'px' }">
+          <button type="button" class="app-menu-item" @click="go('/history')">{{ t('toolbar.history') }}</button>
+          <button type="button" class="app-menu-item" @click="go('/records')">{{ t('toolbar.records') }}</button>
+          <button type="button" class="app-menu-item" @click="go('/help')">{{ t('toolbar.help') }}</button>
           <button
             v-if="auth.user && auth.user.role !== 'user'"
             type="button"
-            class="item"
+            class="app-menu-item"
             @click="go('/admin')"
           >
             {{ t('admin.entry') }}
           </button>
-          <div class="divider" />
-          <div class="lang-row">
+          <div class="app-menu-divider" />
+          <div class="app-menu-lang-row">
             <button
               type="button"
-              class="lang-btn"
+              class="app-menu-lang-btn"
               :class="{ active: locale === 'zh' }"
               @click="chooseLang('zh')"
             >
@@ -103,20 +103,20 @@ function chooseLang(lang: Language) {
             </button>
             <button
               type="button"
-              class="lang-btn"
+              class="app-menu-lang-btn"
               :class="{ active: locale === 'ko' }"
               @click="chooseLang('ko')"
             >
               한국어
             </button>
           </div>
-          <div class="divider" />
-          <button v-if="!auth.user" type="button" class="item" @click="go('/login')">
+          <div class="app-menu-divider" />
+          <button v-if="!auth.user" type="button" class="app-menu-item" @click="go('/login')">
             {{ t('toolbar.login') }}
           </button>
           <template v-else>
-            <div class="email">{{ auth.user.email }}</div>
-            <button type="button" class="item" @click="logout">{{ t('toolbar.logout') }}</button>
+            <div class="app-menu-email">{{ auth.user.email }}</div>
+            <button type="button" class="app-menu-item" @click="logout">{{ t('toolbar.logout') }}</button>
           </template>
         </nav>
       </Transition>
@@ -166,12 +166,12 @@ function chooseLang(lang: Language) {
 <style>
 /* Unscoped: this panel and backdrop are teleported out of the component's
    DOM subtree, so Vue's scoped data-v attribute no longer reaches them. */
-.backdrop {
+.app-menu-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1000;
 }
-.panel {
+.app-menu-panel {
   position: fixed;
   z-index: 1001;
   width: 220px;
@@ -183,7 +183,7 @@ function chooseLang(lang: Language) {
   display: flex;
   flex-direction: column;
 }
-.panel .item {
+.app-menu-panel .app-menu-item {
   text-align: left;
   padding: 10px 12px;
   border: none;
@@ -192,12 +192,12 @@ function chooseLang(lang: Language) {
   font-size: 14px;
   color: var(--text);
 }
-.panel .item:hover {
+.app-menu-panel .app-menu-item:hover {
   background: var(--accent-soft);
   color: var(--accent);
   transform: none;
 }
-.panel .email {
+.app-menu-panel .app-menu-email {
   padding: 6px 12px 2px;
   font-size: 12px;
   color: var(--text-muted);
@@ -205,17 +205,17 @@ function chooseLang(lang: Language) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.panel .divider {
+.app-menu-panel .app-menu-divider {
   height: 1px;
   background: var(--border);
   margin: 6px 4px;
 }
-.lang-row {
+.app-menu-lang-row {
   display: flex;
   gap: 6px;
   padding: 2px 4px;
 }
-.lang-btn {
+.app-menu-lang-btn {
   flex: 1;
   padding: 7px 0;
   border: 1px solid var(--border);
@@ -224,7 +224,7 @@ function chooseLang(lang: Language) {
   font-size: 12.5px;
   color: var(--text-muted);
 }
-.lang-btn.active {
+.app-menu-lang-btn.active {
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 600;

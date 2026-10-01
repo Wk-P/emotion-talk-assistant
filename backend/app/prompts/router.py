@@ -42,5 +42,10 @@ async def build_prompt(
         if key in resolved:
             resolved[key] = registry.ResolvedPrompt(content, -1)
 
-    prompt = build_system_prompt(resolved[registry.ROLE_RULES].content, resolved[flow_key].content)
+    prompt = build_system_prompt(
+        resolved[registry.ROLE_RULES].content,
+        resolved[flow_key].content,
+        language,
+        registry.FLOW_FORMAT_RULES[flow_key][language],
+    )
     return prompt, {key: resolved[key].version for key in keys}

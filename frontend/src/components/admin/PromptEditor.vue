@@ -20,7 +20,6 @@ const { t } = useI18n()
 // prompt.
 const lang = ref<Language>('zh')
 const items = ref<PromptItem[]>([])
-const outputFormat = ref('')
 const loading = ref(true)
 const selectedKey = ref<string>('role_rules')
 // Unsaved edits, keyed `${key}|${lang}` — kept across block/language
@@ -60,7 +59,6 @@ async function load() {
   try {
     const data = await listPrompts()
     items.value = data.items
-    outputFormat.value = data.output_format
   } finally {
     loading.value = false
   }
@@ -215,14 +213,24 @@ onMounted(load)
 <template>
   <div class="prompt-editor">
     <div class="toolbar">
-      <p class="intro">{{ t('prompts.intro') }}</p>
-      <div class="segmented" role="radiogroup">
-        <button type="button" role="radio" :aria-checked="lang === 'zh'" :class="{ on: lang === 'zh' }" @click="lang = 'zh'">
-          中文
-        </button>
-        <button type="button" role="radio" :aria-checked="lang === 'ko'" :class="{ on: lang === 'ko' }" @click="lang = 'ko'">
-          한국어
-        </button>
+      <div class="steps">
+        <div class="steps-title">{{ t('prompts.stepsTitle') }}</div>
+        <ol>
+          <li>{{ t('prompts.step1') }}</li>
+          <li>{{ t('prompts.step2') }}</li>
+          <li>{{ t('prompts.step3') }}</li>
+        </ol>
+      </div>
+      <div class="lang-pick">
+        <span class="lang-label">{{ t('prompts.langLabel') }}</span>
+        <div class="segmented" role="radiogroup" :aria-label="t('prompts.langLabel')">
+          <button type="button" role="radio" :aria-checked="lang === 'zh'" :class="{ on: lang === 'zh' }" @click="lang = 'zh'">
+            中文
+          </button>
+          <button type="button" role="radio" :aria-checked="lang === 'ko'" :class="{ on: lang === 'ko' }" @click="lang = 'ko'">
+            한국어
+          </button>
+        </div>
       </div>
     </div>
 
@@ -243,7 +251,7 @@ onMounted(load)
           <span class="block-tags">
             <span v-if="isDirty(item)" class="badge warn">{{ t('prompts.unsaved') }}</span>
             <span class="badge" :class="{ accent: item.version > 0 }">
-              {{ item.version > 0 ? `v${item.version}` : t('prompts.default') }}
+              {{ item.version > 0 ? t('prompts.modified') : t('prompts.default') }}
             </span>
           </span>
         </button>
@@ -260,6 +268,15 @@ onMounted(load)
           </template>
           <template v-else>{{ t('prompts.usingDefault') }}</template>
         </p>
+
+        <details class="tips" open>
+          <summary>{{ t('prompts.tipsTitle') }}</summary>
+          <ul>
+            <li>{{ t('prompts.tip1') }}</li>
+            <li>{{ t('prompts.tip2') }}</li>
+            <li>{{ t('prompts.tip3') }}</li>
+          </ul>
+        </details>
 
         <textarea v-model="draft" class="content" spellcheck="false" />
 
@@ -286,7 +303,7 @@ onMounted(load)
           <p v-if="versions.length === 0" class="muted">{{ t('prompts.noHistory') }}</p>
           <div v-for="v in versions" :key="v.version" class="version">
             <div class="version-head">
-              <span class="badge accent">v{{ v.version }}</span>
+              <span class="badge accent">{{ t('prompts.versionBadge', { v: v.version }) }}</span>
               <span class="muted">{{ new Date(v.created_at).toLocaleString() }} · {{ v.created_by ?? '—' }}</span>
               <button type="button" class="btn-text" @click="loadVersion(v)">{{ t('prompts.loadVersion') }}</button>
             </div>
@@ -298,11 +315,7 @@ onMounted(load)
           </div>
         </div>
 
-        <details class="locked">
-          <summary>{{ t('prompts.lockedTitle') }}</summary>
-          <p class="muted">{{ t('prompts.lockedDesc') }}</p>
-          <pre>{{ outputFormat }}</pre>
-        </details>
+        <p class="safety-note">🔒 {{ t('prompts.safetyNote') }}</p>
       </section>
 
       <aside class="test panel">
@@ -413,16 +426,35 @@ onMounted(load)
     margin-bottom: 28px;
   }
 }
-.intro {
+.steps {
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.6;
-  margin: 0;
   max-width: 880px;
+}
+.steps-title {
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.steps ol {
+  margin: 0;
+  padding-left: 20px;
+}
+.lang-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.lang-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 .segmented {
   display: inline-flex;
-  align-self: flex-start;
   flex-shrink: 0;
   padding: 3px;
   border-radius: 999px;
@@ -564,6 +596,25 @@ onMounted(load)
     height: clamp(360px, calc(100dvh - 580px), 900px);
   }
 }
+.tips {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.tips ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text);
+}
+.safety-note {
+  margin: 20px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
 .save-row {
   display: flex;
   gap: 8px;
@@ -669,9 +720,6 @@ pre {
   line-height: 1.55;
   max-height: 360px;
   overflow: auto;
-}
-.locked {
-  margin-top: 20px;
 }
 
 /* ---- Test chat ---- */

@@ -36,9 +36,7 @@ ROLE_RULES: dict[Language, str] = {
         "不要用文化刻板印象解释用户的经历。\n"
         "7. 遇到偏见或歧视经历时，不要将其解释为用户的误解、想太多，或归因于用户自身的原因。\n"
         "8. 语言要非评价性、非评判性，不说'对/错'。\n"
-        "9. 每次回复要简短、口语化，适合手机阅读，一次只问一个问题或顺着一个线索追问。\n"
-        "10. 如果需要给用户候选项（情绪词、策略、文案等），把它们放进 candidates 字段，"
-        "不要在正文文字里堆砌选项列表。"
+        "9. 每次回复要简短、口语化，适合手机阅读，一次只问一个问题或顺着一个线索追问。"
     ),
     Language.KO: (
         "당신은 한국에 있는 중국인 유학생의 정서적 자기공감과 성찰을 돕는 대화 보조자입니다."
@@ -66,15 +64,31 @@ ROLE_RULES: dict[Language, str] = {
         "문화적 고정관념으로 사용자의 경험을 설명하지 마세요.\n"
         "7. 편견이나 차별 경험을 사용자의 오해, 과민반응, 혹은 사용자 자신의 문제로 해석하지 마세요.\n"
         "8. 평가적이지 않은 언어를 사용하고 '맞다/틀리다' 같은 표현을 쓰지 마세요.\n"
-        "9. 답변은 짧고 구어체로, 모바일 화면에 맞게 작성하고 한 번에 하나의 질문 또는 하나의 실마리만 물으세요.\n"
-        "10. 사용자에게 제시할 후보(감정 단어, 전략, 문구 등)는 candidates 필드에 넣고, "
-        "본문 텍스트에 목록으로 나열하지 마세요."
+        "9. 답변은 짧고 구어체로, 모바일 화면에 맞게 작성하고 한 번에 하나의 질문 또는 하나의 실마리만 물으세요."
     ),
 }
 
 
-def build_system_prompt(role_rules: str, flow_instructions: str) -> str:
-    # role_rules is passed in rather than read from ROLE_RULES here because
-    # admins can override it (see app/prompts/registry.py); ROLE_RULES is
-    # only the code default.
-    return f"{role_rules}\n\n---\n{flow_instructions}"
+# Machine-facing rules (candidate field/type names the frontend renders) are
+# kept out of the admin-editable text above, so non-technical admins only
+# ever see plain-language guidance. They're appended here, in code, and so
+# can't be lost by an edit. Each flow module has its own FORMAT_RULES too.
+FORMAT_RULES: dict[Language, str] = {
+    Language.ZH: (
+        "【系统格式要求】\n"
+        "- 需要给用户挑选的候选项（情绪词、策略、文案、小结等）都放进 candidates 字段，"
+        "不要在 reply_text 正文里堆砌选项列表。"
+    ),
+    Language.KO: (
+        "[시스템 형식 요구사항]\n"
+        "- 사용자에게 고르게 할 후보(감정 단어, 전략, 문구, 요약 등)는 모두 candidates 필드에 넣고, "
+        "reply_text 본문에 목록으로 나열하지 마세요."
+    ),
+}
+
+
+def build_system_prompt(role_rules: str, flow_instructions: str, language: Language, flow_format: str) -> str:
+    # role_rules / flow_instructions are passed in rather than read from the
+    # module constants because admins can override them (see
+    # app/prompts/registry.py); the format rules are never overridable.
+    return f"{role_rules}\n\n---\n{flow_instructions}\n\n---\n{FORMAT_RULES[language]}\n{flow_format}"

@@ -5,6 +5,8 @@ Only tone/behavior text is editable. Deliberately NOT in here, and so never
 editable from the UI:
   - the JSON output-format suffix (app/services/llm.py) — the frontend
     parses the reply, so a bad edit would break every turn
+  - candidate field/type names (FORMAT_RULES in base.py and each flow
+    module) — same reason, and they read as jargon to non-technical admins
   - risk screening, crisis copy and the disclaimer (app/services/safety.py,
     app/services/dialogue_state.py) — safety-critical, enforced in code
   - flow routing (app/prompts/router.py)
@@ -32,6 +34,15 @@ DEFAULTS: dict[str, dict[Language, str]] = {
     FLOW_RECOVERY_PLAN: recovery_plan.FLOW_INSTRUCTIONS,
     FLOW_SELF_KINDNESS: self_kindness.FLOW_INSTRUCTIONS,
     ASSISTANT_INTENT_QUESTION: intent_question.TEXT,
+}
+
+# Fixed, code-only rules appended after each flow's (editable) text — see
+# base.build_system_prompt. Not exposed to the admin UI.
+FLOW_FORMAT_RULES: dict[str, dict[Language, str]] = {
+    FLOW_EMOTION_EXPLORATION: emotion_exploration.FORMAT_RULES,
+    FLOW_STABILIZATION: stabilization.FORMAT_RULES,
+    FLOW_RECOVERY_PLAN: recovery_plan.FORMAT_RULES,
+    FLOW_SELF_KINDNESS: self_kindness.FORMAT_RULES,
 }
 
 MAX_CONTENT_LENGTH = 20000
