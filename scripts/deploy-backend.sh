@@ -30,6 +30,34 @@ ssh "$SSH_HOST" "cd $REMOTE_DIR/backend && docker build -t $DOCKERHUB_IMAGE ."
 echo "==> pushing to Docker Hub"
 ssh "$SSH_HOST" "docker push $DOCKERHUB_IMAGE"
 
+# The server's .env is never rsynced (it holds server-only settings), but the
+# OpenAI settings must match the local, known-good ones — a stale key there
+# once made every AI reply fail in production. Only these lines are touched;
+# the server .env is backed up first (5 most recent kept) when anything
+# changes. The key travels over ssh stdin and is never printed.
+echo "==> syncing OpenAI settings from backend/.env"
+SYNC_LINES="$(grep -E '^(OPENAI_API_KEY|OPENAI_MODEL)=' "$ROOT_DIR/backend/.env" 2>/dev/null || true)"
+if [ -z "$SYNC_LINES" ]; then
+  echo "    no OPENAI_* lines in backend/.env — leaving the server's as they are" >&2
+else
+  REMOTE_SYNC='
+set -e
+changed=0
+while IFS= read -r line; do
+  key=${line%%=*}
+  grep -qxF "$line" .env && continue
+  [ $changed -eq 0 ] && cp -p .env ".env.bak-$(date +%Y%m%d-%H%M%S)"
+  changed=1
+  awk -v k="$key" -v nl="$line" "BEGIN{d=0} index(\$0, k\"=\")==1{print nl; d=1; next} {print} END{if(!d) print nl}" .env > .env.new
+  cat .env.new > .env && rm .env.new
+  echo "    updated $key"
+done
+[ $changed -eq 0 ] && echo "    already up to date"
+ls -1t .env.bak-* 2>/dev/null | tail -n +6 | xargs -r rm --
+'
+  printf '%s\n' "$SYNC_LINES" | ssh "$SSH_HOST" "cd $REMOTE_DIR && bash -c $(printf %q "$REMOTE_SYNC")"
+fi
+
 echo "==> restarting container"
 ssh "$SSH_HOST" "cd $REMOTE_DIR && docker compose up -d"
 # Each build leaves the previous image untagged; drop those.
@@ -44,6 +72,25 @@ if ! ssh "$SSH_HOST" "for i in \$(seq 15); do curl -sf http://localhost:8000/api
   exit 1
 fi
 echo
+
+# /api/health only proves the server is up. Ask OpenAI about the configured
+# model with the container's own settings, so a bad key or model name fails
+# the deploy here instead of surfacing as a broken chat for users.
+echo "==> AI key check"
+if ! ssh "$SSH_HOST" "cd $REMOTE_DIR && docker compose exec -T backend python -" <<'PY'
+import asyncio
+from openai import AsyncOpenAI
+from app.core.config import get_settings
+
+s = get_settings()
+asyncio.run(AsyncOpenAI(api_key=s.openai_api_key).models.retrieve(s.openai_model))
+print(f"    OpenAI key OK, model {s.openai_model} available")
+PY
+then
+  echo "AI check failed: the server's OPENAI_API_KEY or OPENAI_MODEL is wrong (see the error above)" >&2
+  exit 1
+fi
+
 echo "==> public health check"
 curl -s https://emotion-api.knettf.com/api/health
 echo
