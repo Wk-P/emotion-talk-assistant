@@ -139,6 +139,30 @@ def _filter_candidates(candidates: list[dict[str, Any]], messages: list[Message]
     return []
 
 
+# Tells the model which one-time checkpoints are already done, so it neither
+# re-offers them (they'd be filtered anyway) nor refers to a card the user
+# will never see ("下面是整理的小结…" with nothing below it).
+_SHOWN_CARD_NOTES = {
+    "seb_summary": {
+        Language.ZH: "本次对话已经给用户看过「发生了什么—感受—应对」小结了，不要再整理小结，也不要在回复里提到小结。",
+        Language.KO: "이번 대화에서 '상황-감정-대처' 요약은 이미 보여 주었어요. 다시 요약하지 말고, 답변에서 요약을 언급하지도 마세요.",
+    },
+    "plan_form": {
+        Language.ZH: "本次对话已经给用户看过整理好的小计划了，不要再生成计划，也不要在回复里说「下面是计划」。",
+        Language.KO: "이번 대화에서 정리한 작은 계획은 이미 보여 주었어요. 다시 만들지 말고, 답변에서 '아래 계획'이라고 말하지 마세요.",
+    },
+}
+
+
+def _progress_note(messages: list[Message], language: Language) -> str:
+    shown = _cards_already_shown(messages)
+    lines = [notes[language] for card_type, notes in _SHOWN_CARD_NOTES.items() if card_type in shown]
+    if not lines:
+        return ""
+    header = "【当前进度】" if language == Language.ZH else "[현재 진행 상황]"
+    return "\n\n---\n" + header + "\n" + "\n".join(f"- {line}" for line in lines)
+
+
 def merge_confirmation(session: ConversationSession, confirmation: dict[str, Any]) -> None:
     """Deterministically folds a user-confirmed card back into session state.
     This is the ONLY place confirmed_context is written from candidate data —
@@ -279,9 +303,10 @@ async def _continue_flow(
     ending: bool = False,
 ) -> TurnResult:
     system_prompt, prompt_versions = await build_prompt(db, intent, session.language, session.self_criticism_level)
+    messages = await _load_messages(db, session.id)
+    system_prompt += _progress_note(messages, session.language)
     if ending:
         system_prompt += _CLOSING_INSTRUCTION[session.language]
-    messages = await _load_messages(db, session.id)
     history = _history_for_llm(messages, synthetic_text)
 
     model = await current_model(db)
