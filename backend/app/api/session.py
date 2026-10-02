@@ -4,25 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_required, get_owned_session
 from app.db.session import get_db
-from app.models.enums import Language, MessageRole
 from app.models.message import Message
 from app.models.record import SavedRecord
 from app.models.session import ConversationSession
 from app.models.user import User
-from app.schemas.chat import ChatResponse, HistoryMessageItem, SessionCreateRequest, SessionHistoryItem, SessionResponse
-from app.services.dialogue_state import opening_turn
+from app.schemas.chat import HistoryMessageItem, SessionCreateRequest, SessionHistoryItem, SessionResponse
 
 router = APIRouter(prefix="/api/session", tags=["session"])
-
-
-@router.get("/opening", response_model=ChatResponse)
-async def get_opening(language: Language = Language.ZH, db: AsyncSession = Depends(get_db)) -> ChatResponse:
-    """What a new chat shows before the user has said anything — read-only,
-    nothing is stored. Like ChatGPT, a conversation only gets created
-    (POST /start) once the user sends their first message or picks an option."""
-
-    turn = await opening_turn(db, language)
-    return ChatResponse(reply_text=turn.reply_text, candidates=turn.candidates, risk_level=turn.risk_level)
 
 
 @router.post("/start", response_model=SessionResponse)
@@ -42,26 +30,11 @@ async def start_session(
         await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(blank)))
         await db.execute(delete(ConversationSession).where(ConversationSession.id.in_(blank)))
 
-    session = ConversationSession(
-        language=payload.language,
-        user_id=user.id,
-        consent={},
-        confirmed_context={"disclaimer_shown": True},
-    )
+    # There's no fixed opening message any more — the conversation is created
+    # empty, and the user's first real message (POST /api/chat) goes straight
+    # to handle_turn, same as every later turn.
+    session = ConversationSession(language=payload.language, user_id=user.id, consent={})
     db.add(session)
-    await db.flush()
-    # The client already showed this opening from GET /opening before the
-    # session existed; record it here so the stored transcript starts where
-    # the conversation the user saw did.
-    opening = await opening_turn(db, session.language)
-    db.add(
-        Message(
-            session_id=session.id,
-            role=MessageRole.ASSISTANT,
-            content=opening.reply_text,
-            meta={"candidates": opening.candidates, "risk_level": opening.risk_level.value, "prompt_versions": opening.prompt_versions},
-        )
-    )
     await db.commit()
     await db.refresh(session)
     return SessionResponse(session_id=session.id, language=session.language)

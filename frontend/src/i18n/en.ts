@@ -28,7 +28,8 @@ export const en = {
     aiUnavailable: 'The AI service is temporarily unavailable. Please try again later; if this keeps happening, contact the administrator.',
     retry: 'Retry',
     export: 'Export conversation',
-    starterLabel: 'Not sure how to begin? Pick one of these:',
+    emptyTitle: 'Welcome.',
+    emptyHint: "Type whatever's on your mind, and we'll take it from there.",
     saveRecord: 'Save to my records',
     recordSaving: 'Saving…',
     recordSaved: 'Saved to my records',
@@ -273,7 +274,7 @@ export const en = {
     tip1: 'Write the way you would brief a new colleague — plain everyday language, no special format needed.',
     tip2: 'Say directly what you want the AI to do, e.g. “keep replies short” or “don’t ask several questions at once”.',
     tip3: 'Try a few lines first and check the result before saving.',
-    safetyNote: 'How option buttons and summary cards are produced, how crises are detected and support information is given, and the opening disclaimer are all handled by the system and not edited here — so you can’t break them.',
+    safetyNote: 'How option buttons and summary cards are produced, and how crises are detected and support information is given, are all handled by the system and not edited here — so you can’t break them.',
     testTitle: 'Try it out',
     testDesc: 'Chat with the AI using the text currently in the editor. Real users are not affected and nothing is saved.',
     testFlow: 'Suppose the user chose at the start',
@@ -294,7 +295,6 @@ export const en = {
     groups: {
       rules: { name: 'Common principles', hint: 'Used in every conversation; 13 items following the prompt structure in Guideline 2' },
       flow: { name: 'Conversation flows', hint: 'Used according to the user’s chosen purpose or current state' },
-      assistant: { name: 'Fixed lines', hint: 'Said by the system as-is, without the AI' },
     },
     keys: {
       rules: {
@@ -317,9 +317,6 @@ export const en = {
         stabilization: { name: 'Helping the user calm down', desc: 'Used when the user chose “Calm down”, or the system notices they are very low.' },
         recovery_plan: { name: 'Finding ways together', desc: 'Used when the user chose “Find ways to cope”.' },
         self_kindness: { name: 'When the user blames themselves', desc: 'Switched to automatically when the system notices strong self-blame (except during “Calm down”).' },
-      },
-      assistant: {
-        intent_question: { name: 'Asking what is needed', desc: 'The fixed question “what do you need most right now?” after the user’s first message. The option buttons below it are not edited here.' },
       },
     },
   },

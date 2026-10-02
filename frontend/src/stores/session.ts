@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
 import {
   endSession,
-  getOpening,
   getSessionMessages,
   errorStatus,
   saveRecord,
@@ -43,18 +42,6 @@ export const useSessionStore = defineStore('session', () => {
     reset()
     language.value = lang
     pending.value = true
-  }
-
-  // Shows the disclaimer + intent question without creating anything.
-  async function loadOpening() {
-    if (sessionId.value || turns.value.length > 0) return
-    sending.value = true
-    try {
-      const res = await getOpening(language.value)
-      turns.value.push({ role: 'assistant', text: res.reply_text, candidates: res.candidates, riskLevel: res.risk_level })
-    } finally {
-      sending.value = false
-    }
   }
 
   // Re-opens a past conversation instead of starting a new one — the
@@ -120,16 +107,12 @@ export const useSessionStore = defineStore('session', () => {
 
   // The user switched the UI language. An ongoing conversation continues in
   // the new language from the next reply on (nothing already said is
-  // re-translated); a chat that hasn't started yet just reloads its opening.
+  // re-translated); a chat that hasn't started yet just remembers the choice
+  // for when the user does send something.
   async function setLanguage(lang: Language) {
     if (language.value === lang) return
     language.value = lang
-    if (sessionId.value) {
-      await updateSessionLanguage(sessionId.value, lang)
-    } else if (pending.value && !turns.value.some((turn) => turn.role === 'user')) {
-      turns.value = []
-      await loadOpening()
-    }
+    if (sessionId.value) await updateSessionLanguage(sessionId.value, lang)
   }
 
   function markAnswered(turnIndex: number) {
@@ -199,7 +182,6 @@ export const useSessionStore = defineStore('session', () => {
     answeredTurnIndices,
     error,
     begin,
-    loadOpening,
     resume,
     send,
     retry,

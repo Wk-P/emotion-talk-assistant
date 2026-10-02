@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
 import AppMenu from '@/components/AppMenu.vue'
@@ -15,20 +15,6 @@ const { t } = useI18n()
 const session = useSessionStore()
 const draft = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
-const inputEl = ref<HTMLInputElement | null>(null)
-
-// Starter prompts under the opening message (documents/02_内容与需求/首选提示题建议.md):
-// picking one sends it as the user's first message; "custom" ("I want to
-// say…") just puts the cursor in the input box. Gone once the user speaks.
-const hasUserTurn = computed(() => session.turns.some((turn) => turn.role === 'user'))
-function pickStarter(item: { id: string; label: string }) {
-  if (session.sending) return
-  if (item.id === 'custom') {
-    inputEl.value?.focus()
-    return
-  }
-  session.send(item.label)
-}
 
 function exportConversation() {
   const content = buildTranscriptMarkdown(
@@ -44,16 +30,18 @@ function exportConversation() {
 // dialog shows every time; nothing is stored until the first send.
 const needsAck = computed(() => !session.sessionId && !session.pending)
 
+// Shown only until the user's first message — plain UI chrome, not a chat
+// bubble, so it never reads as something the AI said (there is no canned
+// AI reply any more; the first real reply comes from the model).
+const showEmptyHint = computed(() => !needsAck.value && session.turns.length === 0 && !session.sending)
 
+
+// Starting a chat no longer shows any canned message — the conversation is
+// entirely AI-driven from the user's first real message on (only the crisis
+// safety response, app/services/dialogue_state.py, is still fixed by code).
 function onAcknowledge(lang: Language) {
   session.begin(lang)
-  // Opening: deterministic, no LLM call, nothing stored.
-  session.loadOpening()
 }
-
-onMounted(() => {
-  if (!needsAck.value) session.loadOpening()
-})
 
 function scrollToBottom() {
   nextTick(() => {
@@ -116,30 +104,16 @@ async function saveRecordFor(idx: number) {
       </header>
 
       <div ref="scrollEl" class="turns">
+        <div v-if="showEmptyHint" class="chat-empty">
+          <p class="chat-empty-title">{{ t('chat.emptyTitle') }}</p>
+          <p class="chat-empty-hint">{{ t('chat.emptyHint') }}</p>
+        </div>
 
         <TransitionGroup name="turn" tag="div" class="turns-inner">
           <div v-for="(turn, idx) in session.turns" :key="idx" class="turn" :class="turn.role">
             <div class="bubble">{{ turn.text }}</div>
-            <template v-for="(card, cIdx) in turn.candidates ?? []" :key="`s${cIdx}`">
-              <div v-if="card.type === 'starter_options' && !hasUserTurn" class="starters">
-                <span class="starters-label">{{ t('chat.starterLabel') }}</span>
-                <div class="starter-list">
-                  <button
-                    v-for="item in card.items ?? []"
-                    :key="item.id"
-                    type="button"
-                    class="starter"
-                    :class="{ custom: item.id === 'custom' }"
-                    :disabled="session.sending || needsAck"
-                    @click="pickStarter(item)"
-                  >
-                    {{ item.label }}
-                  </button>
-                </div>
-              </div>
-            </template>
             <CandidateCardView
-              v-for="(card, cIdx) in (turn.candidates ?? []).filter((c) => c.type !== 'starter_options')"
+              v-for="(card, cIdx) in turn.candidates ?? []"
               :key="cIdx"
               :card="card"
               :disabled="session.answeredTurnIndices.has(idx)"
@@ -186,7 +160,6 @@ async function saveRecordFor(idx: number) {
 
         <form class="composer" @submit.prevent="submit">
           <input
-            ref="inputEl"
             v-model="draft"
             :placeholder="t('chat.placeholder')"
             :disabled="session.sending || needsAck"
@@ -259,42 +232,25 @@ async function saveRecordFor(idx: number) {
   overflow-y: auto;
   padding: 16px;
 }
-.starters {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  margin-top: 2px;
+/* Plain instructional text, not a chat bubble — there is no canned AI
+   reply any more for it to be confused with. */
+.chat-empty {
+  max-width: 420px;
+  margin: 15vh auto 0;
+  padding: 0 16px;
+  text-align: center;
 }
-.starters-label {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-.starter-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.starter {
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
+.chat-empty-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--text);
+}
+.chat-empty-hint {
+  margin: 0;
   font-size: 13.5px;
-  text-align: left;
-}
-.starter:not(:disabled):hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.starter.custom {
-  border-style: dashed;
+  line-height: 1.6;
   color: var(--text-muted);
-}
-.starter:disabled {
-  opacity: 0.55;
 }
 .save-record {
   display: flex;

@@ -20,7 +20,6 @@ from app.models.prompt import PromptVersion
 from app.prompts import (
     principles,
     emotion_exploration,
-    intent_question,
     recovery_plan,
     self_kindness,
     stabilization,
@@ -32,7 +31,6 @@ FLOW_EMOTION_EXPLORATION = "flow.emotion_exploration"
 FLOW_STABILIZATION = "flow.stabilization"
 FLOW_RECOVERY_PLAN = "flow.recovery_plan"
 FLOW_SELF_KINDNESS = "flow.self_kindness"
-ASSISTANT_INTENT_QUESTION = "assistant.intent_question"
 
 # Ordered as the admin UI lists them.
 DEFAULTS: dict[str, dict[Language, str]] = {
@@ -41,7 +39,6 @@ DEFAULTS: dict[str, dict[Language, str]] = {
     FLOW_STABILIZATION: stabilization.FLOW_INSTRUCTIONS,
     FLOW_RECOVERY_PLAN: recovery_plan.FLOW_INSTRUCTIONS,
     FLOW_SELF_KINDNESS: self_kindness.FLOW_INSTRUCTIONS,
-    ASSISTANT_INTENT_QUESTION: intent_question.TEXT,
 }
 
 # Fixed, code-only rules appended after each flow's (editable) text — see

@@ -45,7 +45,7 @@ class ConversationSession(Base):
 
     # {"situation": str|None, "emotions": [str], "needs": [str], "beliefs": [str],
     #  "acculturation_domains": [str], "values": [str], "goals": [...],
-    #  "seb_entries": [...], "last_intent": str|None}
+    #  "seb_entries": [...]}
     confirmed_context: Mapped[dict] = mapped_column(JSON, default=dict)
 
     # Per-category booleans, see ConsentCategory. Defaults are all False (opt-in only).

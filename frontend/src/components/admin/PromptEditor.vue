@@ -40,7 +40,7 @@ const langItems = computed(() => items.value.filter((i) => i.language === lang.v
 // The list is grouped the way documents/03_技术文档/指导意见2.md is: the common
 // principles (one per prompt-composition area), then the per-purpose flows,
 // then the fixed lines the assistant always says.
-const GROUPS = ['rules', 'flow', 'assistant'] as const
+const GROUPS = ['rules', 'flow'] as const
 const groupedItems = computed(() =>
   GROUPS.map((group) => ({ group, items: langItems.value.filter((i) => i.key.startsWith(`${group}.`)) })).filter(
     (g) => g.items.length > 0,
