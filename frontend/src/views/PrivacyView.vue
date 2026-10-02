@@ -3,12 +3,12 @@ import SiteFooter from '@/components/SiteFooter.vue'
 import SiteHeader from '@/components/SiteHeader.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Language } from '@/api/client'
+import type { UiLang } from '@/i18n/langPreference'
 import { PRIVACY } from '@/content/privacy'
 
 const { t, locale } = useI18n()
 
-const doc = computed(() => PRIVACY[locale.value as Language] ?? PRIVACY.zh)
+const doc = computed(() => PRIVACY[locale.value as UiLang] ?? PRIVACY.zh)
 </script>
 
 <template>

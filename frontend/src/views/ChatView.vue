@@ -17,7 +17,7 @@ const draft = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLInputElement | null>(null)
 
-// Starter prompts under the opening message (documents/首选提示题建议.md):
+// Starter prompts under the opening message (documents/02_内容与需求/首选提示题建议.md):
 // picking one sends it as the user's first message; "custom" ("I want to
 // say…") just puts the cursor in the input box. Gone once the user speaks.
 const hasUserTurn = computed(() => session.turns.some((turn) => turn.role === 'user'))

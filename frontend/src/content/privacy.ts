@@ -1,7 +1,7 @@
-// 用户隐私协议 — source text: documents/用户隐私协议.md (Chinese, as written
-// by the research team). The Korean version is a translation of it; keep the
-// two in step when either changes.
-import type { Language } from '@/api/client'
+// 用户隐私协议 — source text: documents/02_内容与需求/用户隐私协议.md (Chinese, as written
+// by the research team). The Korean and English versions are translations
+// of it; keep all three in step when one changes.
+import type { UiLang } from '@/i18n/langPreference'
 
 export interface PrivacySection {
   title: string
@@ -13,7 +13,7 @@ export interface PrivacyDoc {
   sections: PrivacySection[]
 }
 
-export const PRIVACY: Record<Language, PrivacyDoc> = {
+export const PRIVACY: Record<UiLang, PrivacyDoc> = {
   zh: {
     title: '《自我共情对话个人信息及隐私说明》',
     sections: [
@@ -129,6 +129,63 @@ export const PRIVACY: Record<Language, PrivacyDoc> = {
       {
         title: '10. 연락처 및 변경',
         body: ['연구 책임자: XIAO AIJIN(肖爱进)', '이메일: xiaoaijin12@gmail.com', '소속 기관: 부산대학교 (Pusan National University)'],
+      },
+    ],
+  },
+  en: {
+    title: 'Self-Compassion Talk — Personal Information and Privacy Notice',
+    sections: [
+      {
+        title: '1. About the service',
+        body: ['This app uses generative AI to support self-compassion conversations, self-understanding, sorting out emotions and self-regulation.'],
+      },
+      {
+        title: '2. Information collected and processed',
+        body: [
+          'This includes conversation content you enter, the emotions and intensity you choose, the purpose of the conversation, the regulation activities you choose, usage times, and reflection records you save. Where registration is offered, the basic information needed for an account may also be processed.',
+        ],
+      },
+      {
+        title: '3. Purposes of use',
+        body: [
+          'The information is mainly used to provide AI conversations, keep the records you choose to save, run the service and improve the app. If the data is used for academic research, separate informed consent will be obtained from research participants.',
+        ],
+      },
+      {
+        title: '4. AI services and third-party processing',
+        body: [
+          'To generate replies, part of what you enter may be sent via an API to an AI service provider for processing. Under OpenAI’s current public policy, API business data is not used to train or improve models by default, unless the account opts in to sharing data.',
+        ],
+      },
+      {
+        title: '5. Retention and deletion',
+        body: [
+          'Information is kept only as far as needed to provide the service, and retention periods are set according to the purpose of the service and research requirements. You can view and delete your saved records, or withdraw the related consent.',
+        ],
+      },
+      {
+        title: '6. Your choices and control',
+        body: ['You can skip non-essential questions, stop a conversation, choose whether to save records, and request deletion of your personal information.'],
+      },
+      {
+        title: '7. Information security',
+        body: ['Reasonable technical and organisational measures are taken to protect your information, and research data is processed with data minimisation, de-identification or anonymisation wherever possible.'],
+      },
+      {
+        title: '8. Limitations and safety',
+        body: [
+          'This app is not for diagnosing illness, psychological treatment or medical decisions. AI-generated content may contain errors or may not fully fit your situation; you can ignore or change its suggestions, or stop using them.',
+        ],
+      },
+      {
+        title: '9. Crisis situations',
+        body: [
+          'If you are at serious risk of self-harm, suicide, harming others or any other emergency, please seek professional and emergency support in real life first rather than relying on this app.',
+        ],
+      },
+      {
+        title: '10. Contact and changes',
+        body: ['Principal investigator: XIAO AIJIN (肖爱进)', 'Email: xiaoaijin12@gmail.com', 'Institution: Pusan National University'],
       },
     ],
   },

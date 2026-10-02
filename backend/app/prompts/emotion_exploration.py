@@ -1,6 +1,6 @@
 """Design principles 1.1, 1.2, 1.3, 10.3 — emotion/situation candidate proposal
 and situation-emotion-behavior structuring. Depth/narrative guidance per
-documents/Modified_Log.md 具体功能 1-3 (recognize feelings, trace them back to
+documents/02_内容与需求/Modified_Log.md 具体功能 1-3 (recognize feelings, trace them back to
 the described event, understand the user's habitual stress reaction)."""
 
 from app.models.enums import Language

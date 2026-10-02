@@ -2,7 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { useSessionStore } from '@/stores/session'
 
-const { locale, t } = useI18n()
+const { t } = useI18n()
 const session = useSessionStore()
 
 function skipQuestion() {
@@ -12,7 +12,9 @@ function skipQuestion() {
 
 function anotherQuestion() {
   if (session.sending) return
-  session.send(locale.value === 'zh' ? '换一个问题' : '다른 질문으로 해주세요')
+  // Sent into the conversation, so it follows the conversation's language
+  // (zh/ko), not the interface language.
+  session.send(session.language === 'ko' ? '다른 질문으로 해주세요' : '换一个问题')
 }
 </script>
 

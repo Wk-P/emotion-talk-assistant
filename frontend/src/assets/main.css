@@ -106,20 +106,17 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
-/* Route-level transition, driven by the <Transition name="route"> in App.vue */
-.route-enter-active,
-.route-leave-active {
+/* Route-level transition, driven by the <Transition name="route"> in App.vue.
+   Kept short: the old page leaves instantly and only the new one fades in,
+   so a click shows the next page right away instead of after two animations. */
+.route-enter-active {
   transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+    opacity 0.12s ease,
+    transform 0.12s ease;
 }
 .route-enter-from {
   opacity: 0;
-  transform: translateY(8px);
-}
-.route-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(4px);
 }
 
 @keyframes fade-up {
@@ -150,7 +147,6 @@ textarea::placeholder {
 .history-view,
 .help-view,
 .privacy-view,
-.contact-view,
 .reflection-view,
 .admin-view {
   display: flex;
@@ -347,15 +343,5 @@ textarea::placeholder {
   border-color: var(--danger);
 }
 
-/* Every top-level view fades/slides in on mount instead of popping in cold. */
-.chat-view,
-.auth-view,
-.records-view,
-.history-view,
-.help-view,
-.privacy-view,
-.contact-view,
-.reflection-view,
-.admin-view {
-  animation: fade-up 0.35s ease;
-}
+/* Page entry is handled by the route transition above (a second per-view
+   animation on top of it only added delay). */

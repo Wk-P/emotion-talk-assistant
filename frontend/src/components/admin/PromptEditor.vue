@@ -37,7 +37,7 @@ const draftId = (key: string, l: Language) => `${key}|${l}`
 
 const langItems = computed(() => items.value.filter((i) => i.language === lang.value))
 
-// The list is grouped the way documents/指导意见2.md is: the common
+// The list is grouped the way documents/03_技术文档/指导意见2.md is: the common
 // principles (one per prompt-composition area), then the per-purpose flows,
 // then the fixed lines the assistant always says.
 const GROUPS = ['rules', 'flow', 'assistant'] as const

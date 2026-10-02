@@ -80,7 +80,6 @@ function logout() {
           <button type="button" class="app-menu-item" @click="go('/records')">{{ t('toolbar.records') }}</button>
           <button type="button" class="app-menu-item" @click="go('/help')">{{ t('toolbar.help') }}</button>
           <button type="button" class="app-menu-item" @click="go('/privacy')">{{ t('privacy.title') }}</button>
-          <button type="button" class="app-menu-item" @click="go('/contact')">{{ t('contact.title') }}</button>
           <button
             v-if="auth.user && auth.user.role !== 'user'"
             type="button"

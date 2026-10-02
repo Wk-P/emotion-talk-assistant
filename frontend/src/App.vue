@@ -5,7 +5,7 @@ import SignOutOverlay from '@/components/SignOutOverlay.vue'
 
 <template>
   <RouterView v-slot="{ Component }">
-    <Transition name="route" mode="out-in">
+    <Transition name="route">
       <component :is="Component" />
     </Transition>
   </RouterView>

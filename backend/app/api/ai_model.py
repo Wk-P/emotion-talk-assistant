@@ -1,6 +1,6 @@
 """Admin choice of the OpenAI model (see app/services/model_settings.py).
-Anyone with admin access can see it; only a superadmin can change it, since
-it affects every participant's conversation and the running cost."""
+Any admin (admin or superadmin) can view and change it; a change is only
+accepted after a test call to the model succeeds."""
 
 from datetime import UTC, datetime
 
@@ -12,7 +12,6 @@ from app.api.deps import get_current_admin_required
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.app_setting import AppSetting
-from app.models.enums import UserRole
 from app.models.user import User
 from app.services import model_settings
 
@@ -83,9 +82,6 @@ async def set_model(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_required),
 ) -> ModelOverview:
-    if admin.role != UserRole.SUPERADMIN:
-        raise HTTPException(status_code=403, detail="superadmin access required")
-
     row = await db.get(AppSetting, model_settings.MODEL_KEY)
     if payload.model:
         # Never switch every conversation to a model that doesn't answer.

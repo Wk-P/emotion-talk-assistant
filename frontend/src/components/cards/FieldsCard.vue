@@ -13,7 +13,7 @@ const local = reactive<Record<string, string>>(
 )
 
 // The AI's reply_text is asked to explain what a card is for, but that's a
-// prompt-level request, not a guarantee (BUG 反馈, documents/Modified_Log.md:
+// prompt-level request, not a guarantee (BUG 反馈, documents/02_内容与需求/Modified_Log.md:
 // users had no idea what a fields card was for). Every known card type gets
 // a fixed, code-owned caption instead of relying on the model to say so.
 const captionKey = computed(() => `fieldsCard.${props.card.type}`)

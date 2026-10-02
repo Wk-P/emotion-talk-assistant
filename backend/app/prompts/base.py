@@ -1,8 +1,8 @@
 """Shared system-prompt scaffolding (design principles 8.1, 8.3, 10.1-10.3;
-role tone and depth per documents/Modified_Log.md "AI 角色规则细化").
+role tone and depth per documents/02_内容与需求/Modified_Log.md "AI 角色规则细化").
 
 Every flow-specific prompt in this package is composed on top of the common
-principles in principles.py (one section per area of documents/指导意见2.md).
+principles in principles.py (one section per area of documents/03_技术文档/指导意见2.md).
 Nothing here should be the sole enforcement of a safety-critical rule (risk
 screening and consent gating happen in app/services/safety.py and the API
 layer, in code) — this is tone/behavior guidance for the model, not a guard.

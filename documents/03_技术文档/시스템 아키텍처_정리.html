@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>시스템 아키텍처_정리.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> or <div class="page"></div> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="부록-시스템-아키텍처">부록. 시스템 아키텍처</h1>
+<h2 id="1-개요">1. 개요</h2>
+<p>본 연구에서 개발한 자기공감 대화 애플리케이션은 사용자, 프런트엔드, 백엔드, 인공지능, 데이터 관리의 다섯 요소로 구성된다. 사용자는 웹 기반 프런트엔드를 통해서만 시스템과 상호작용하며, 프런트엔드는 백엔드와 HTTP API로 통신한다. 인공지능 모델과 데이터베이스는 백엔드를 매개로 해서만 접근되며, 프런트엔드가 이들에 직접 접근하는 경로는 존재하지 않는다.</p>
+<p>이러한 계층 구조는 두 가지 목적을 가진다. 첫째, 위기 상황 감지, 대화 흐름 결정, 데이터 보관 여부 판단 등 안전 및 개인정보와 관련된 결정을 백엔드의 규칙 기반 코드에서 일관되게 수행함으로써, 생성형 AI의 출력에 의존하지 않도록 한다. 둘째, 사용자 데이터에 대한 접근을 단일 경로로 제한하여 인증과 권한 검사를 일관되게 적용할 수 있도록 한다.</p>
+<h2 id="2-구성-요소별-역할과-구현">2. 구성 요소별 역할과 구현</h2>
+<h3 id="21-프런트엔드">2.1 프런트엔드</h3>
+<p>프런트엔드는 사용자가 직접 이용하는 단일 페이지 웹 애플리케이션으로, 언어 선택, 대화 시작, 성찰일지 작성, 저장 기록 조회 기능을 제공한다. 인터페이스는 중국어, 한국어, 영어를 지원하며 사용자는 모든 화면에서 언제든 언어를 전환할 수 있다. 대화는 중국어 또는 한국어로 진행되며, 중국어나 한국어로 전환하면 진행 중인 대화의 이후 응답도 해당 언어로 생성된다. 영어는 인터페이스 언어로만 제공된다.</p>
+<p><strong>[표 A-1] 프런트엔드 구현 기술</strong></p>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>기술</th>
+<th>용도</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>프레임워크</td>
+<td>Vue 3 (Composition API), TypeScript</td>
+<td>화면 및 컴포넌트 구성, 타입 검사</td>
+</tr>
+<tr>
+<td>빌드</td>
+<td>Vite</td>
+<td>개발 환경 및 배포용 번들 생성</td>
+</tr>
+<tr>
+<td>라우팅</td>
+<td>Vue Router</td>
+<td>화면 전환, 화면별 지연 로딩, 로그인 확인</td>
+</tr>
+<tr>
+<td>상태 관리</td>
+<td>Pinia</td>
+<td>로그인 상태, 진행 중인 대화 상태</td>
+</tr>
+<tr>
+<td>다국어</td>
+<td>vue-i18n</td>
+<td>중국어 · 한국어 · 영어 인터페이스</td>
+</tr>
+<tr>
+<td>네트워크</td>
+<td>axios</td>
+<td>백엔드 API 호출</td>
+</tr>
+<tr>
+<td>코드 검사</td>
+<td>vue-tsc, ESLint, oxlint</td>
+<td>타입 및 코드 규칙 검사</td>
+</tr>
+<tr>
+<td>배포</td>
+<td>Cloudflare Workers</td>
+<td>정적 자산 배포</td>
+</tr>
+</tbody>
+</table>
+<p><strong>[표 A-2] 화면 구성</strong></p>
+<table>
+<thead>
+<tr>
+<th>경로</th>
+<th>화면</th>
+<th>로그인 필요</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/</code></td>
+<td>대화 (시작 전 사전 안내 포함)</td>
+<td>예</td>
+</tr>
+<tr>
+<td><code>/history</code></td>
+<td>대화 기록</td>
+<td>예</td>
+</tr>
+<tr>
+<td><code>/records</code></td>
+<td>내 기록 (모든 대화에서 저장한 기록, 유형별 필터)</td>
+<td>예</td>
+</tr>
+<tr>
+<td><code>/reflection</code></td>
+<td>매일 사용 성찰일지</td>
+<td>예</td>
+</tr>
+<tr>
+<td><code>/help</code></td>
+<td>도움말 및 지원 기관 안내</td>
+<td>아니요</td>
+</tr>
+<tr>
+<td><code>/privacy</code></td>
+<td>개인정보 처리 안내</td>
+<td>아니요</td>
+</tr>
+<tr>
+<td><code>/contact</code></td>
+<td>문의하기</td>
+<td>아니요</td>
+</tr>
+<tr>
+<td><code>/login</code>, <code>/register</code></td>
+<td>로그인, 회원가입 (아이디 · 비밀번호)</td>
+<td>아니요</td>
+</tr>
+<tr>
+<td><code>/admin</code></td>
+<td>관리자 페이지</td>
+<td>예 (관리자만)</td>
+</tr>
+</tbody>
+</table>
+<p>로그인이 필요한 화면에 로그인하지 않은 상태로 접근하면 로그인 화면으로 이동하며, 로그인 후 원래 화면으로 돌아간다.</p>
+<p><strong>[구조 A-1] 프런트엔드 디렉터리 구조</strong></p>
+<pre class="hljs"><code><div>frontend/src/
+├── api/client.ts        백엔드 API 호출 및 데이터 타입
+├── views/               화면: 대화, 대화 기록, 내 기록, 성찰일지, 도움말,
+│                        개인정보 처리 안내, 문의하기, 로그인 · 회원가입, 관리자
+├── components/          공통 컴포넌트: 사이드바, 상단 메뉴, 언어 전환,
+│   │                    사전 안내 대화상자, 선택 카드 등
+│   └── admin/           관리자 기능: AI 대화 설정 편집, 모델 선택, 성찰일지 조회
+├── content/             개인정보 처리 안내, 연락처 (중 · 한 · 영)
+├── stores/              전역 상태 (로그인, 진행 중인 대화)
+├── i18n/                인터페이스 문구 (중 · 한 · 영) 및 언어 설정
+├── router/              화면 경로 및 로그인 확인
+└── utils/               기록 항목명 변환, 로그인 후 이동, 대화 내보내기
+</div></code></pre>
+<h3 id="22-백엔드">2.2 백엔드</h3>
+<p>백엔드는 프런트엔드의 요청을 처리하고 인공지능 및 데이터베이스와의 연동을 담당한다. 주요 기능은 사용자 및 세션 관리, 대화 목적 · 상태 및 활동 경로 관리, 맥락 조회 및 프롬프트 구성, AI API 연동 및 응답 처리, 활동 · 기록 · 사용 로그 관리이다.</p>
+<p>프롬프트는 공통 원칙, 대화 목적별 흐름 지침, 고정된 응답 형식 요구사항의 세 부분으로 조합된다. 이 중 공통 원칙과 흐름 지침은 연구진이 관리자 페이지에서 코드 수정 없이 조정할 수 있으며, 모든 수정 내용은 버전으로 보관되고 각 AI 응답에는 생성 당시의 프롬프트 버전과 모델명이 함께 기록된다.</p>
+<p><strong>[표 A-3] 백엔드 구현 기술</strong></p>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>기술</th>
+<th>용도</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>언어 · 프레임워크</td>
+<td>Python 3.12, FastAPI, Uvicorn</td>
+<td>API 서버 및 비동기 요청 처리</td>
+</tr>
+<tr>
+<td>데이터 접근</td>
+<td>SQLAlchemy 2 (비동기), aiosqlite</td>
+<td>데이터베이스 연동</td>
+</tr>
+<tr>
+<td>데이터 검증</td>
+<td>Pydantic, pydantic-settings</td>
+<td>입출력 형식 검증, 환경 설정</td>
+</tr>
+<tr>
+<td>인증</td>
+<td>JWT (PyJWT), PBKDF2 비밀번호 해시</td>
+<td>아이디 · 비밀번호 기반 로그인</td>
+</tr>
+<tr>
+<td>암호화</td>
+<td>Fernet (cryptography)</td>
+<td>저장 기록 및 성찰일지 암호화</td>
+</tr>
+<tr>
+<td>문서 생성</td>
+<td>python-docx, ReportLab</td>
+<td>관리자용 Word · PDF 내보내기</td>
+</tr>
+<tr>
+<td>의존성 관리</td>
+<td>uv</td>
+<td>패키지 버전 고정</td>
+</tr>
+<tr>
+<td>배포</td>
+<td>Docker</td>
+<td>서버 환경 구성</td>
+</tr>
+</tbody>
+</table>
+<p><strong>[구조 A-2] 백엔드 디렉터리 구조</strong></p>
+<pre class="hljs"><code><div>backend/app/
+├── main.py              애플리케이션 진입점, API 등록
+├── api/                 API 계층 (기능별 파일, [표 A-4] 참조)
+├── services/            처리 로직
+│   ├── dialogue_state.py   대화 처리 총괄: 위기 검사 → 흐름 결정 → 모델 호출 → 결과 정리
+│   ├── safety.py           위기 표현 검사 (규칙 기반)
+│   ├── llm.py              OpenAI 호출, JSON 응답 형식 고정
+│   ├── model_settings.py   사용 모델 선택 및 사용 가능 여부 확인
+│   ├── auth.py             비밀번호 해시, 로그인 토큰, 아이디 규칙
+│   ├── crypto.py           기록 암호화
+│   └── export_docs.py      PDF · Word · Markdown · TXT 내보내기
+├── prompts/             프롬프트
+│   ├── principles.py       공통 원칙 13개 항목
+│   ├── base.py             시스템 프롬프트 조합, 고정 형식 요구사항
+│   ├── intent_question.py  필요한 도움 확인 질문
+│   ├── emotion_exploration.py · stabilization.py · recovery_plan.py · self_kindness.py
+│   │                       네 가지 대화 흐름 지침
+│   ├── router.py           대화 흐름 결정
+│   └── registry.py         수정 가능 항목의 기본값 및 버전 조회
+├── models/              데이터 테이블 정의 ([표 A-5] 참조)
+├── schemas/             API 요청 · 응답 형식
+├── db/                  데이터베이스 연결, 초기화, 지원 기관 초기 데이터
+└── core/config.py       환경 설정
+</div></code></pre>
+<p><strong>[표 A-4] API 구성</strong></p>
+<table>
+<thead>
+<tr>
+<th>경로</th>
+<th>파일</th>
+<th>기능</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/api/auth</code></td>
+<td><code>auth.py</code></td>
+<td>회원가입, 로그인, 현재 사용자 조회</td>
+</tr>
+<tr>
+<td><code>/api/session</code></td>
+<td><code>session.py</code></td>
+<td>대화 시작, 첫 안내, 대화 기록 목록, 언어 전환</td>
+</tr>
+<tr>
+<td><code>/api/chat</code></td>
+<td><code>chat.py</code></td>
+<td>메시지 전송, AI 응답 및 선택 카드 반환</td>
+</tr>
+<tr>
+<td><code>/api/session/{id}/consent</code>, <code>/end</code></td>
+<td><code>consent.py</code></td>
+<td>동의 항목 설정, 대화 종료 (미동의 시 대화 내용 삭제)</td>
+</tr>
+<tr>
+<td><code>/api/records</code></td>
+<td><code>records.py</code></td>
+<td>기록 저장 · 조회 · 삭제 (본인 기록만)</td>
+</tr>
+<tr>
+<td><code>/api/reflections</code></td>
+<td><code>reflections.py</code></td>
+<td>성찰일지 작성 · 수정 · 조회 · 삭제 (하루 1건)</td>
+</tr>
+<tr>
+<td><code>/api/resources</code></td>
+<td><code>resources.py</code></td>
+<td>검증된 지원 기관 정보</td>
+</tr>
+<tr>
+<td><code>/api/admin</code></td>
+<td><code>admin.py</code></td>
+<td>대화 데이터 조회 · 필터 · 내보내기, 성찰일지 조회, 사용자 관리</td>
+</tr>
+<tr>
+<td><code>/api/admin/prompts</code></td>
+<td><code>prompts.py</code></td>
+<td>프롬프트 조회 · 버전 저장 · 수정 기록 · 시험 대화</td>
+</tr>
+<tr>
+<td><code>/api/admin/model</code></td>
+<td><code>ai_model.py</code></td>
+<td>사용 가능한 모델 목록, 사용 모델 변경</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-인공지능">2.3 인공지능</h3>
+<p>인공지능은 OpenAI API를 통해 연동되며, 응답은 사전에 정의된 JSON 형식(응답 문장과 선택지)으로 반환된다. 기본 모델은 gpt-5.6-terra이며, 관리자는 최근 출시된 모델 가운데 실제 호출이 확인된 모델로 변경할 수 있다.</p>
+<p>인공지능이 담당하는 역할은 상황 · 맥락의 이해 및 요약, 감정 및 필요 탐색 질문 생성, 자기수용 표현 제안, 조절 활동 제안, 사용자의 수정 · 거부 내용 반영이다. 인공지능이 제시하는 감정, 해석, 표현은 모두 후보로 제시되며, 사용자가 확인한 내용만 대화 맥락으로 저장된다.</p>
+<h3 id="24-데이터-관리">2.4 데이터 관리</h3>
+<p>데이터는 관계형 데이터베이스(SQLite)에 저장된다. 저장 대상은 사용자 동의 정보, 대화 기록, 성찰일지, 사용 일시 및 횟수 기록이다. 사용자가 저장을 선택한 기록과 성찰일지는 암호화되어 보관되며, 대화 기록은 사용자의 보관 동의 여부에 따라 대화 종료 시 삭제된다.</p>
+<p><strong>[표 A-5] 주요 데이터 테이블</strong></p>
+<table>
+<thead>
+<tr>
+<th>테이블</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>users</code></td>
+<td>아이디, 비밀번호 해시, 역할(일반 사용자 · 관리자 · 최고 관리자), 사용 여부</td>
+</tr>
+<tr>
+<td><code>sessions</code></td>
+<td>대화 단위: 소속 사용자, 대화 언어, 동의 항목, 사용자가 확인한 맥락, 시작 · 종료 시각</td>
+</tr>
+<tr>
+<td><code>messages</code></td>
+<td>대화 메시지; AI 응답에는 생성 당시의 프롬프트 버전과 모델명 기록</td>
+</tr>
+<tr>
+<td><code>saved_records</code></td>
+<td>사용자가 저장한 기록 (암호화)</td>
+</tr>
+<tr>
+<td><code>daily_reflections</code></td>
+<td>매일 사용 성찰일지 (사용자당 하루 1건, 암호화)</td>
+</tr>
+<tr>
+<td><code>prompt_versions</code></td>
+<td>관리자가 수정한 프롬프트의 전체 버전 이력</td>
+</tr>
+<tr>
+<td><code>app_settings</code></td>
+<td>관리자가 선택한 사용 모델 등 운영 설정</td>
+</tr>
+<tr>
+<td><code>crisis_resources</code></td>
+<td>검증된 지원 기관 정보 (중 · 한 · 영)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-관리자-기능과-권한">2.5 관리자 기능과 권한</h3>
+<p>관리자 페이지는 연구진이 데이터를 검토하고 시스템을 운영하기 위한 기능을 제공한다. 권한은 관리자와 최고 관리자의 두 단계로 구분되며, 최고 관리자 계정은 관리자 페이지에서 생성하거나 변경할 수 없다.</p>
+<p><strong>[표 A-6] 관리자 기능과 권한</strong></p>
+<table>
+<thead>
+<tr>
+<th>기능</th>
+<th>관리자</th>
+<th>최고 관리자</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>대화 데이터 조회 (참여자 아이디 표시) 및 필터</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>대화 데이터 내보내기 (JSON · PDF · Word · Markdown · TXT)</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>성찰일지 조회 및 내보내기 (CSV · JSON)</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>계정 생성, 비밀번호 재설정, 사용 중지 · 복구, 삭제</td>
+<td>일반 사용자</td>
+<td>일반 사용자 · 관리자</td>
+</tr>
+<tr>
+<td>관리자 지정 · 해제</td>
+<td>×</td>
+<td>○</td>
+</tr>
+<tr>
+<td>프롬프트(AI 대화 설정) 수정</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>사용 모델 변경</td>
+<td>○</td>
+<td>○</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-대화-처리-절차">3. 대화 처리 절차</h2>
+<p>한 차례의 대화는 다음 절차에 따라 처리된다.</p>
+<ol>
+<li>사용자가 프런트엔드에서 메시지를 입력하면 백엔드로 전달된다.</li>
+<li>백엔드는 먼저 규칙 기반의 위기 키워드 검사를 수행한다. 위기 신호가 감지되면 인공지능을 호출하지 않고 사전에 검증된 지원 기관 정보를 즉시 제공한다.</li>
+<li>위기 신호가 없는 경우, 사용자가 선택한 대화 목적과 자기비판 수준에 따라 대화 흐름을 결정한다.</li>
+<li>데이터베이스에서 최근 대화 내용과 사용자가 확인한 맥락을 조회하여 프롬프트를 구성하고, 인공지능에 응답을 요청한다.</li>
+<li>인공지능이 생성한 응답과 선택지를 저장한 후 프런트엔드에 전달하며, 프런트엔드는 이를 대화 말풍선과 선택 카드로 표시한다.</li>
+<li>사용자가 요약, 계획, 자기친절 표현 등을 확인한 후 저장을 선택하면, 해당 기록은 보관 동의와 함께 암호화되어 저장된다.</li>
+</ol>
+<h2 id="4-설계-원칙">4. 설계 원칙</h2>
+<p><strong>[표 A-7] 시스템 설계 원칙</strong></p>
+<table>
+<thead>
+<tr>
+<th>원칙</th>
+<th>구현 방식</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>안전 판단의 코드화</td>
+<td>위기 감지와 지원 정보 제공을 인공지능이 아닌 규칙 기반 코드로 수행한다.</td>
+</tr>
+<tr>
+<td>사용자 결정권 보장</td>
+<td>인공지능의 해석은 후보로만 제시하며, 사용자가 확인 · 수정 · 거부할 수 있다.</td>
+</tr>
+<tr>
+<td>동의 기반 데이터 보관</td>
+<td>기록은 사용자가 저장을 선택한 경우에만 보관하며, 저장 시 암호화한다.</td>
+</tr>
+<tr>
+<td>계정 기반 접근 통제</td>
+<td>모든 이용은 로그인을 전제로 하며, 사용자는 본인의 데이터에만 접근할 수 있다.</td>
+</tr>
+<tr>
+<td>연구진에 의한 조정 가능성</td>
+<td>프롬프트와 사용 모델을 관리자 페이지에서 조정할 수 있으며, 변경 이력과 응답별 사용 버전을 기록한다.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-핵심-구현-코드">5. 핵심 구현 코드</h2>
+<p>본 절은 앞서 기술한 설계 원칙이 실제로 구현된 부분을 소스 코드에서 발췌한 것이다. 각 코드는 실제 시스템의 코드를 그대로 옮겼으며, 백엔드 코드의 경로는 <code>backend/</code> 기준이며(디렉터리 구조는 [구조 A-2] 참조), 프런트엔드 코드는 <code>frontend/src/</code> 기준이다.</p>
+<h3 id="51-위기-신호-감지">5.1 위기 신호 감지</h3>
+<p>위기 신호는 인공지능의 판단에 의존하지 않고, 중국어와 한국어의 위기 표현 목록을 정규식으로 대조하여 판정한다. 결과는 위기(CRISIS), 주의(WATCH), 해당 없음(NONE)의 세 단계로 구분된다.</p>
+<p><strong>[코드 A-1] 위기 표현 목록 및 판정 함수</strong> (<code>app/services/safety.py</code>)</p>
+<pre class="hljs"><code><div>_CRISIS_PATTERNS_ZH = [
+    <span class="hljs-string">r&quot;不想活&quot;</span>, <span class="hljs-string">r&quot;自杀&quot;</span>, <span class="hljs-string">r&quot;想死&quot;</span>, <span class="hljs-string">r&quot;结束生命&quot;</span>, <span class="hljs-string">r&quot;伤害自己&quot;</span>, <span class="hljs-string">r&quot;割腕&quot;</span>, <span class="hljs-string">r&quot;想杀&quot;</span>, <span class="hljs-string">r&quot;杀了他&quot;</span>, <span class="hljs-string">r&quot;杀了她&quot;</span>,
+]
+_CRISIS_PATTERNS_KO = [
+    <span class="hljs-string">r&quot;죽고\s*싶&quot;</span>, <span class="hljs-string">r&quot;자살&quot;</span>, <span class="hljs-string">r&quot;자해&quot;</span>, <span class="hljs-string">r&quot;삶을\s*끝&quot;</span>, <span class="hljs-string">r&quot;죽이고\s*싶&quot;</span>, <span class="hljs-string">r&quot;살고\s*싶지\s*않&quot;</span>,
+]
+
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">screen_text</span>(<span class="hljs-params">text: <span class="hljs-built_in">str</span></span>) -&gt; RiskLevel:
+    <span class="hljs-keyword">if</span> _matches(text, _CRISIS_PATTERNS_ZH) <span class="hljs-keyword">or</span> _matches(text, _CRISIS_PATTERNS_KO):
+        <span class="hljs-keyword">return</span> RiskLevel.CRISIS
+    <span class="hljs-keyword">if</span> _matches(text, _WATCH_PATTERNS_ZH) <span class="hljs-keyword">or</span> _matches(text, _WATCH_PATTERNS_KO):
+        <span class="hljs-keyword">return</span> RiskLevel.WATCH
+    <span class="hljs-keyword">return</span> RiskLevel.NONE
+</div></code></pre>
+<p>이 검사는 매 대화 턴에서 인공지능을 호출하기 전에 수행되며, 위기로 판정되면 인공지능을 거치지 않고 검증된 지원 기관 정보를 반환한다.</p>
+<p><strong>[코드 A-2] 대화 처리 시 위기 검사 순서</strong> (<code>app/services/dialogue_state.py</code>)</p>
+<pre class="hljs"><code><div>risk = RiskLevel.NONE
+<span class="hljs-keyword">if</span> user_text:
+    risk = safety.screen_text(user_text)
+    session.self_criticism_level = safety.bump_self_criticism(user_text, session.self_criticism_level)
+    <span class="hljs-keyword">if</span> risk == RiskLevel.CRISIS:
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">await</span> _crisis_turn(db, language)
+</div></code></pre>
+<p>위기로 판정된 경우 반환되는 응답은 고정 문구와 데이터베이스에 등록된 지원 기관 정보로만 구성되며, 각 기관 정보에는 연구진이 연락처를 확인한 일시(<code>verified_at</code>)가 함께 포함된다.</p>
+<p><strong>[코드 A-3] 위기 응답 구성</strong> (<code>app/services/dialogue_state.py</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title function_">_crisis_turn</span>(<span class="hljs-params">db: AsyncSession, language: Language</span>) -&gt; TurnResult:
+    country = <span class="hljs-string">&quot;KR&quot;</span>  <span class="hljs-comment"># participants are studying in Korea; primary resources are KR-based</span>
+    result = <span class="hljs-keyword">await</span> db.execute(select(CrisisResource).where(CrisisResource.country == country))
+    resources = result.scalars().<span class="hljs-built_in">all</span>()
+    candidates = [
+        {
+            <span class="hljs-string">&quot;type&quot;</span>: <span class="hljs-string">&quot;crisis_resources&quot;</span>,
+            <span class="hljs-string">&quot;items&quot;</span>: [
+                {
+                    <span class="hljs-string">&quot;id&quot;</span>: r.<span class="hljs-built_in">id</span>,
+                    <span class="hljs-string">&quot;label&quot;</span>: r.name.get(language.value, r.name.get(<span class="hljs-string">&quot;ko&quot;</span>, <span class="hljs-string">&quot;&quot;</span>)),
+                    <span class="hljs-string">&quot;description&quot;</span>: r.description.get(language.value, r.description.get(<span class="hljs-string">&quot;ko&quot;</span>, <span class="hljs-string">&quot;&quot;</span>)),
+                    <span class="hljs-string">&quot;contact&quot;</span>: r.contact,
+                    <span class="hljs-string">&quot;url&quot;</span>: r.url,
+                    <span class="hljs-string">&quot;verified_at&quot;</span>: r.verified_at.isoformat(),
+                }
+                <span class="hljs-keyword">for</span> r <span class="hljs-keyword">in</span> resources
+            ],
+        }
+    ]
+    <span class="hljs-keyword">return</span> TurnResult(reply_text=_CRISIS_COPY[language], candidates=candidates, risk_level=RiskLevel.CRISIS)
+</div></code></pre>
+<h3 id="52-대화-흐름-결정">5.2 대화 흐름 결정</h3>
+<p>사용자가 선택한 대화 목적에 따라 대화 흐름을 결정하되, 자기비판 수준이 기준값(0.5) 이상이면 「안정화」를 선택한 경우를 제외하고 자기친절 흐름을 우선 적용한다.</p>
+<p><strong>[코드 A-4] 대화 목적과 흐름의 대응 및 흐름 결정 함수</strong> (<code>app/prompts/router.py</code>)</p>
+<pre class="hljs"><code><div>_FLOW_MAP = {
+    DialogueIntent.VENT: registry.FLOW_EMOTION_EXPLORATION,
+    DialogueIntent.ORGANIZE: registry.FLOW_EMOTION_EXPLORATION,
+    DialogueIntent.STABILIZE: registry.FLOW_STABILIZATION,
+    DialogueIntent.METHOD: registry.FLOW_RECOVERY_PLAN,
+}
+
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">flow_key_for</span>(<span class="hljs-params">intent: DialogueIntent, self_criticism_level: <span class="hljs-built_in">float</span></span>) -&gt; <span class="hljs-built_in">str</span>:
+    <span class="hljs-keyword">if</span> self_criticism_level &gt;= <span class="hljs-number">0.5</span> <span class="hljs-keyword">and</span> intent != DialogueIntent.STABILIZE:
+        <span class="hljs-keyword">return</span> registry.FLOW_SELF_KINDNESS
+    <span class="hljs-keyword">return</span> _FLOW_MAP.get(intent, registry.FLOW_EMOTION_EXPLORATION)
+</div></code></pre>
+<h3 id="53-프롬프트-구성">5.3 프롬프트 구성</h3>
+<p>시스템 프롬프트는 공통 원칙(13개 항목), 대화 흐름별 지침, 응답 형식 요구사항, 응답 언어 지정의 순서로 조합된다. 공통 원칙과 흐름 지침은 관리자 페이지에서 수정할 수 있으나, 응답 형식과 응답 언어 지정은 코드에 고정되어 있어 수정되지 않는다.</p>
+<p><strong>[코드 A-5] 공통 원칙 조합 및 시스템 프롬프트 구성</strong> (<code>app/prompts/principles.py</code>, <code>app/prompts/base.py</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">def</span> <span class="hljs-title function_">build_rules_text</span>(<span class="hljs-params">bodies: <span class="hljs-built_in">dict</span>[<span class="hljs-built_in">str</span>, <span class="hljs-built_in">str</span>], language: Language</span>) -&gt; <span class="hljs-built_in">str</span>:
+    parts = [<span class="hljs-string">f&quot;【<span class="hljs-subst">{TITLES[key][language]}</span>】\n<span class="hljs-subst">{bodies[key].strip()}</span>&quot;</span> <span class="hljs-keyword">for</span> key <span class="hljs-keyword">in</span> KEYS <span class="hljs-keyword">if</span> bodies.get(key, <span class="hljs-string">&quot;&quot;</span>).strip()]
+    <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;\n\n&quot;</span>.join(parts)
+
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">build_system_prompt</span>(<span class="hljs-params">rules_text: <span class="hljs-built_in">str</span>, flow_instructions: <span class="hljs-built_in">str</span>, language: Language, flow_format: <span class="hljs-built_in">str</span></span>) -&gt; <span class="hljs-built_in">str</span>:
+    <span class="hljs-keyword">return</span> (
+        <span class="hljs-string">f&quot;<span class="hljs-subst">{rules_text}</span>\n\n---\n<span class="hljs-subst">{flow_instructions}</span>\n\n---\n<span class="hljs-subst">{FORMAT_RULES[language]}</span>\n<span class="hljs-subst">{flow_format}</span>&quot;</span>
+        <span class="hljs-string">f&quot;\n<span class="hljs-subst">{REPLY_LANGUAGE[language]}</span>&quot;</span>
+    )
+</div></code></pre>
+<p>인공지능에는 다음의 응답 형식이 함께 전달되며, 응답은 사용자에게 보여 줄 문장(<code>reply_text</code>)과 선택지(<code>candidates</code>)로 구성된 JSON으로 받는다.</p>
+<p><strong>[코드 A-6] 응답 형식 지정</strong> (<code>app/services/llm.py</code>)</p>
+<pre class="hljs"><code><div>RESPONSE_INSTRUCTIONS = (
+    <span class="hljs-string">&quot;\n\n---\n&quot;</span>
+    <span class="hljs-string">&quot;输出格式 / Output format: 只返回一个 JSON 对象 / return exactly one JSON object, &quot;</span>
+    <span class="hljs-string">&#x27;{&quot;reply_text&quot;: string, &quot;candidates&quot;: [{&quot;type&quot;: string, &quot;items&quot;: [{&quot;id&quot;: string, &quot;label&quot;: string}]?, &#x27;</span>
+    <span class="hljs-string">&#x27;&quot;fields&quot;: object?}]}. reply_text 是给用户看的简短消息；candidates 是可选的结构化建议，&#x27;</span>
+    <span class="hljs-string">&quot;没有则给空数组。不要在 JSON 之外输出任何文字。&quot;</span>
+)
+</div></code></pre>
+<p>구성된 프롬프트와 최근 대화 내역은 관리자가 선택한 모델로 전송된다. 응답이 JSON 형식이 아닌 경우에도 대화가 중단되지 않도록 응답 전체를 문장으로 처리하며, API 호출이 실패하면 오류 원인을 기록한 뒤 사용자에게 일시적 오류임을 알린다.</p>
+<p><strong>[코드 A-7] 인공지능 호출 및 응답 해석</strong> (<code>app/services/llm.py</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title function_">generate_turn</span>(<span class="hljs-params">
+    system_prompt: <span class="hljs-built_in">str</span>,
+    history: <span class="hljs-built_in">list</span>[<span class="hljs-built_in">dict</span>[<span class="hljs-built_in">str</span>, <span class="hljs-built_in">str</span>]],
+    user_message: <span class="hljs-built_in">str</span>,
+    model: <span class="hljs-built_in">str</span>,
+</span>) -&gt; LLMResponse:
+    messages = [{<span class="hljs-string">&quot;role&quot;</span>: <span class="hljs-string">&quot;system&quot;</span>, <span class="hljs-string">&quot;content&quot;</span>: system_prompt + RESPONSE_INSTRUCTIONS}]
+    messages.extend(history)
+    messages.append({<span class="hljs-string">&quot;role&quot;</span>: <span class="hljs-string">&quot;user&quot;</span>, <span class="hljs-string">&quot;content&quot;</span>: user_message})
+
+    <span class="hljs-keyword">try</span>:
+        completion = <span class="hljs-keyword">await</span> _client().chat.completions.create(
+            model=model,
+            messages=messages,
+            response_format={<span class="hljs-string">&quot;type&quot;</span>: <span class="hljs-string">&quot;json_object&quot;</span>},
+        )
+    <span class="hljs-keyword">except</span> APIError <span class="hljs-keyword">as</span> e:
+        logger.exception(<span class="hljs-string">&quot;OpenAI call failed (model=%s)&quot;</span>, model)
+        status = <span class="hljs-built_in">getattr</span>(e, <span class="hljs-string">&quot;status_code&quot;</span>, <span class="hljs-literal">None</span>)
+        <span class="hljs-keyword">raise</span> LLMUnavailable(<span class="hljs-string">f&quot;<span class="hljs-subst">{<span class="hljs-built_in">type</span>(e).__name__}</span><span class="hljs-subst">{<span class="hljs-string">f&#x27; <span class="hljs-subst">{status}</span>&#x27;</span> <span class="hljs-keyword">if</span> status <span class="hljs-keyword">else</span> <span class="hljs-string">&#x27;&#x27;</span>}</span>&quot;</span>) <span class="hljs-keyword">from</span> e
+    raw = completion.choices[<span class="hljs-number">0</span>].message.content <span class="hljs-keyword">or</span> <span class="hljs-string">&quot;{}&quot;</span>
+    <span class="hljs-keyword">try</span>:
+        parsed = json.loads(raw)
+    <span class="hljs-keyword">except</span> json.JSONDecodeError:
+        parsed = {<span class="hljs-string">&quot;reply_text&quot;</span>: raw, <span class="hljs-string">&quot;candidates&quot;</span>: []}
+
+    <span class="hljs-keyword">return</span> LLMResponse(
+        reply_text=parsed.get(<span class="hljs-string">&quot;reply_text&quot;</span>, <span class="hljs-string">&quot;&quot;</span>),
+        candidates=parsed.get(<span class="hljs-string">&quot;candidates&quot;</span>, []) <span class="hljs-keyword">or</span> [],
+    )
+</div></code></pre>
+<h3 id="54-사용자-확인-내용의-반영">5.4 사용자 확인 내용의 반영</h3>
+<p>인공지능이 제시한 감정, 표현, 계획은 사용자가 선택하거나 수정한 경우에만 대화 맥락(<code>confirmed_context</code>)에 저장된다. 이 함수는 대화 맥락이 기록되는 유일한 경로이며, 확인되지 않은 인공지능의 출력은 저장되지 않는다.</p>
+<p><strong>[코드 A-8] 사용자 확인 내용의 반영</strong> (<code>app/services/dialogue_state.py</code>, 일부)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">def</span> <span class="hljs-title function_">merge_confirmation</span>(<span class="hljs-params">session: ConversationSession, confirmation: <span class="hljs-built_in">dict</span>[<span class="hljs-built_in">str</span>, <span class="hljs-type">Any</span>]</span>) -&gt; <span class="hljs-literal">None</span>:
+    ctx = <span class="hljs-built_in">dict</span>(session.confirmed_context <span class="hljs-keyword">or</span> {})
+    card_type = confirmation.get(<span class="hljs-string">&quot;card_type&quot;</span>)
+    selected = confirmation.get(<span class="hljs-string">&quot;selected_labels&quot;</span>, [])
+    custom = confirmation.get(<span class="hljs-string">&quot;custom_text&quot;</span>)
+    values = [*selected, *( [custom] <span class="hljs-keyword">if</span> custom <span class="hljs-keyword">else</span> [] )]
+
+    <span class="hljs-keyword">if</span> card_type == <span class="hljs-string">&quot;intent_options&quot;</span> <span class="hljs-keyword">and</span> selected:
+        ctx[<span class="hljs-string">&quot;last_intent&quot;</span>] = selected[<span class="hljs-number">0</span>]
+    <span class="hljs-keyword">elif</span> card_type == <span class="hljs-string">&quot;emotion_options&quot;</span>:
+        ctx[<span class="hljs-string">&quot;emotions&quot;</span>] = <span class="hljs-built_in">list</span>({*ctx.get(<span class="hljs-string">&quot;emotions&quot;</span>, []), *values})
+    <span class="hljs-keyword">elif</span> card_type == <span class="hljs-string">&quot;self_kindness_options&quot;</span> <span class="hljs-keyword">and</span> values:
+        ctx.setdefault(<span class="hljs-string">&quot;self_kindness_texts&quot;</span>, []).append(values[<span class="hljs-number">0</span>])
+    <span class="hljs-comment"># (안정화 활동, 회복 행동, 행동 계획, 상황-감정-행동 요약도 같은 방식으로 반영)</span>
+
+    session.confirmed_context = ctx
+</div></code></pre>
+<h3 id="55-동의-기반-데이터-보관과-접근-통제">5.5 동의 기반 데이터 보관과 접근 통제</h3>
+<p>대화 종료 시 사용자가 대화 기록 보관에 동의하지 않았다면 대화 내용을 삭제한다. 또한 모든 대화 관련 요청은 로그인한 사용자 본인의 대화인지 확인한 후에만 처리되며, 다른 사용자의 대화는 존재하지 않는 것으로 응답하여 대화 식별자를 추측하는 시도를 막는다.</p>
+<p><strong>[코드 A-9] 대화 종료 시 동의 여부에 따른 삭제</strong> (<code>app/api/consent.py</code>, 일부)</p>
+<pre class="hljs"><code><div>consent = session.consent <span class="hljs-keyword">or</span> {}
+<span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> consent.get(ConsentCategory.DIALOGUE_HISTORY.value, <span class="hljs-literal">False</span>):
+    <span class="hljs-keyword">await</span> db.execute(delete(Message).where(Message.session_id == session.<span class="hljs-built_in">id</span>))
+
+session.ended_at = datetime.now(timezone.utc)
+</div></code></pre>
+<p><strong>[코드 A-10] 본인 대화 확인</strong> (<code>app/api/deps.py</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title function_">get_owned_session</span>(<span class="hljs-params">
+    session_id: <span class="hljs-built_in">str</span>,
+    db: AsyncSession = Depends(<span class="hljs-params">get_db</span>),
+    user: User = Depends(<span class="hljs-params">get_current_user_required</span>),
+</span>) -&gt; ConversationSession:
+    session = <span class="hljs-keyword">await</span> get_session_or_404(session_id, db)
+    <span class="hljs-keyword">if</span> session.user_id != user.<span class="hljs-built_in">id</span>:
+        <span class="hljs-keyword">raise</span> HTTPException(status_code=<span class="hljs-number">404</span>, detail=<span class="hljs-string">&quot;session not found&quot;</span>)
+    <span class="hljs-keyword">return</span> session
+</div></code></pre>
+<p>사용자가 저장한 기록과 성찰일지는 대칭키 암호화(Fernet)를 적용하여 저장하며, 암호화 키는 서버의 환경 설정에만 보관된다. 따라서 데이터베이스 파일만으로는 기록 내용을 확인할 수 없다.</p>
+<p><strong>[코드 A-11] 기록 암호화 및 복호화</strong> (<code>app/services/crypto.py</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">def</span> <span class="hljs-title function_">encrypt_json</span>(<span class="hljs-params">payload: <span class="hljs-built_in">dict</span></span>) -&gt; <span class="hljs-built_in">bytes</span>:
+    <span class="hljs-keyword">return</span> _fernet().encrypt(json.dumps(payload, ensure_ascii=<span class="hljs-literal">False</span>).encode(<span class="hljs-string">&quot;utf-8&quot;</span>))
+
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">decrypt_json</span>(<span class="hljs-params">token: <span class="hljs-built_in">bytes</span> | <span class="hljs-built_in">str</span></span>) -&gt; <span class="hljs-built_in">dict</span>:
+    <span class="hljs-keyword">if</span> <span class="hljs-built_in">isinstance</span>(token, <span class="hljs-built_in">str</span>):
+        token = token.encode(<span class="hljs-string">&quot;utf-8&quot;</span>)
+    <span class="hljs-keyword">return</span> json.loads(_fernet().decrypt(token).decode(<span class="hljs-string">&quot;utf-8&quot;</span>))
+</div></code></pre>
+<p>성찰일지는 사용자당 하루 1건으로 관리된다. 같은 날 다시 제출하면 새 항목을 만들지 않고 기존 내용을 수정하며, 모든 응답 항목이 비어 있는 제출은 거부한다.</p>
+<p><strong>[코드 A-12] 성찰일지 저장</strong> (<code>app/api/reflections.py</code>, 일부)</p>
+<pre class="hljs"><code><div>answers = payload.answers.model_dump()
+<span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> <span class="hljs-built_in">any</span>(v.strip() <span class="hljs-keyword">for</span> v <span class="hljs-keyword">in</span> answers.values()):
+    <span class="hljs-keyword">raise</span> HTTPException(status_code=<span class="hljs-number">400</span>, detail=<span class="hljs-string">&quot;at least one answer is required&quot;</span>)
+
+owner = _owner_filter(user)
+existing = (
+    <span class="hljs-keyword">await</span> db.execute(select(DailyReflection).where(owner, DailyReflection.day == day))
+).scalar_one_or_none()
+<span class="hljs-keyword">if</span> existing <span class="hljs-keyword">is</span> <span class="hljs-literal">None</span>:
+    existing = DailyReflection(user_id=user.<span class="hljs-built_in">id</span>, day=day)
+existing.language = payload.language
+existing.answers_encrypted = encrypt_json(answers).decode(<span class="hljs-string">&quot;utf-8&quot;</span>)
+</div></code></pre>
+<h3 id="56-사용-모델의-검증">5.6 사용 모델의 검증</h3>
+<p>관리자가 사용 모델을 변경하면, 실제 대화와 같은 형식(JSON 응답)의 짧은 요청을 먼저 보내 정상 응답 여부를 확인한다. 응답에 실패한 모델로는 변경되지 않으므로, 모델 변경으로 인해 참여자의 대화가 중단되는 것을 방지한다.</p>
+<p><strong>[코드 A-13] 모델 사용 가능 여부 확인</strong> (<code>app/services/model_settings.py</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title function_">probe</span>(<span class="hljs-params">model: <span class="hljs-built_in">str</span></span>) -&gt; <span class="hljs-built_in">tuple</span>[<span class="hljs-built_in">bool</span>, <span class="hljs-built_in">str</span> | <span class="hljs-literal">None</span>]:
+    client = AsyncOpenAI(api_key=get_settings().openai_api_key)
+    <span class="hljs-keyword">try</span>:
+        <span class="hljs-keyword">await</span> client.chat.completions.create(
+            model=model,
+            messages=[
+                {<span class="hljs-string">&quot;role&quot;</span>: <span class="hljs-string">&quot;system&quot;</span>, <span class="hljs-string">&quot;content&quot;</span>: <span class="hljs-string">&#x27;Reply with the JSON object {&quot;ok&quot;: true}.&#x27;</span>},
+                {<span class="hljs-string">&quot;role&quot;</span>: <span class="hljs-string">&quot;user&quot;</span>, <span class="hljs-string">&quot;content&quot;</span>: <span class="hljs-string">&quot;ping&quot;</span>},
+            ],
+            response_format={<span class="hljs-string">&quot;type&quot;</span>: <span class="hljs-string">&quot;json_object&quot;</span>},
+            max_completion_tokens=<span class="hljs-number">200</span>,
+        )
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">True</span>, <span class="hljs-literal">None</span>
+    <span class="hljs-keyword">except</span> APIError <span class="hljs-keyword">as</span> e:
+        status = <span class="hljs-built_in">getattr</span>(e, <span class="hljs-string">&quot;status_code&quot;</span>, <span class="hljs-literal">None</span>)
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">False</span>, <span class="hljs-string">f&quot;<span class="hljs-subst">{<span class="hljs-built_in">type</span>(e).__name__}</span><span class="hljs-subst">{<span class="hljs-string">f&#x27; <span class="hljs-subst">{status}</span>&#x27;</span> <span class="hljs-keyword">if</span> status <span class="hljs-keyword">else</span> <span class="hljs-string">&#x27;&#x27;</span>}</span>&quot;</span>
+</div></code></pre>
+<h3 id="57-프런트엔드의-접근-제어와-언어-전환">5.7 프런트엔드의 접근 제어와 언어 전환</h3>
+<p>프런트엔드는 화면 이동 시마다 로그인 여부를 확인하여, 로그인이 필요한 화면은 로그인 후 원래 화면으로 돌아오도록 한다. 이는 사용 편의를 위한 것이며, 실제 접근 제한은 백엔드([코드 A-10])에서 이루어진다.</p>
+<p><strong>[코드 A-14] 화면 이동 시 로그인 확인</strong> (<code>frontend/src/router/index.ts</code>)</p>
+<pre class="hljs"><code><div>router.<span class="hljs-title function_">beforeEach</span>(<span class="hljs-title function_">async</span> (to) =&gt; {
+  <span class="hljs-keyword">const</span> auth = <span class="hljs-title function_">useAuthStore</span>()
+  <span class="hljs-keyword">if</span> ((to.<span class="hljs-property">name</span> === <span class="hljs-string">&#x27;login&#x27;</span> || to.<span class="hljs-property">name</span> === <span class="hljs-string">&#x27;register&#x27;</span>) &amp;&amp; auth.<span class="hljs-property">ready</span> &amp;&amp; auth.<span class="hljs-property">user</span>) <span class="hljs-keyword">return</span> { <span class="hljs-attr">path</span>: <span class="hljs-string">&#x27;/&#x27;</span> }
+  <span class="hljs-keyword">if</span> (!to.<span class="hljs-property">meta</span>.<span class="hljs-property">requiresAuth</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>
+  <span class="hljs-keyword">if</span> (!auth.<span class="hljs-property">ready</span>) <span class="hljs-keyword">await</span> auth.<span class="hljs-title function_">init</span>()
+  <span class="hljs-keyword">if</span> (!auth.<span class="hljs-property">user</span>) <span class="hljs-keyword">return</span> { <span class="hljs-attr">path</span>: <span class="hljs-string">&#x27;/login&#x27;</span>, <span class="hljs-attr">query</span>: to.<span class="hljs-property">fullPath</span> === <span class="hljs-string">&#x27;/&#x27;</span> ? {} : { <span class="hljs-attr">redirect</span>: to.<span class="hljs-property">fullPath</span> } }
+  <span class="hljs-keyword">if</span> (to.<span class="hljs-property">meta</span>.<span class="hljs-property">requiresAdmin</span> &amp;&amp; auth.<span class="hljs-property">user</span>.<span class="hljs-property">role</span> === <span class="hljs-string">&#x27;user&#x27;</span>) <span class="hljs-keyword">return</span> { <span class="hljs-attr">path</span>: <span class="hljs-string">&#x27;/&#x27;</span> }
+  <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>
+})
+</div></code></pre>
+<p>언어 전환 시 인터페이스는 즉시 변경되며, 중국어 또는 한국어를 선택한 경우 진행 중인 대화의 언어도 함께 변경된다. 이미 진행된 대화 내용은 번역하지 않고, 이후의 응답부터 선택한 언어로 생성된다.</p>
+<p><strong>[코드 A-15] 언어 전환</strong> (<code>frontend/src/components/LanguageSwitch.vue</code>, <code>frontend/src/stores/session.ts</code>)</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">function</span> <span class="hljs-title function_">choose</span>(<span class="hljs-params"><span class="hljs-attr">lang</span>: <span class="hljs-title class_">UiLang</span></span>) {
+  <span class="hljs-keyword">if</span> (locale.<span class="hljs-property">value</span> === lang) <span class="hljs-keyword">return</span>
+  locale.<span class="hljs-property">value</span> = lang
+  <span class="hljs-title function_">saveLang</span>(lang)
+  <span class="hljs-keyword">if</span> (lang !== <span class="hljs-string">&#x27;en&#x27;</span>) session.<span class="hljs-title function_">setLanguage</span>(lang).<span class="hljs-title function_">catch</span>(<span class="hljs-function">() =&gt;</span> {})
+}
+
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">setLanguage</span>(<span class="hljs-params"><span class="hljs-attr">lang</span>: <span class="hljs-title class_">Language</span></span>) {
+  <span class="hljs-keyword">if</span> (language.<span class="hljs-property">value</span> === lang) <span class="hljs-keyword">return</span>
+  language.<span class="hljs-property">value</span> = lang
+  <span class="hljs-keyword">if</span> (sessionId.<span class="hljs-property">value</span>) {
+    <span class="hljs-keyword">await</span> <span class="hljs-title function_">updateSessionLanguage</span>(sessionId.<span class="hljs-property">value</span>, lang)
+  } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (pending.<span class="hljs-property">value</span> &amp;&amp; !turns.<span class="hljs-property">value</span>.<span class="hljs-title function_">some</span>(<span class="hljs-function">(<span class="hljs-params">turn</span>) =&gt;</span> turn.<span class="hljs-property">role</span> === <span class="hljs-string">&#x27;user&#x27;</span>)) {
+    turns.<span class="hljs-property">value</span> = []
+    <span class="hljs-keyword">await</span> <span class="hljs-title function_">loadOpening</span>()
+  }
+}
+</div></code></pre>
+<h2 id="6-개발-및-실행-환경">6. 개발 및 실행 환경</h2>
+<p>본 시스템은 다음과 같이 로컬 환경에서 실행할 수 있다. 백엔드의 환경 설정 파일(<code>.env</code>)에는 OpenAI API 키, 로그인 토큰 서명 키, 기록 암호화 키 등을 지정한다.</p>
+<p><strong>[코드 A-16] 로컬 실행</strong></p>
+<pre class="hljs"><code><div><span class="hljs-comment"># 백엔드</span>
+<span class="hljs-built_in">cd</span> backend
+<span class="hljs-built_in">cp</span> .env.example .<span class="hljs-built_in">env</span>        <span class="hljs-comment"># OPENAI_API_KEY, JWT_SECRET, RECORD_ENCRYPTION_KEY 등 지정</span>
+uv <span class="hljs-built_in">sync</span>
+uv run uvicorn app.main:app --reload --port 8000
+
+<span class="hljs-comment"># 프런트엔드</span>
+<span class="hljs-built_in">cd</span> frontend
+<span class="hljs-built_in">cp</span> .env.example .<span class="hljs-built_in">env</span>        <span class="hljs-comment"># 백엔드 주소 지정</span>
+npm install
+npm run dev                 <span class="hljs-comment"># http://localhost:5173</span>
+</div></code></pre>
+<p>운영 환경에서는 백엔드를 Docker 컨테이너로, 프런트엔드를 Cloudflare Workers로 배포하며, 배포 스크립트(<code>scripts/deploy.sh</code>)가 빌드 검사, 데이터베이스 백업, 배포, AI 연결 확인을 순서대로 수행한다.</p>
+
+</body>
+</html>

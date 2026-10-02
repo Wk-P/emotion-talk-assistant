@@ -6,10 +6,11 @@ import { useAuthStore } from '@/stores/auth'
 
 // Which OpenAI model answers every conversation. Candidates are the chat
 // models OpenAI released in the last ~3 months, each test-called by the
-// server. Only a superadmin can switch.
+// server. Any admin can switch.
 const { t } = useI18n()
 const auth = useAuthStore()
-const canChange = computed(() => auth.user?.role === 'superadmin')
+// The admin page is admin-only already, so every viewer here can switch.
+const canChange = computed(() => auth.user?.role === 'admin' || auth.user?.role === 'superadmin')
 
 const overview = ref<ModelOverview | null>(null)
 const loading = ref(true)
@@ -127,7 +128,6 @@ onMounted(() => load())
         >
           {{ t('model.resetDefault', { model: overview.default }) }}
         </button>
-        <span v-if="!canChange" class="muted">{{ t('model.superadminOnly') }}</span>
         <span class="muted">{{ t('model.checkedAt', { time: new Date(overview.checked_at).toLocaleString() }) }}</span>
         <span v-if="flash" class="flash">{{ flash }}</span>
       </div>

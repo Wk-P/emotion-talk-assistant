@@ -14,7 +14,7 @@ import { chatLangFor } from '@/i18n/langPreference'
 import SiteHeader from '@/components/SiteHeader.vue'
 
 // 每日省察 — the daily usage reflection questionnaire
-// (documents/每日省察功能.md). One per day; today's can be edited.
+// (documents/02_内容与需求/每日省察功能.md). One per day; today's can be edited.
 const { t, te, locale } = useI18n()
 
 const QUESTIONS = ['helpful', 'changed', 'improve'] as const

@@ -1,6 +1,6 @@
 """Common interaction principles used in every conversation, one admin-editable
-block per prompt-composition area of documents/指导意见2.md §四 (from
-documents/프롬프트 구성.pdf, p.97). The section titles are fixed here and
+block per prompt-composition area of documents/03_技术文档/指导意见2.md §四 (from
+documents/01_研究资料/프롬프트 구성.pdf, p.97). The section titles are fixed here and
 added in code (build_rules_text); admins only edit each section's body.
 
 Order matters: sections are concatenated in this order into the system

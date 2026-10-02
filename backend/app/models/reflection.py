@@ -9,7 +9,7 @@ from app.models.enums import Language
 
 
 class DailyReflection(Base):
-    """The daily usage reflection questionnaire (documents/每日省察功能.md;
+    """The daily usage reflection questionnaire (documents/02_内容与需求/每日省察功能.md;
     flowchart step "성찰일지 및 사용경험 작성"). One per owner per day —
     re-submitting the same day updates it.
 

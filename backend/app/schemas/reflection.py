@@ -6,7 +6,7 @@ from app.models.enums import Language
 
 
 class ReflectionAnswers(BaseModel):
-    # The three questions of documents/每日省察功能.md, in order.
+    # The three questions of documents/02_内容与需求/每日省察功能.md, in order.
     helpful: str = Field(default="", max_length=4000)
     changed: str = Field(default="", max_length=4000)
     improve: str = Field(default="", max_length=4000)

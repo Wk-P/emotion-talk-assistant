@@ -70,7 +70,7 @@ function chooseChat(lang: Language) {
         <p class="chat-lang-hint">{{ t('onboarding.chatLanguageHint') }}</p>
       </div>
 
-      <!-- documents/首页提示词.md — shown here, before the chat starts, and
+      <!-- documents/02_内容与需求/首页提示词.md — shown here, before the chat starts, and
            not repeated inside the conversation. -->
       <p class="tagline">{{ t('welcome.title') }}</p>
       <p class="intro">{{ t('welcome.body') }}</p>

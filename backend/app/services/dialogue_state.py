@@ -61,7 +61,7 @@ _INTENT_OPTION_COPY = {
     },
 }
 
-# Clickable starters under the opening disclaimer (documents/首选提示题建议.md).
+# Clickable starters under the opening disclaimer (documents/02_内容与需求/首选提示题建议.md).
 # Picking one sends its label as the user's first message; "custom" just
 # focuses the input box (handled in the frontend, never sent).
 _STARTER_OPTIONS = {
@@ -329,7 +329,7 @@ async def _continue_flow(
     candidates = llm_response.candidates
     if ctx.get("seb_entries"):
         # The situation-emotion-behavior summary card is a one-time checkpoint
-        # (BUG 反馈, documents/Modified_Log.md): once the user has confirmed
+        # (BUG 反馈, documents/02_内容与需求/Modified_Log.md): once the user has confirmed
         # one, the model re-proposing another is a prompt-following slip, not
         # something the session should surface again. This must be enforced
         # here rather than left to the prompt (see module docstring).

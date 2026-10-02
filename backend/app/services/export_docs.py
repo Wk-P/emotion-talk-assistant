@@ -76,6 +76,14 @@ LABELS: dict[str, dict[str, str]] = {
     },
 }
 
+# Punctuation between a label and its value, and around times: full-width
+# for Chinese, normal spacing for Korean and English.
+PUNCT = {
+    "zh": {"c": "：", "l": "（", "r": "）", "h": "【{}】"},
+    "ko": {"c": ": ", "l": " (", "r": ")", "h": "[{}]"},
+    "en": {"c": ": ", "l": " (", "r": ")", "h": "[{}]"},
+}
+
 # Same labels as the frontend (src/utils/fieldLabels.ts, src/i18n records.types).
 RECORD_TYPES = {
     "zh": {
@@ -188,49 +196,52 @@ def _document(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> 
 
 
 def to_markdown(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> str:
+    P = PUNCT[lang]
     d = _document(sessions, lang, tz_offset)
     L = d["L"]
     out = [f"# {d['title']}", ""]
-    out += [f"- {k}：{v}" for k, v in d["meta"]]
+    out += [f"- {k}{P['c']}{v}" for k, v in d["meta"]]
     for c in d["convs"]:
         out += ["", "---", "", f"## {c['heading']}", ""]
-        out += [f"- **{k}**：{v}" for k, v in c["meta"]]
+        out += [f"- **{k}**{P['c']}{v}" for k, v in c["meta"]]
         out += ["", f"### {L['messages']}", ""]
         if not c["messages"]:
             out.append(L["no_messages"])
         for role, time, content in c["messages"]:
             body = content.replace("\n", "  \n")
-            out += [f"**{role}**（{time}）  ", body, ""]
+            out += [f"**{role}**{P['l']}{time}{P['r']}  ", body, ""]
         if c["records"]:
             out += [f"### {L['records']}", ""]
             for rtype, time, lines in c["records"]:
-                out.append(f"- **{rtype}**（{time}）")
-                out += [f"  - {k}：{v}" for k, v in lines]
+                out.append(f"- **{rtype}**{P['l']}{time}{P['r']}")
+                out += [f"  - {k}{P['c']}{v}" for k, v in lines]
     return "\n".join(out).rstrip() + "\n"
 
 
 def to_text(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> str:
+    P = PUNCT[lang]
     d = _document(sessions, lang, tz_offset)
     L = d["L"]
     out = [d["title"], "=" * 40]
-    out += [f"{k}：{v}" for k, v in d["meta"]]
+    out += [f"{k}{P['c']}{v}" for k, v in d["meta"]]
     for c in d["convs"]:
         out += ["", "-" * 40, c["heading"], "-" * 40]
-        out += [f"{k}：{v}" for k, v in c["meta"]]
-        out += ["", f"【{L['messages']}】"]
+        out += [f"{k}{P['c']}{v}" for k, v in c["meta"]]
+        out += ["", P["h"].format(L["messages"])]
         if not c["messages"]:
             out.append(L["no_messages"])
         for role, time, content in c["messages"]:
-            out += [f"[{time}] {role}：", content, ""]
+            out += [f"[{time}] {role}{P['c']}", content, ""]
         if c["records"]:
-            out.append(f"【{L['records']}】")
+            out.append(P["h"].format(L["records"]))
             for rtype, time, lines in c["records"]:
-                out.append(f"· {rtype}（{time}）")
-                out += [f"    {k}：{v}" for k, v in lines]
+                out.append(f"· {rtype}{P['l']}{time}{P['r']}")
+                out += [f"    {k}{P['c']}{v}" for k, v in lines]
     return "\n".join(out).rstrip() + "\n"
 
 
 def to_docx(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> bytes:
+    P = PUNCT[lang]
     from docx import Document
     from docx.oxml.ns import qn
     from docx.shared import Pt, RGBColor
@@ -248,12 +259,12 @@ def to_docx(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> by
 
     doc.add_heading(d["title"], level=0)
     for k, v in d["meta"]:
-        doc.add_paragraph(f"{k}：{v}")
+        doc.add_paragraph(f"{k}{P['c']}{v}")
     for c in d["convs"]:
         doc.add_heading(c["heading"], level=1)
         for k, v in c["meta"]:
             p = doc.add_paragraph()
-            p.add_run(f"{k}：").bold = True
+            p.add_run(f"{k}{P['c']}").bold = True
             p.add_run(v)
         doc.add_heading(L["messages"], level=2)
         if not c["messages"]:
@@ -273,9 +284,9 @@ def to_docx(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> by
             for rtype, time, lines in c["records"]:
                 p = doc.add_paragraph(style="List Bullet")
                 p.add_run(rtype).bold = True
-                p.add_run(f"（{time}）")
+                p.add_run(f"{P['l']}{time}{P['r']}")
                 for k, v in lines:
-                    doc.add_paragraph(f"{k}：{v}", style="List Bullet 2")
+                    doc.add_paragraph(f"{k}{P['c']}{v}", style="List Bullet 2")
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
@@ -308,6 +319,7 @@ def _pdf_text(text: str) -> str:
 
 
 def to_pdf(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> bytes:
+    P = PUNCT[lang]
     global _fonts_ready
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -338,10 +350,10 @@ def to_pdf(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> byt
     }
 
     story = [Paragraph(_pdf_text(d["title"]), styles["title"])]
-    story += [Paragraph(_pdf_text(f"{k}：{v}"), styles["meta"]) for k, v in d["meta"]]
+    story += [Paragraph(_pdf_text(f"{k}{P['c']}{v}"), styles["meta"]) for k, v in d["meta"]]
     for c in d["convs"]:
         story += [Spacer(1, 6), HRFlowable(width="100%", color=colors.HexColor("#E6E3F0")), Paragraph(_pdf_text(c["heading"]), styles["h1"])]
-        story += [Paragraph(_pdf_text(f"{k}：{v}"), styles["meta"]) for k, v in c["meta"]]
+        story += [Paragraph(_pdf_text(f"{k}{P['c']}{v}"), styles["meta"]) for k, v in c["meta"]]
         story.append(Paragraph(_pdf_text(L["messages"]), styles["h2"]))
         if not c["messages"]:
             story.append(Paragraph(_pdf_text(L["no_messages"]), styles["msg"]))
@@ -352,8 +364,8 @@ def to_pdf(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> byt
         if c["records"]:
             story.append(Paragraph(_pdf_text(L["records"]), styles["h2"]))
             for rtype, time, lines in c["records"]:
-                story.append(Paragraph(f"<b>{_pdf_text(rtype)}</b>（{_pdf_text(time)}）", styles["rec"]))
-                story += [Paragraph(_pdf_text(f"{k}：{v}"), styles["msg"]) for k, v in lines]
+                story.append(Paragraph(f"<b>{_pdf_text(rtype)}</b>{P['l']}{_pdf_text(time)}{P['r']}", styles["rec"]))
+                story += [Paragraph(_pdf_text(f"{k}{P['c']}{v}"), styles["msg"]) for k, v in lines]
 
     buf = io.BytesIO()
     SimpleDocTemplate(
