@@ -100,8 +100,8 @@ export const useSessionStore = defineStore('session', () => {
     } catch (e) {
       // Keep the user's bubble (their intent was real) but surface a retry
       // affordance instead of leaving the UI silently stuck on "...".
-      // 502 = the backend is fine but the AI provider call failed.
-      error.value = errorStatus(e) === 502 ? 'ai_unavailable' : 'send_failed'
+      // 503 = the backend is fine but the AI provider call failed.
+      error.value = errorStatus(e) === 503 ? 'ai_unavailable' : 'send_failed'
       lastFailedSend.value = { message, confirmation }
     } finally {
       sending.value = false

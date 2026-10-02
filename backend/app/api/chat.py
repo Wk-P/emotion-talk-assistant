@@ -29,12 +29,13 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> Chat
     try:
         result = await handle_turn(db, session, payload.message, confirmation)
     except LLMUnavailable as e:
-        # A clean 502 instead of an unhandled 500: it passes through the CORS
+        # A clean 503 instead of an unhandled 500: it passes through the CORS
         # middleware, so the browser shows the real reason rather than a
-        # misleading CORS error. Nothing from this turn is saved; the client
-        # can retry the same message.
+        # misleading CORS error. Not 502: Cloudflare replaces an origin's
+        # 502/504 with its own error page, dropping the CORS headers and the
+        # reason. Nothing from this turn is saved; the client can retry.
         await db.rollback()
-        raise HTTPException(status_code=502, detail=f"ai service unavailable: {e.reason}") from e
+        raise HTTPException(status_code=503, detail=f"ai service unavailable: {e.reason}") from e
 
     # A confirmation-only turn has no payload.message, but may have sent the
     # LLM a plain-language description of what was confirmed (see
