@@ -416,7 +416,7 @@ async function saveRecordFor(idx: number) {
 .ended-hint {
   margin: 0 0 12px;
   font-size: 13px;
-  color: var(--text-muted, var(--text));
+  color: var(--text-muted);
 }
 .ended-actions {
   display: flex;
