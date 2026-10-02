@@ -31,8 +31,20 @@ FORMAT_RULES: dict[Language, str] = {
 }
 
 
+# The user can switch language mid-conversation (sidebar setting). Without
+# this the model keeps mirroring the language of the earlier messages, so
+# the chosen language is stated explicitly — fixed in code, not editable.
+REPLY_LANGUAGE: dict[Language, str] = {
+    Language.ZH: "- 无论之前的对话或用户输入用的是什么语言，reply_text 和候选项都必须用简体中文。",
+    Language.KO: "- 이전 대화나 사용자의 입력이 어떤 언어이든, reply_text와 후보 항목은 반드시 한국어로 작성하세요.",
+}
+
+
 def build_system_prompt(rules_text: str, flow_instructions: str, language: Language, flow_format: str) -> str:
     # rules_text (the common principles, see principles.build_rules_text) and
     # flow_instructions are passed in because admins can override them (see
     # app/prompts/registry.py); the format rules are never overridable.
-    return f"{rules_text}\n\n---\n{flow_instructions}\n\n---\n{FORMAT_RULES[language]}\n{flow_format}"
+    return (
+        f"{rules_text}\n\n---\n{flow_instructions}\n\n---\n{FORMAT_RULES[language]}\n{flow_format}"
+        f"\n{REPLY_LANGUAGE[language]}"
+    )

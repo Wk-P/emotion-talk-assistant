@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppMenu from '@/components/AppMenu.vue'
+import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 
@@ -45,6 +46,7 @@ function logout() {
     </nav>
 
     <div class="site-account">
+      <LanguageSwitch />
       <template v-if="auth.user">
         <span class="site-user">{{ auth.user.username }}</span>
         <button type="button" class="btn-text" @click="logout">{{ t('toolbar.logout') }}</button>

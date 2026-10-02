@@ -92,8 +92,36 @@ async def _record_counts(db: AsyncSession, session_ids: list[str]) -> dict[str, 
     return dict(result.all())
 
 
-def _participant_label(session: ConversationSession) -> str:
-    return f"P-{(session.user_id or 'anon')[:8]}"
+# Participants are shown by their account ID (username). Conversations from
+# the time anonymous use was allowed have no account; they're labelled
+# ANON_LABEL (the admin UI shows it as "匿名用户" / "익명 사용자").
+ANON_LABEL = "anon"
+_ANON_WORDS = {"anon", "匿名", "匿名用户", "익명", "익명 사용자"}
+
+
+async def _usernames(db: AsyncSession, user_ids: set[str | None]) -> dict[str, str]:
+    ids = {i for i in user_ids if i}
+    if not ids:
+        return {}
+    return dict((await db.execute(select(User.id, User.username).where(User.id.in_(ids)))).all())
+
+
+def _label(user_id: str | None, usernames: dict[str, str]) -> str:
+    # A deleted account's leftover rows (if any) fall back to the anon label.
+    return usernames.get(user_id, ANON_LABEL) if user_id else ANON_LABEL
+
+
+def _participant_condition(column, participant: str, exact: bool = False):
+    """Match rows by the owner's account ID: case-insensitive, partial by
+    default (search box), exact for a one-person export."""
+
+    q = participant.strip()
+    if q.lower() in _ANON_WORDS:
+        return column.is_(None)
+    users = select(User.id).where(
+        func.lower(User.username) == q.lower() if exact else User.username.ilike(f"%{_like_escape(q)}%", escape="\\")
+    )
+    return column.in_(users)
 
 
 def _like_escape(text: str) -> str:
@@ -114,6 +142,7 @@ class SessionFilter:
     "export exactly what the list currently shows"."""
 
     participant: str | None = None
+    participant_exact: bool = False
     user_id: str | None = None
     language: Language | None = None
     created_from: datetime | None = None
@@ -122,25 +151,22 @@ class SessionFilter:
 
 
 def session_filter(
-    participant: str | None = Query(default=None, max_length=40, description="匿名编号，如 P-1a2b3c4d，可只填前几位"),
+    participant: str | None = Query(default=None, max_length=255, description="账号 ID（可只填一部分）；anon = 匿名使用时期的对话"),
+    participant_exact: bool = Query(default=False, description="true = 账号 ID 完全一致（单人导出用）"),
     user_id: str | None = Query(default=None, max_length=36),
     language: Language | None = None,
     created_from: datetime | None = Query(default=None, description="开始时间（含）"),
     created_to: datetime | None = Query(default=None, description="结束时间（不含）"),
     min_messages: int | None = Query(default=None, ge=1),
 ) -> SessionFilter:
-    return SessionFilter(participant, user_id, language, created_from, created_to, min_messages)
+    return SessionFilter(participant, participant_exact, user_id, language, created_from, created_to, min_messages)
 
 
 async def _apply_session_filter(
     stmt: Select, f: SessionFilter, message_count, db: AsyncSession, admin: User
 ) -> Select:
-    if f.participant:
-        code = f.participant.strip().lower().removeprefix("p-")
-        if code == "anon":
-            stmt = stmt.where(ConversationSession.user_id.is_(None))
-        elif code:
-            stmt = stmt.where(ConversationSession.user_id.like(f"{_like_escape(code)}%", escape="\\"))
+    if f.participant and f.participant.strip():
+        stmt = stmt.where(_participant_condition(ConversationSession.user_id, f.participant, f.participant_exact))
     if f.user_id:
         _can_view(admin, await _get_user_or_404(f.user_id, db))
         stmt = stmt.where(ConversationSession.user_id == f.user_id)
@@ -200,10 +226,8 @@ async def list_all_sessions(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_required),
 ) -> list[AdminSessionItem]:
-    """De-identified, for research analysis (see documents/Modified_Log.md).
-    No username or other directly-identifying field is returned — each
-    participant is a short, non-reversible-in-the-UI label derived from
-    their user_id. Only sessions the user took part in (see
+    """For research analysis. Each participant is shown by their account ID
+    (see _label). Only sessions the user took part in (see
     ConversationSession.participated) and that still have messages are listed:
     a session with none either never had a message, or had DIALOGUE_HISTORY
     consent revoked/never granted, and its messages were already purged
@@ -220,10 +244,11 @@ async def list_all_sessions(
     stmt = await _apply_session_filter(stmt, f, count_subq.c.message_count, db, admin)
     rows = (await db.execute(stmt)).all()
     record_counts = await _record_counts(db, [session.id for session, _ in rows])
+    usernames = await _usernames(db, {session.user_id for session, _ in rows})
     return [
         AdminSessionItem(
             session_id=session.id,
-            participant_label=_participant_label(session),
+            participant_label=_label(session.user_id, usernames),
             language=session.language,
             created_at=session.created_at.isoformat(),
             ended_at=session.ended_at.isoformat() if session.ended_at else None,
@@ -295,10 +320,11 @@ async def export_all_sessions(
     for rec in records_result.scalars().all():
         records_by_session.setdefault(rec.session_id, []).append(rec)
 
+    usernames = await _usernames(db, {s.user_id for s in sessions})
     return [
         AdminSessionExport(
             session_id=session.id,
-            participant_label=_participant_label(session),
+            participant_label=_label(session.user_id, usernames),
             language=session.language,
             created_at=session.created_at.isoformat(),
             ended_at=session.ended_at.isoformat() if session.ended_at else None,
@@ -348,31 +374,25 @@ async def export_sessions_file(
 
 @router.get("/reflections", response_model=list[AdminReflectionItem])
 async def list_reflections(
-    participant: str | None = Query(default=None, max_length=40),
+    participant: str | None = Query(default=None, max_length=255),
     day_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     day_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(get_current_admin_required),
 ) -> list[AdminReflectionItem]:
-    """每日省察 answers for research review, newest first. De-identified
-    like the conversation list: participants appear only as P-xxxxxxxx."""
+    """每日省察 answers for research review, newest first. Participants are
+    shown by account ID, as in the conversation list."""
 
     stmt = select(DailyReflection).order_by(DailyReflection.day.desc(), DailyReflection.created_at.desc())
-    if participant:
-        code = participant.strip().lower().removeprefix("p-")
-        if code == "anon":
-            stmt = stmt.where(DailyReflection.user_id.is_(None))
-        elif code:
-            stmt = stmt.where(DailyReflection.user_id.like(f"{_like_escape(code)}%", escape="\\"))
+    if participant and participant.strip():
+        stmt = stmt.where(_participant_condition(DailyReflection.user_id, participant))
     if day_from:
         stmt = stmt.where(DailyReflection.day >= day_from)
     if day_to:
         stmt = stmt.where(DailyReflection.day <= day_to)
     rows = (await db.execute(stmt)).scalars().all()
-    return [
-        AdminReflectionItem(**_reflection_item(r).model_dump(), participant_label=f"P-{(r.user_id or 'anon')[:8]}")
-        for r in rows
-    ]
+    usernames = await _usernames(db, {r.user_id for r in rows})
+    return [AdminReflectionItem(**_reflection_item(r).model_dump(), participant_label=_label(r.user_id, usernames)) for r in rows]
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

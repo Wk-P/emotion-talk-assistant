@@ -246,12 +246,21 @@ function doExport() {
 
 // Single-participant export keeps the other active filters (language, dates…)
 // so it matches the group as shown.
+// Participants are shown by account ID; 'anon' marks conversations from
+// when anonymous use was allowed.
+function participantName(label: string) {
+  return label === 'anon' ? t('admin.anonymous') : label
+}
+// Account IDs may contain characters that don't belong in a file name
+// (older ones are email addresses).
+const fileSafe = (s: string) => s.replace(/[^A-Za-z0-9_.-]+/g, '_')
+
 function exportParticipant(label: string) {
-  return runExport(label, { ...sessionQuery(), participant: label }, label)
+  return runExport(label, { ...sessionQuery(), participant: label, participant_exact: true }, fileSafe(label))
 }
 
 function exportUser(user: AdminUserItem) {
-  return runExport(user.id, { user_id: user.id }, `P-${user.id.slice(0, 8)}`)
+  return runExport(user.id, { user_id: user.id }, fileSafe(user.username))
 }
 
 async function doDeleteSession(sessionId: string) {
@@ -461,7 +470,7 @@ onMounted(load)
           <div v-for="group in groups" :key="group.label" class="group">
             <div class="group-head-row">
               <button type="button" class="group-head" @click="toggleGroup(group.label)">
-                <span class="group-label">{{ group.label }}</span>
+                <span class="group-label">{{ participantName(group.label) }}</span>
                 <span class="group-meta">
                   {{ t('admin.groupMeta', { sessions: group.sessionCount, messages: group.messageCount }) }}
                 </span>
@@ -533,7 +542,7 @@ onMounted(load)
         <div class="conv-detail">
           <template v-if="selectedSession">
             <div class="detail-header">
-              <span class="detail-participant">{{ selectedSession.participant_label }}</span>
+              <span class="detail-participant">{{ participantName(selectedSession.participant_label) }}</span>
               <span>{{ new Date(selectedSession.created_at).toLocaleString() }}</span>
             </div>
             <div class="messages">

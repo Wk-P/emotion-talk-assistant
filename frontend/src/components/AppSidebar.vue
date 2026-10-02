@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { listHistory, type SessionHistoryItem } from '@/api/client'
+import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 
@@ -86,6 +87,8 @@ onMounted(loadRecent)
         {{ t('admin.entry') }}
       </button>
     </nav>
+
+    <LanguageSwitch class="sidebar-lang" show-label />
 
     <div class="account">
       <button v-if="!auth.user" type="button" class="btn-outline" @click="router.push('/login')">
@@ -210,5 +213,8 @@ onMounted(loadRecent)
   text-overflow: ellipsis;
   white-space: nowrap;
   padding: 0 2px;
+}
+.sidebar-lang {
+  margin: 12px 0 4px;
 }
 </style>

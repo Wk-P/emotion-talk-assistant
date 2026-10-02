@@ -2,12 +2,11 @@
 import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import type { Language } from '@/api/client'
-import { saveLang } from '@/i18n/langPreference'
+import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 const session = useSessionStore()
@@ -54,10 +53,6 @@ function logout() {
   })
 }
 
-function chooseLang(lang: Language) {
-  locale.value = lang
-  saveLang(lang)
-}
 </script>
 
 <template>
@@ -95,24 +90,7 @@ function chooseLang(lang: Language) {
             {{ t('admin.entry') }}
           </button>
           <div class="app-menu-divider" />
-          <div class="app-menu-lang-row">
-            <button
-              type="button"
-              class="app-menu-lang-btn"
-              :class="{ active: locale === 'zh' }"
-              @click="chooseLang('zh')"
-            >
-              中文
-            </button>
-            <button
-              type="button"
-              class="app-menu-lang-btn"
-              :class="{ active: locale === 'ko' }"
-              @click="chooseLang('ko')"
-            >
-              한국어
-            </button>
-          </div>
+          <LanguageSwitch class="app-menu-lang" />
           <div class="app-menu-divider" />
           <button v-if="!auth.user" type="button" class="app-menu-item" @click="go('/login')">
             {{ t('toolbar.login') }}
@@ -213,25 +191,8 @@ function chooseLang(lang: Language) {
   background: var(--border);
   margin: 6px 4px;
 }
-.app-menu-lang-row {
-  display: flex;
-  gap: 6px;
+.app-menu-lang {
   padding: 2px 4px;
-}
-.app-menu-lang-btn {
-  flex: 1;
-  padding: 7px 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: none;
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-.app-menu-lang-btn.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
-  background: var(--accent-soft);
 }
 .menu-panel-enter-active,
 .menu-panel-leave-active {

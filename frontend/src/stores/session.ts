@@ -8,6 +8,7 @@ import {
   errorStatus,
   saveRecord,
   sendChat,
+  updateSessionLanguage,
   startSession,
   updateConsent,
 } from '@/api/client'
@@ -117,6 +118,20 @@ export const useSessionStore = defineStore('session', () => {
     await send(message, confirmation, { skipBubble: true })
   }
 
+  // The user switched the UI language. An ongoing conversation continues in
+  // the new language from the next reply on (nothing already said is
+  // re-translated); a chat that hasn't started yet just reloads its opening.
+  async function setLanguage(lang: Language) {
+    if (language.value === lang) return
+    language.value = lang
+    if (sessionId.value) {
+      await updateSessionLanguage(sessionId.value, lang)
+    } else if (pending.value && !turns.value.some((turn) => turn.role === 'user')) {
+      turns.value = []
+      await loadOpening()
+    }
+  }
+
   function markAnswered(turnIndex: number) {
     answeredTurnIndices.value = new Set(answeredTurnIndices.value).add(turnIndex)
   }
@@ -189,6 +204,7 @@ export const useSessionStore = defineStore('session', () => {
     send,
     retry,
     markAnswered,
+    setLanguage,
     recordDrafts,
     savedTurns,
     savingTurn,

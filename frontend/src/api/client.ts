@@ -95,6 +95,11 @@ export interface HistoryMessageItem {
 
 // The opening shown on a new chat before anything is stored — the session
 // itself is only created (startSession) on the user's first send.
+/** Switch an ongoing conversation's language: later AI replies use it. */
+export async function updateSessionLanguage(sessionId: string, language: Language) {
+  await api.put(`/api/session/${sessionId}/language`, { language })
+}
+
 export async function getOpening(language: Language) {
   const { data } = await api.get<ChatResponse>('/api/session/opening', { params: { language } })
   return data
@@ -290,7 +295,8 @@ export async function getAdminSessionRecords(sessionId: string) {
 // SessionFilter): export always means "what the list currently shows".
 // participant/user_id narrow it to one person for a single-user export.
 export interface AdminSessionFilter {
-  participant?: string
+  participant?: string // account ID, partial match; 'anon' = from when anonymous use was allowed
+  participant_exact?: boolean
   user_id?: string
   language?: Language
   created_from?: string // ISO datetime, inclusive

@@ -4,9 +4,11 @@ import { useI18n } from 'vue-i18n'
 import { listAdminReflections, type AdminReflection } from '@/api/client'
 
 // 每日省察 answers for research review (backend GET /api/admin/reflections).
-// De-identified: participants appear only as P-xxxxxxxx.
+// Participants are shown by account ID.
 const { t } = useI18n()
 const QUESTIONS = ['helpful', 'changed', 'improve'] as const
+// Shown by account ID; 'anon' = from when anonymous use was allowed.
+const name = (label: string) => (label === 'anon' ? t('admin.anonymous') : label)
 
 const items = ref<AdminReflection[]>([])
 const loading = ref(true)
@@ -53,7 +55,7 @@ function exportCsv() {
     .map(cell)
     .join(',')
   const rows = items.value.map((r) =>
-    [r.participant_label, r.day, r.language, ...QUESTIONS.map((q) => r.answers[q])].map(cell).join(','),
+    [name(r.participant_label), r.day, r.language, ...QUESTIONS.map((q) => r.answers[q])].map(cell).join(','),
   )
   download('﻿' + [header, ...rows].join('\r\n'), 'text/csv;charset=utf-8', 'csv')
 }
@@ -99,7 +101,7 @@ onMounted(load)
     <div class="grid">
       <article v-for="r in items" :key="r.id" class="card">
         <header class="card-head">
-          <span class="participant">{{ r.participant_label }}</span>
+          <span class="participant">{{ name(r.participant_label) }}</span>
           <span class="day">{{ r.day }}</span>
           <span class="lang">{{ r.language === 'ko' ? '한국어' : '中文' }}</span>
         </header>

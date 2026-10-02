@@ -34,6 +34,7 @@ LABELS: dict[str, dict[str, str]] = {
         "system": "系统",
         "lang_zh": "中文",
         "lang_ko": "韩语",
+        "anon": "匿名用户",
     },
     "ko": {
         "title": "대화 데이터 내보내기",
@@ -53,6 +54,7 @@ LABELS: dict[str, dict[str, str]] = {
         "system": "시스템",
         "lang_zh": "중국어",
         "lang_ko": "한국어",
+        "anon": "익명 사용자",
     },
 }
 
@@ -128,8 +130,9 @@ def _document(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> 
     now = (datetime.utcnow() - timedelta(minutes=tz_offset)).strftime("%Y-%m-%d %H:%M")
     convs = []
     for i, s in enumerate(sessions, 1):
+        who = L["anon"] if s.participant_label == "anon" else s.participant_label
         meta = [
-            (L["participant"], s.participant_label),
+            (L["participant"], who),
             (L["language"], L.get(f"lang_{s.language.value}", s.language.value)),
             (L["started"], _fmt_time(s.created_at, tz_offset)),
             (L["ended"], _fmt_time(s.ended_at, tz_offset) or L["not_ended"]),
@@ -143,7 +146,7 @@ def _document(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> 
                 if _field_text(v)
             ]
             records.append((RECORD_TYPES[lang].get(r.record_type, r.record_type), _fmt_time(r.created_at, tz_offset), lines))
-        convs.append({"heading": f"{L['conversation']} {i} · {s.participant_label}", "meta": meta, "messages": messages, "records": records})
+        convs.append({"heading": f"{L['conversation']} {i} · {who}", "meta": meta, "messages": messages, "records": records})
     return {"title": L["title"], "meta": [(L["exported_at"], now), (L["count"], str(len(sessions)))], "convs": convs, "L": L}
 
 
