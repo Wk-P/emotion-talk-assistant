@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import SiteFooter from '@/components/SiteFooter.vue'
+import SiteHeader from '@/components/SiteHeader.vue'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { listResources, type Resource } from '@/api/client'
 
 const { t, locale } = useI18n()
-const router = useRouter()
 const resources = ref<Resource[]>([])
 
 onMounted(async () => {
@@ -15,14 +15,14 @@ onMounted(async () => {
 
 <template>
   <div class="help-view">
-    <div class="page-inner">
-      <header class="header">
-        <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('help.back') }}</button>
-      </header>
+    <SiteHeader />
+    <main class="page-body">
+    <div class="page-full">
 
       <h1 class="page-title">{{ t('help.title') }}</h1>
 
-      <section>
+      <div class="help-layout">
+      <section class="about">
         <h2>{{ t('help.roleTitle') }}</h2>
         <p>{{ t('help.roleText') }}</p>
       </section>
@@ -30,6 +30,7 @@ onMounted(async () => {
       <section>
         <h2>{{ t('help.resourcesTitle') }}</h2>
         <p v-if="resources.length === 0" class="empty">{{ t('help.resourcesEmpty') }}</p>
+        <div class="resource-grid">
         <div v-for="r in resources" :key="r.id" class="resource">
           <div class="name">{{ r.name[locale] ?? r.name.ko }}</div>
           <div class="desc">{{ r.description[locale] ?? r.description.ko }}</div>
@@ -38,26 +39,17 @@ onMounted(async () => {
             <a v-if="r.url" :href="r.url" target="_blank" rel="noopener">{{ r.url }}</a>
           </div>
         </div>
+        </div>
       </section>
+      </div>
     </div>
+  </main>
+    <SiteFooter />
   </div>
 </template>
 
 <style scoped>
-.help-view {
-  padding: 16px;
-}
-@media (min-width: 640px) {
-  .help-view {
-    padding: 32px;
-  }
-}
-.header {
-  margin-bottom: 14px;
-}
 .page-title {
-  font-size: 17px;
-  font-weight: 700;
   margin-bottom: 20px;
 }
 section {
@@ -76,11 +68,39 @@ p {
   color: var(--text);
   line-height: 1.65;
 }
+.page-full {
+  width: 100%;
+}
+/* Wide: "about" on the left, the support resources (the part people come
+   here for) taking the rest, as a multi-column card grid. */
+@media (min-width: 1024px) {
+  .help-layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) minmax(0, 2.4fr);
+    gap: 32px;
+    align-items: start;
+  }
+  .about {
+    position: sticky;
+    top: calc(var(--site-header-h) + 24px);
+    padding: 18px 20px;
+    border-radius: var(--radius-md);
+    background: var(--accent-soft);
+  }
+}
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
 .resource {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 12px;
-  margin-bottom: 8px;
+  padding: 14px;
+}
+.contact {
+  flex-wrap: wrap;
+  word-break: break-all;
 }
 .name {
   font-weight: 600;

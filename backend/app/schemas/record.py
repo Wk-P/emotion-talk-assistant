@@ -17,3 +17,11 @@ class RecordResponse(BaseModel):
     record_type: RecordType
     payload: dict[str, Any]
     created_at: datetime
+
+
+class OwnRecordItem(RecordResponse):
+    """A record in the "my records" list, which spans all of the owner's
+    conversations — so it carries which conversation it came from."""
+
+    session_id: str
+    session_created_at: datetime

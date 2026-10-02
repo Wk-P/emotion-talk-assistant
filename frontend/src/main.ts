@@ -1,6 +1,6 @@
 import './assets/main.css'
 
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 
 import App from './App.vue'
@@ -19,6 +19,18 @@ app.use(i18n)
 // ConsentDialog happens to mount and fix it — which never happens for a
 // visitor landing straight on /history, /help, etc. via a saved link.
 i18n.global.locale.value = detectLang()
+
+// Tab title, <html lang> and the description follow the UI language, so the
+// browser, screen readers and search previews all see the right one.
+watch(
+  i18n.global.locale,
+  (lang) => {
+    document.documentElement.lang = lang === 'ko' ? 'ko' : 'zh-CN'
+    document.title = i18n.global.t('app.title')
+    document.querySelector('meta[name="description"]')?.setAttribute('content', i18n.global.t('site.description'))
+  },
+  { immediate: true },
+)
 
 useAuthStore().init()
 

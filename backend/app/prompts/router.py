@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.enums import DialogueIntent, Language
 from app.prompts import registry
 from app.prompts.base import build_system_prompt
+from app.prompts.principles import build_rules_text
 
 _FLOW_MAP = {
     DialogueIntent.VENT: registry.FLOW_EMOTION_EXPLORATION,
@@ -36,14 +37,14 @@ async def build_prompt(
     preview only) substitutes unsaved draft text, reported as version -1."""
 
     flow_key = flow_key_for(intent, self_criticism_level)
-    keys = [registry.ROLE_RULES, flow_key]
+    keys = [*registry.RULE_KEYS, flow_key]
     resolved = await registry.resolve(db, keys, language)
     for key, content in (overrides or {}).items():
         if key in resolved:
             resolved[key] = registry.ResolvedPrompt(content, -1)
 
     prompt = build_system_prompt(
-        resolved[registry.ROLE_RULES].content,
+        build_rules_text({key: resolved[key].content for key in registry.RULE_KEYS}, language),
         resolved[flow_key].content,
         language,
         registry.FLOW_FORMAT_RULES[flow_key][language],

@@ -30,10 +30,12 @@ FLOW_INSTRUCTIONS: dict[Language, str] = {
 FORMAT_RULES: dict[Language, str] = {
     Language.ZH: (
         "- 恢复行动选项放入 candidates，type 为 'recovery_action_options'。\n"
-        "- 四步计划用 candidates 里 type 为 'plan_form' 的一条记录承载这四个字段。"
+        "- 四步计划用 candidates 里 type 为 'plan_form' 的一条记录承载，fields 固定用四个键："
+        "action（先做的行动）、when（实施时间）、support（需要的帮助）、backup（做不到时的备选方案）。"
     ),
     Language.KO: (
         "- 회복행동 선택지는 candidates에 담고, type은 'recovery_action_options'.\n"
-        "- 4단계 계획은 candidates의 type 'plan_form' 항목 하나에 네 필드로 담으세요."
+        "- 4단계 계획은 candidates의 type 'plan_form' 항목 하나에 담고, fields는 네 키로 고정: "
+        "action(먼저 할 행동), when(실행 시점), support(필요한 도움), backup(어려울 경우의 대안)."
     ),
 }

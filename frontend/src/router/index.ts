@@ -13,10 +13,8 @@ const router = createRouter({
     { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue') },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
     { path: '/register', name: 'register', component: () => import('@/views/RegisterView.vue') },
-    { path: '/forgot-password', name: 'forgot-password', component: () => import('@/views/ForgotPasswordView.vue') },
-    { path: '/reset-password', name: 'reset-password', component: () => import('@/views/ResetPasswordView.vue') },
-    { path: '/verify-email', name: 'verify-email', component: () => import('@/views/VerifyEmailView.vue') },
     { path: '/help', name: 'help', component: () => import('@/views/HelpView.vue') },
+    { path: '/privacy', name: 'privacy', component: () => import('@/views/PrivacyView.vue') },
     {
       path: '/admin',
       name: 'admin',

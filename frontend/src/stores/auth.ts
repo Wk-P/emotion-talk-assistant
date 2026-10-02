@@ -3,13 +3,10 @@ import { ref } from 'vue'
 import type { AuthUser } from '@/api/client'
 import {
   fetchMe,
-  forgotPassword as apiForgotPassword,
   getAuthToken,
   login as apiLogin,
   register as apiRegister,
-  resetPassword as apiResetPassword,
   setAuthToken,
-  verifyEmail as apiVerifyEmail,
 } from '@/api/client'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -32,26 +29,17 @@ export const useAuthStore = defineStore('auth', () => {
     ready.value = true
   }
 
-  async function login(email: string, password: string) {
-    const res = await apiLogin(email, password)
+  async function login(username: string, password: string) {
+    const res = await apiLogin(username, password)
     setAuthToken(res.access_token)
     user.value = res.user
   }
 
-  async function register(email: string, password: string) {
-    return apiRegister(email, password)
-  }
-
-  async function verifyEmail(token: string) {
-    return apiVerifyEmail(token)
-  }
-
-  async function forgotPassword(email: string) {
-    return apiForgotPassword(email)
-  }
-
-  async function resetPassword(token: string, newPassword: string) {
-    return apiResetPassword(token, newPassword)
+  // Registration signs the user straight in — there's nothing to confirm.
+  async function register(username: string, password: string) {
+    const res = await apiRegister(username, password)
+    setAuthToken(res.access_token)
+    user.value = res.user
   }
 
   function logout() {
@@ -82,9 +70,6 @@ export const useAuthStore = defineStore('auth', () => {
     init,
     login,
     register,
-    verifyEmail,
-    forgotPassword,
-    resetPassword,
     logout,
     signOut,
   }

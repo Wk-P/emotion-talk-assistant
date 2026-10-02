@@ -24,13 +24,6 @@ class Settings(BaseSettings):
     #   python -c "import secrets; print(secrets.token_urlsafe(48))"
     jwt_secret: str = ""
 
-    resend_api_key: str = ""
-    # onboarding@resend.dev works without verifying a sending domain —
-    # switch to an address on a verified domain once that's set up.
-    email_from: str = "onboarding@resend.dev"
-    # Used to build the links inside verification/reset emails.
-    frontend_base_url: str = "http://localhost:5174"
-
 
 @lru_cache
 def get_settings() -> Settings:

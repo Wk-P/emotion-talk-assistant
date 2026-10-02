@@ -2,6 +2,7 @@
 import { computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CandidateCard } from '@/api/client'
+import { fieldLabel } from '@/utils/fieldLabels'
 
 const props = defineProps<{ card: CandidateCard; disabled?: boolean }>()
 const emit = defineEmits<{ confirm: [fields: Record<string, unknown>]; skip: [] }>()
@@ -28,7 +29,7 @@ function submit() {
   <div class="fields-card" :class="{ disabled }">
     <p class="caption">{{ caption }}</p>
     <label v-for="(_, key) in local" :key="key" class="field">
-      <span class="field-label">{{ key }}</span>
+      <span class="field-label">{{ fieldLabel(t, te, String(key)) }}</span>
       <textarea v-model="local[key]" rows="2" :disabled="disabled" />
     </label>
     <div class="actions">

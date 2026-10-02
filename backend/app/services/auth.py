@@ -9,6 +9,16 @@ _PBKDF2_ITERATIONS = 260_000
 _JWT_ALGORITHM = "HS256"
 
 
+# Shared by self sign-up (app/api/auth.py) and admin-created accounts
+# (app/api/admin.py). IDs are case-insensitive: stored lowercased.
+MIN_PASSWORD_LENGTH = 8
+USERNAME_PATTERN = r"^[A-Za-z0-9_.-]+$"
+
+
+def normalize_username(username: str) -> str:
+    return username.strip().lower()
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), _PBKDF2_ITERATIONS)
@@ -40,7 +50,3 @@ def decode_access_token(token: str, secret: str) -> str | None:
         return payload.get("sub")
     except jwt.PyJWTError:
         return None
-
-
-def generate_token() -> str:
-    return secrets.token_urlsafe(32)

@@ -32,14 +32,14 @@ def _check_key(key: str) -> None:
         raise HTTPException(status_code=404, detail="unknown prompt key")
 
 
-async def _emails(db: AsyncSession, user_ids: set[str]) -> dict[str, str]:
+async def _usernames(db: AsyncSession, user_ids: set[str]) -> dict[str, str]:
     if not user_ids:
         return {}
-    result = await db.execute(select(User.id, User.email).where(User.id.in_(user_ids)))
+    result = await db.execute(select(User.id, User.username).where(User.id.in_(user_ids)))
     return dict(result.all())
 
 
-def _item(key: str, language: Language, row: PromptVersion | None, emails: dict[str, str]) -> PromptItem:
+def _item(key: str, language: Language, row: PromptVersion | None, usernames: dict[str, str]) -> PromptItem:
     default = registry.DEFAULTS[key][language]
     return PromptItem(
         key=key,
@@ -48,7 +48,7 @@ def _item(key: str, language: Language, row: PromptVersion | None, emails: dict[
         content=row.content if row else default,
         default_content=default,
         updated_at=row.created_at.isoformat() if row else None,
-        updated_by=emails.get(row.created_by_id) if row and row.created_by_id else None,
+        updated_by=usernames.get(row.created_by_id) if row and row.created_by_id else None,
     )
 
 
@@ -59,9 +59,9 @@ async def list_prompts(
 ) -> PromptOverview:
     keys = list(registry.DEFAULTS)
     latest = {lang: await registry.latest_versions(db, keys, lang) for lang in Language}
-    emails = await _emails(db, {r.created_by_id for rows in latest.values() for r in rows.values() if r.created_by_id})
+    usernames = await _usernames(db, {r.created_by_id for rows in latest.values() for r in rows.values() if r.created_by_id})
     return PromptOverview(
-        items=[_item(key, lang, latest[lang].get(key), emails) for key in keys for lang in Language],
+        items=[_item(key, lang, latest[lang].get(key), usernames) for key in keys for lang in Language],
         output_format=RESPONSE_INSTRUCTIONS.strip(),
     )
 
@@ -80,14 +80,14 @@ async def list_versions(
         .order_by(PromptVersion.version.desc())
     )
     rows = result.scalars().all()
-    emails = await _emails(db, {r.created_by_id for r in rows if r.created_by_id})
+    usernames = await _usernames(db, {r.created_by_id for r in rows if r.created_by_id})
     return [
         PromptVersionItem(
             version=r.version,
             content=r.content,
             note=r.note,
             created_at=r.created_at.isoformat(),
-            created_by=emails.get(r.created_by_id) if r.created_by_id else None,
+            created_by=usernames.get(r.created_by_id) if r.created_by_id else None,
         )
         for r in rows
     ]
@@ -126,7 +126,7 @@ async def save_prompt(
         await db.rollback()
         raise HTTPException(status_code=409, detail="prompt was changed by someone else, reload and retry")
     await db.refresh(row)
-    return _item(key, language, row, {admin.id: admin.email})
+    return _item(key, language, row, {admin.id: admin.username})
 
 
 @router.post("/preview", response_model=PromptPreviewResponse)

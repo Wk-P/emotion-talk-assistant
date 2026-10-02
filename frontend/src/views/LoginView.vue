@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import SiteFooter from '@/components/SiteFooter.vue'
+import SiteHeader from '@/components/SiteHeader.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { errorStatus } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 
-const email = ref('')
+const username = ref('')
 const password = ref('')
 const submitting = ref(false)
 const error = ref<string | null>(null)
@@ -17,11 +20,10 @@ async function submit() {
   submitting.value = true
   error.value = null
   try {
-    await auth.login(email.value, password.value)
+    await auth.login(username.value, password.value)
     router.push('/')
   } catch (e: unknown) {
-    const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-    error.value = detail ?? t('auth.loginFailed')
+    error.value = errorStatus(e) === 403 ? t('auth.accountDisabled') : t('auth.loginFailed')
   } finally {
     submitting.value = false
   }
@@ -30,18 +32,24 @@ async function submit() {
 
 <template>
   <div class="auth-view">
-    <header class="header">
-      <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('auth.back') }}</button>
-    </header>
+    <SiteHeader />
+    <main class="page-body">
 
-    <div class="page-inner">
+    <div class="auth-split">
+      <aside class="auth-intro">
+        <img class="auth-intro-logo" src="/emotion-talk.png" alt="" />
+        <div class="auth-intro-app">{{ t('app.title') }}</div>
+        <h2>{{ t('welcome.title') }}</h2>
+        <p>{{ t('welcome.body') }}</p>
+      </aside>
+      <div class="auth-card">
       <img class="logo" src="/emotion-talk.png" :alt="t('app.title')" />
       <h1>{{ t('auth.loginTitle') }}</h1>
 
       <form class="form" @submit.prevent="submit">
         <label>
-          {{ t('auth.email') }}
-          <input v-model="email" type="email" required autocomplete="email" />
+          {{ t('auth.username') }}
+          <input v-model="username" type="text" required autocomplete="username" autocapitalize="off" spellcheck="false" />
         </label>
         <label>
           {{ t('auth.password') }}
@@ -51,31 +59,18 @@ async function submit() {
         <button class="btn-primary" type="submit" :disabled="submitting">{{ t('auth.login') }}</button>
       </form>
 
+      <p class="forgot-hint">{{ t('auth.forgotHint') }}</p>
       <div class="links">
-        <button type="button" class="btn-text" @click="router.push('/forgot-password')">
-          {{ t('auth.forgotPassword') }}
-        </button>
         <button type="button" class="btn-text" @click="router.push('/register')">{{ t('auth.needAccount') }}</button>
       </div>
+      </div>
     </div>
+  </main>
+    <SiteFooter />
   </div>
 </template>
 
 <style scoped>
-.auth-view {
-  padding: 16px;
-}
-@media (min-width: 640px) {
-  .auth-view {
-    padding: 32px;
-  }
-}
-.header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-}
 .form {
   display: flex;
   flex-direction: column;
@@ -98,10 +93,16 @@ input {
   color: var(--danger);
   font-size: 13px;
 }
+.forgot-hint {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-align: center;
+}
 .links {
   display: flex;
-  justify-content: space-between;
-  margin-top: 16px;
+  justify-content: center;
+  margin-top: 8px;
 }
 .logo {
   width: 56px;

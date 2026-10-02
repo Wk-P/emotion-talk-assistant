@@ -28,6 +28,7 @@ function choose(lang: Language) {
 <template>
   <div class="backdrop">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+      <div class="dialog-main">
       <img class="logo" src="/emotion-talk.png" alt="" />
       <h2 id="consent-title">{{ t('app.title') }}</h2>
 
@@ -42,6 +43,9 @@ function choose(lang: Language) {
 
       <p class="intro">{{ t('onboarding.intro') }}</p>
       <p class="note">{{ t('onboarding.consentNote') }}</p>
+      </div>
+
+      <div class="dialog-side">
 
       <button type="button" class="btn-primary start" @click="emit('start', selected)">
         {{ t('onboarding.acknowledge') }}
@@ -54,6 +58,7 @@ function choose(lang: Language) {
           <button type="button" class="btn-outline" @click="router.push('/register')">{{ t('auth.register') }}</button>
         </div>
         <p class="login-hint">{{ t('onboarding.loginHint') }}</p>
+      </div>
       </div>
     </div>
   </div>
@@ -180,6 +185,67 @@ h2 {
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-muted);
+}
+.dialog-main,
+.dialog-side {
+  display: contents;
+}
+
+/* >=960px: not a small box in the middle of the screen — the notice takes
+   the whole screen as a split: what this is on the left, the choices
+   (language, start, account) on the right. */
+@media (min-width: 960px) {
+  .backdrop {
+    padding: 0;
+    background: var(--surface);
+    backdrop-filter: none;
+  }
+  .dialog {
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    align-items: stretch;
+    text-align: left;
+  }
+  .dialog-main,
+  .dialog-side {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 48px clamp(32px, 5vw, 96px);
+  }
+  .dialog-main {
+    align-items: flex-start;
+    background: var(--accent-soft);
+  }
+  .dialog-side {
+    align-items: stretch;
+  }
+  .logo {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+  }
+  h2 {
+    font-size: clamp(22px, 2.2vw, 32px);
+  }
+  .intro {
+    font-size: 16px;
+    line-height: 1.85;
+  }
+  .note {
+    font-size: 14px;
+    padding: 14px 16px;
+  }
+  .start {
+    padding: 14px 20px;
+    font-size: 16px;
+  }
 }
 @keyframes fade-in {
   from {

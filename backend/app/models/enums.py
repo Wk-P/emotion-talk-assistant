@@ -54,11 +54,6 @@ class RiskLevel(str, enum.Enum):
     CRISIS = "crisis"     # self-harm / harm-to-others / acute crisis language
 
 
-class AuthTokenPurpose(str, enum.Enum):
-    VERIFY_EMAIL = "verify_email"
-    RESET_PASSWORD = "reset_password"
-
-
 class UserRole(str, enum.Enum):
     """ADMIN/SUPERADMIN can read de-identified conversation content for
     research analysis (see app/api/admin.py) — everyone starts as USER.

@@ -21,7 +21,7 @@ const { t } = useI18n()
 const lang = ref<Language>('zh')
 const items = ref<PromptItem[]>([])
 const loading = ref(true)
-const selectedKey = ref<string>('role_rules')
+const selectedKey = ref<string>('rules.role_scope')
 // Unsaved edits, keyed `${key}|${lang}` — kept across block/language
 // switches so moving around never silently throws work away.
 const drafts = ref<Record<string, string>>({})
@@ -36,6 +36,16 @@ const showVersions = ref(false)
 const draftId = (key: string, l: Language) => `${key}|${l}`
 
 const langItems = computed(() => items.value.filter((i) => i.language === lang.value))
+
+// The list is grouped the way documents/指导意见2.md is: the common
+// principles (one per prompt-composition area), then the per-purpose flows,
+// then the fixed lines the assistant always says.
+const GROUPS = ['rules', 'flow', 'assistant'] as const
+const groupedItems = computed(() =>
+  GROUPS.map((group) => ({ group, items: langItems.value.filter((i) => i.key.startsWith(`${group}.`)) })).filter(
+    (g) => g.items.length > 0,
+  ),
+)
 const current = computed(() => langItems.value.find((i) => i.key === selectedKey.value) ?? null)
 
 const draft = computed({
@@ -239,8 +249,13 @@ onMounted(load)
          sticky, full-height test chat on the right. -->
     <div v-if="!loading" class="workspace">
       <nav class="block-list">
+        <template v-for="g in groupedItems" :key="g.group">
+        <div class="group-title">
+          {{ t(`prompts.groups.${g.group}.name`) }}
+          <span class="group-hint">{{ t(`prompts.groups.${g.group}.hint`) }}</span>
+        </div>
         <button
-          v-for="item in langItems"
+          v-for="item in g.items"
           :key="item.key"
           type="button"
           class="block"
@@ -255,6 +270,7 @@ onMounted(load)
             </span>
           </span>
         </button>
+        </template>
       </nav>
 
       <section v-if="current" class="editor panel">
@@ -427,10 +443,21 @@ onMounted(load)
   }
 }
 .steps {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.6;
-  max-width: 880px;
+}
+/* Wide: the three steps side by side across the toolbar. */
+@media (min-width: 1024px) {
+  .steps ol {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    padding-left: 0;
+    list-style-position: inside;
+  }
 }
 .steps-title {
   font-weight: 700;
@@ -498,7 +525,7 @@ onMounted(load)
   }
   .block-list {
     position: sticky;
-    top: 24px;
+    top: calc(var(--site-header-h) + 24px);
   }
 }
 @media (min-width: 1360px) {
@@ -509,8 +536,8 @@ onMounted(load)
   .test {
     grid-column: auto;
     position: sticky;
-    top: 24px;
-    height: calc(100dvh - 48px);
+    top: calc(var(--site-header-h) + 24px);
+    height: calc(100dvh - var(--site-header-h) - 48px);
     max-height: 960px;
   }
 }
@@ -543,6 +570,22 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.group-title {
+  margin: 14px 2px 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.group-title:first-child {
+  margin-top: 0;
+}
+.group-hint {
+  display: block;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 .block {
   display: flex;
@@ -864,7 +907,7 @@ pre {
   text-align: center;
   color: var(--text-muted);
   font-size: 12.5px;
-  max-width: 240px;
+  padding: 0 16px;
   line-height: 1.6;
 }
 .test-empty-icon {

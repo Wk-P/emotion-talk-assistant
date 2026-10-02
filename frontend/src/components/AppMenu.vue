@@ -83,6 +83,7 @@ function chooseLang(lang: Language) {
           <button type="button" class="app-menu-item" @click="go('/history')">{{ t('toolbar.history') }}</button>
           <button type="button" class="app-menu-item" @click="go('/records')">{{ t('toolbar.records') }}</button>
           <button type="button" class="app-menu-item" @click="go('/help')">{{ t('toolbar.help') }}</button>
+          <button type="button" class="app-menu-item" @click="go('/privacy')">{{ t('privacy.title') }}</button>
           <button
             v-if="auth.user && auth.user.role !== 'user'"
             type="button"
@@ -115,7 +116,7 @@ function chooseLang(lang: Language) {
             {{ t('toolbar.login') }}
           </button>
           <template v-else>
-            <div class="app-menu-email">{{ auth.user.email }}</div>
+            <div class="app-menu-email">{{ auth.user.username }}</div>
             <button type="button" class="app-menu-item" @click="logout">{{ t('toolbar.logout') }}</button>
           </template>
         </nav>

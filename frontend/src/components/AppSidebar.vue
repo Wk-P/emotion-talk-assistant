@@ -79,6 +79,7 @@ onMounted(loadRecent)
       <button type="button" @click="router.push('/history')">{{ t('toolbar.history') }}</button>
       <button type="button" @click="router.push('/records')">{{ t('toolbar.records') }}</button>
       <button type="button" @click="router.push('/help')">{{ t('toolbar.help') }}</button>
+      <button type="button" @click="router.push('/privacy')">{{ t('privacy.title') }}</button>
       <button v-if="auth.user && auth.user.role !== 'user'" type="button" @click="router.push('/admin')">
         {{ t('admin.entry') }}
       </button>
@@ -89,7 +90,7 @@ onMounted(loadRecent)
         {{ t('toolbar.login') }}
       </button>
       <template v-else>
-        <div class="email">{{ auth.user.email }}</div>
+        <div class="email">{{ auth.user.username }}</div>
         <button type="button" class="btn-text" @click="logout">{{ t('toolbar.logout') }}</button>
       </template>
     </div>

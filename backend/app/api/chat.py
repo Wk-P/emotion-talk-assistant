@@ -8,6 +8,7 @@ from app.models.message import Message
 from app.models.session import ConversationSession
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.dialogue_state import handle_turn
+from app.services.llm import LLMUnavailable
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -25,7 +26,15 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> Chat
         db.add(Message(session_id=session.id, role=MessageRole.USER, content=payload.message))
         session.participated = True
 
-    result = await handle_turn(db, session, payload.message, confirmation)
+    try:
+        result = await handle_turn(db, session, payload.message, confirmation)
+    except LLMUnavailable as e:
+        # A clean 502 instead of an unhandled 500: it passes through the CORS
+        # middleware, so the browser shows the real reason rather than a
+        # misleading CORS error. Nothing from this turn is saved; the client
+        # can retry the same message.
+        await db.rollback()
+        raise HTTPException(status_code=502, detail=f"ai service unavailable: {e.reason}") from e
 
     # A confirmation-only turn has no payload.message, but may have sent the
     # LLM a plain-language description of what was confirmed (see

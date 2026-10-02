@@ -60,6 +60,30 @@ _INTENT_OPTION_COPY = {
     },
 }
 
+# Clickable starters under the welcome message (documents/首选提示题建议.md).
+# Picking one sends its label as the user's first message; "custom" just
+# focuses the input box (handled in the frontend, never sent).
+_STARTER_OPTIONS = {
+    Language.ZH: [
+        {"id": "s1", "label": "最近有件事让我一直在想"},
+        {"id": "s2", "label": "今天发生了一件让我不舒服的事"},
+        {"id": "s3", "label": "最近学习或研究压力有点大"},
+        {"id": "s4", "label": "和某个人的关系让我有些困扰"},
+        {"id": "s5", "label": "我说不清发生了什么，只是最近有点累"},
+        {"id": "s6", "label": "我现在只是想找个人说说话"},
+        {"id": "custom", "label": "我想说……"},
+    ],
+    Language.KO: [
+        {"id": "s1", "label": "요즘 계속 생각나는 일이 있어요"},
+        {"id": "s2", "label": "오늘 마음이 불편했던 일이 있었어요"},
+        {"id": "s3", "label": "요즘 공부나 연구 스트레스가 좀 커요"},
+        {"id": "s4", "label": "어떤 사람과의 관계 때문에 고민돼요"},
+        {"id": "s5", "label": "무슨 일인지 잘 모르겠지만 요즘 좀 지쳐요"},
+        {"id": "s6", "label": "그냥 누군가와 이야기하고 싶어요"},
+        {"id": "custom", "label": "직접 이야기할게요……"},
+    ],
+}
+
 _CRISIS_COPY = {
     Language.ZH: (
         "谢谢你愿意告诉我这些。这听起来很沉重，我想先确认一下你现在的安全状态——"
@@ -174,7 +198,16 @@ def _describe_confirmation(confirmation: dict[str, Any], language: Language) -> 
     values = [*selected, *([custom] if custom else [])]
 
     if card_type == "intent_options":
-        return None  # handled by the intent_options branch itself, no LLM turn yet
+        # The purpose chosen after the user's first message — name it (ids
+        # are sent, the label is what the model can use) so the first LLM
+        # turn knows both what happened (in history) and what help is wanted.
+        labels = {i["id"]: i["label"] for i in _INTENT_OPTION_COPY[language]["items"]}
+        chosen = "、".join(labels.get(v, v) for v in selected)
+        if not chosen:
+            return None
+        if language == Language.ZH:
+            return f"(我现在最需要的是：{chosen})"
+        return f"(지금 가장 필요한 것: {chosen})"
     if card_type == "skip":
         # Bottom-toolbar "skip" (design principle 8.2/10.5): distinct from a
         # generic confirmation-only continue so the model doesn't try to act
@@ -196,22 +229,33 @@ def _describe_confirmation(confirmation: dict[str, Any], language: Language) -> 
     return None
 
 
-async def opening_turn(db: AsyncSession, language: Language, with_disclaimer: bool = True) -> TurnResult:
-    """The fixed, code-sent opening: disclaimer (optional) + intent question
-    + intent option card. No LLM call. Also served read-only before any
-    session exists (app/api/session.py), so a chat is only created once the
-    user actually sends something."""
+async def opening_turn(db: AsyncSession, language: Language) -> TurnResult:
+    """What a new chat opens with, before the user says anything:
+    disclaimer + welcome message + clickable starters. No LLM call. Served
+    read-only before any session exists (app/api/session.py), so a chat is
+    only created once the user actually sends something."""
+
+    welcome = (await registry.resolve(db, [registry.ASSISTANT_WELCOME], language))[registry.ASSISTANT_WELCOME]
+    # Modified_Log.md "系统提示：开始之前加入免责声明" — sent once, verbatim,
+    # by code rather than left to the model (design principle 8.1).
+    return TurnResult(
+        reply_text=f"{_DISCLAIMER[language]}\n\n{welcome.content}",
+        candidates=[{"type": "starter_options", "items": _STARTER_OPTIONS[language]}],
+        prompt_versions={registry.ASSISTANT_WELCOME: welcome.version},
+    )
+
+
+async def purpose_turn(db: AsyncSession, language: Language) -> TurnResult:
+    """Flowchart: after the user has described what's going on (and it passed
+    risk screening), confirm what kind of help they want before any LLM turn.
+    The user's own words stay in the history, so the flow picks up from them
+    once a purpose is chosen."""
 
     question = (await registry.resolve(db, [registry.ASSISTANT_INTENT_QUESTION], language))[
         registry.ASSISTANT_INTENT_QUESTION
     ]
-    reply_text = question.content
-    if with_disclaimer:
-        # Modified_Log.md "系统提示：开始之前加入免责声明" — sent once, verbatim,
-        # by code rather than left to the model (design principle 8.1).
-        reply_text = f"{_DISCLAIMER[language]}\n\n{reply_text}"
     return TurnResult(
-        reply_text=reply_text,
+        reply_text=question.content,
         candidates=[{"type": "intent_options", "items": _INTENT_OPTION_COPY[language]["items"]}],
         prompt_versions={registry.ASSISTANT_INTENT_QUESTION: question.version},
     )
@@ -237,13 +281,13 @@ async def handle_turn(
 
     ctx = session.confirmed_context or {}
     if not ctx.get("last_intent"):
-        # Covers the very first turn (no user_text yet, deterministic — no
-        # LLM call) and any later turn where the user still hasn't picked an
-        # intent (e.g. they replied before confirming the card).
-        with_disclaimer = not ctx.get("disclaimer_shown")
-        if with_disclaimer:
-            session.confirmed_context = {**ctx, "disclaimer_shown": True}
-        return await opening_turn(db, language, with_disclaimer=with_disclaimer)
+        # No purpose chosen yet. Once the user has said something (it has
+        # already passed risk screening above), ask what they need — the
+        # disclaimer was part of the opening, so it isn't repeated. With
+        # nothing said yet, re-send the opening itself.
+        if user_text:
+            return await purpose_turn(db, language)
+        return await opening_turn(db, language)
 
     confirmation_description = _describe_confirmation(confirmation, language) if confirmation else None
     synthetic_text = (

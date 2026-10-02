@@ -17,22 +17,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import Language
 from app.models.prompt import PromptVersion
-from app.prompts import base, emotion_exploration, intent_question, recovery_plan, self_kindness, stabilization
+from app.prompts import (
+    principles,
+    emotion_exploration,
+    intent_question,
+    recovery_plan,
+    self_kindness,
+    stabilization,
+    welcome,
+)
 
-ROLE_RULES = "role_rules"
+# The common principles, one key per section (e.g. "rules.listening").
+RULE_KEYS = principles.KEYS
 FLOW_EMOTION_EXPLORATION = "flow.emotion_exploration"
 FLOW_STABILIZATION = "flow.stabilization"
 FLOW_RECOVERY_PLAN = "flow.recovery_plan"
 FLOW_SELF_KINDNESS = "flow.self_kindness"
+ASSISTANT_WELCOME = "assistant.welcome"
 ASSISTANT_INTENT_QUESTION = "assistant.intent_question"
 
 # Ordered as the admin UI lists them.
 DEFAULTS: dict[str, dict[Language, str]] = {
-    ROLE_RULES: base.ROLE_RULES,
+    **principles.DEFAULTS,
     FLOW_EMOTION_EXPLORATION: emotion_exploration.FLOW_INSTRUCTIONS,
     FLOW_STABILIZATION: stabilization.FLOW_INSTRUCTIONS,
     FLOW_RECOVERY_PLAN: recovery_plan.FLOW_INSTRUCTIONS,
     FLOW_SELF_KINDNESS: self_kindness.FLOW_INSTRUCTIONS,
+    ASSISTANT_WELCOME: welcome.TEXT,
     ASSISTANT_INTENT_QUESTION: intent_question.TEXT,
 }
 

@@ -1,25 +1,37 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import SiteFooter from '@/components/SiteFooter.vue'
+import SiteHeader from '@/components/SiteHeader.vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import {
+  createAdminUser,
   deleteAdminSession,
   deleteAdminUser,
   exportAdminSessions,
   getAdminSessionMessages,
+  getAdminSessionRecords,
   listAdminSessions,
+  errorStatus,
   listAdminUsers,
+  MIN_PASSWORD_LENGTH,
+  resetAdminUserPassword,
   setAdminUserActive,
   setAdminUserRole,
+  type AdminRecordItem,
+  type AdminSessionFilter,
   type AdminSessionItem,
+  type AdminUserFilter,
   type AdminUserItem,
   type HistoryMessageItem,
+  type Language,
+  type UserRole,
+  USERNAME_PATTERN,
 } from '@/api/client'
 import PromptEditor from '@/components/admin/PromptEditor.vue'
 import { useAuthStore } from '@/stores/auth'
+import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
 
-const { t } = useI18n()
-const router = useRouter()
+const { t, te } = useI18n()
 const auth = useAuthStore()
 
 const tab = ref<'conversations' | 'users' | 'prompts'>('conversations')
@@ -32,8 +44,8 @@ const items = ref<AdminSessionItem[]>([])
 // what both actually mean.
 const openId = ref<string | null>(null)
 const openMessages = ref<HistoryMessageItem[]>([])
+const openRecords = ref<AdminRecordItem[]>([])
 const loading = ref(true)
-const exporting = ref(false)
 const confirmingDeleteSession = ref<string | null>(null)
 // Collapsed by default only once there's more than one participant — with
 // just one or two, expanding everything up front saves a click.
@@ -46,6 +58,68 @@ const users = ref<AdminUserItem[]>([])
 const usersLoading = ref(false)
 const confirmingDeleteUser = ref<string | null>(null)
 const isSuperadmin = computed(() => auth.user?.role === 'superadmin')
+
+// ---- Filters ----
+// Every field is optional; '' / null means "don't filter on this".
+const convFilter = reactive({
+  participant: '',
+  language: '' as Language | '',
+  dateFrom: '', // YYYY-MM-DD from <input type="date">, local time
+  dateTo: '',
+  minMessages: null as number | null,
+})
+const userFilter = reactive({
+  q: '',
+  role: '' as UserRole | '',
+  status: '' as NonNullable<AdminUserFilter['status']> | '',
+})
+
+// Dates are picked in the admin's local time zone, so turn them into exact
+// instants here rather than letting the server guess; "to" is inclusive in
+// the UI, so it becomes the start of the following day.
+function localDayStart(day: string, addDays = 0): string {
+  const [y, m, d] = day.split('-').map(Number)
+  return new Date(y!, m! - 1, d! + addDays).toISOString()
+}
+
+function sessionQuery(): AdminSessionFilter {
+  const f: AdminSessionFilter = {}
+  if (convFilter.participant.trim()) f.participant = convFilter.participant.trim()
+  if (convFilter.language) f.language = convFilter.language
+  if (convFilter.dateFrom) f.created_from = localDayStart(convFilter.dateFrom)
+  if (convFilter.dateTo) f.created_to = localDayStart(convFilter.dateTo, 1)
+  if (convFilter.minMessages && convFilter.minMessages > 0) f.min_messages = convFilter.minMessages
+  return f
+}
+
+function userQuery(): AdminUserFilter {
+  const f: AdminUserFilter = {}
+  if (userFilter.q.trim()) f.q = userFilter.q.trim()
+  if (userFilter.role) f.role = userFilter.role
+  if (userFilter.status) f.status = userFilter.status
+  return f
+}
+
+const convFiltered = computed(() => Object.keys(sessionQuery()).length > 0)
+const usersFiltered = computed(() => Object.keys(userQuery()).length > 0)
+
+function resetConvFilter() {
+  Object.assign(convFilter, { participant: '', language: '', dateFrom: '', dateTo: '', minMessages: null })
+}
+function resetUserFilter() {
+  Object.assign(userFilter, { q: '', role: '', status: '' })
+}
+
+// Typing in a search box shouldn't fire a request per keystroke.
+function debounced(fn: () => void, ms = 300) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return () => {
+    clearTimeout(timer)
+    timer = setTimeout(fn, ms)
+  }
+}
+watch(convFilter, debounced(() => load()))
+watch(userFilter, debounced(() => loadUsers()))
 
 interface ParticipantGroup {
   label: string
@@ -92,7 +166,8 @@ function toggleGroup(label: string) {
 async function load() {
   loading.value = true
   try {
-    items.value = await listAdminSessions()
+    items.value = await listAdminSessions(sessionQuery())
+    if (openId.value && !items.value.some((i) => i.session_id === openId.value)) openId.value = null
   } finally {
     loading.value = false
   }
@@ -103,24 +178,50 @@ async function toggle(sessionId: string) {
     openId.value = null
     return
   }
-  openMessages.value = await getAdminSessionMessages(sessionId)
+  const item = items.value.find((i) => i.session_id === sessionId)
+  ;[openMessages.value, openRecords.value] = await Promise.all([
+    getAdminSessionMessages(sessionId),
+    item && item.record_count > 0 ? getAdminSessionRecords(sessionId) : Promise.resolve([]),
+  ])
   openId.value = sessionId
 }
 
-async function doExport() {
-  exporting.value = true
+function download(data: unknown, name: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `emotion-ai-${name}-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// Which export is running: 'all', a participant label, or a user id — so
+// only the clicked button shows the busy state.
+const exportingKey = ref<string | null>(null)
+
+async function runExport(key: string, filter: AdminSessionFilter, name: string) {
+  if (exportingKey.value) return
+  exportingKey.value = key
   try {
-    const data = await exportAdminSessions()
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `emotion-ai-export-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    download(await exportAdminSessions(filter), name)
   } finally {
-    exporting.value = false
+    exportingKey.value = null
   }
+}
+
+function doExport() {
+  return runExport('all', sessionQuery(), convFiltered.value ? 'export-filtered' : 'export')
+}
+
+// Single-participant export keeps the other active filters (language, dates…)
+// so it matches the group as shown.
+function exportParticipant(label: string) {
+  return runExport(label, { ...sessionQuery(), participant: label }, label)
+}
+
+function exportUser(user: AdminUserItem) {
+  return runExport(user.id, { user_id: user.id }, `P-${user.id.slice(0, 8)}`)
 }
 
 async function doDeleteSession(sessionId: string) {
@@ -133,7 +234,7 @@ async function doDeleteSession(sessionId: string) {
 async function loadUsers() {
   usersLoading.value = true
   try {
-    users.value = await listAdminUsers()
+    users.value = await listAdminUsers(userQuery())
   } finally {
     usersLoading.value = false
   }
@@ -157,6 +258,61 @@ async function demote(user: AdminUserItem) {
   if (idx !== -1) users.value[idx] = updated
 }
 
+// ---- Account management (no email: admins create accounts and reset
+// forgotten passwords, then pass the password on in person) ----
+const showCreate = ref(false)
+const newUser = reactive({ username: '', password: '', role: 'user' as UserRole })
+const creating = ref(false)
+const createError = ref('')
+const accountFlash = ref('')
+
+function flash(message: string) {
+  accountFlash.value = message
+  setTimeout(() => {
+    if (accountFlash.value === message) accountFlash.value = ''
+  }, 5000)
+}
+
+async function doCreateUser() {
+  creating.value = true
+  createError.value = ''
+  try {
+    const created = await createAdminUser(newUser.username, newUser.password, newUser.role)
+    flash(t('admin.account.created', { id: created.username }))
+    Object.assign(newUser, { username: '', password: '', role: 'user' })
+    showCreate.value = false
+    await loadUsers()
+  } catch (e) {
+    const status = errorStatus(e)
+    createError.value =
+      status === 409 ? t('auth.usernameTaken') : status === 422 ? t('admin.account.invalid') : t('admin.account.failed')
+  } finally {
+    creating.value = false
+  }
+}
+
+const resettingUser = ref<string | null>(null)
+const resetPassword = ref('')
+const resetError = ref('')
+
+function startReset(user: AdminUserItem) {
+  resettingUser.value = user.id
+  resetPassword.value = ''
+  resetError.value = ''
+  confirmingDeleteUser.value = null
+}
+
+async function doResetPassword(user: AdminUserItem) {
+  resetError.value = ''
+  try {
+    await resetAdminUserPassword(user.id, resetPassword.value)
+    resettingUser.value = null
+    flash(t('admin.account.resetDone', { id: user.username }))
+  } catch (e) {
+    resetError.value = errorStatus(e) === 422 ? t('auth.passwordHint') : t('admin.account.failed')
+  }
+}
+
 async function doDeleteUser(userId: string) {
   await deleteAdminUser(userId)
   confirmingDeleteUser.value = null
@@ -165,7 +321,7 @@ async function doDeleteUser(userId: string) {
 
 function switchTab(next: 'conversations' | 'users' | 'prompts') {
   tab.value = next
-  if (next === 'users' && users.value.length === 0 && !usersLoading.value) loadUsers()
+  if (next === 'users' && users.value.length === 0 && !usersLoading.value && !usersFiltered.value) loadUsers()
 }
 
 onMounted(load)
@@ -173,9 +329,8 @@ onMounted(load)
 
 <template>
   <div class="admin-view">
-    <header class="header">
-      <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('admin.back') }}</button>
-    </header>
+    <SiteHeader />
+    <main class="page-body">
 
     <h1 class="page-title">{{ t('admin.title') }}</h1>
     <p class="note">{{ t('admin.note') }}</p>
@@ -193,6 +348,36 @@ onMounted(load)
     </div>
 
     <template v-if="tab === 'conversations'">
+      <div class="filters">
+        <label class="filter-field grow">
+          <span>{{ t('admin.filter.participant') }}</span>
+          <input v-model="convFilter.participant" type="search" :placeholder="t('admin.filter.participantPlaceholder')" />
+        </label>
+        <label class="filter-field">
+          <span>{{ t('admin.filter.language') }}</span>
+          <select v-model="convFilter.language">
+            <option value="">{{ t('admin.filter.all') }}</option>
+            <option value="zh">中文</option>
+            <option value="ko">한국어</option>
+          </select>
+        </label>
+        <label class="filter-field">
+          <span>{{ t('admin.filter.dateFrom') }}</span>
+          <input v-model="convFilter.dateFrom" type="date" :max="convFilter.dateTo || undefined" />
+        </label>
+        <label class="filter-field">
+          <span>{{ t('admin.filter.dateTo') }}</span>
+          <input v-model="convFilter.dateTo" type="date" :min="convFilter.dateFrom || undefined" />
+        </label>
+        <label class="filter-field narrow">
+          <span>{{ t('admin.filter.minMessages') }}</span>
+          <input v-model.number="convFilter.minMessages" type="number" min="1" placeholder="—" />
+        </label>
+        <button v-if="convFiltered" type="button" class="btn-text filter-reset" @click="resetConvFilter">
+          {{ t('admin.filter.reset') }}
+        </button>
+      </div>
+
       <div v-if="!loading && items.length > 0" class="stats">
         <div class="stat">
           <div class="stat-value">{{ stats.participantCount }}</div>
@@ -212,13 +397,21 @@ onMounted(load)
         v-if="!loading && items.length > 0"
         type="button"
         class="btn-outline export-btn"
-        :disabled="exporting"
+        :disabled="exportingKey !== null"
         @click="doExport"
       >
-        {{ exporting ? t('admin.exporting') : t('admin.export') }}
+        {{
+          exportingKey === 'all'
+            ? t('admin.exporting')
+            : convFiltered
+              ? t('admin.exportFiltered', { n: items.length })
+              : t('admin.export')
+        }}
       </button>
 
-      <p v-if="!loading && items.length === 0" class="empty">{{ t('admin.empty') }}</p>
+      <p v-if="!loading && items.length === 0" class="empty">
+        {{ convFiltered ? t('admin.filter.noMatch') : t('admin.empty') }}
+      </p>
 
       <!-- >=1024px: left column below is the list half of a master-detail
            split (see .conv-layout); <1024px: it's the whole page and each
@@ -226,20 +419,36 @@ onMounted(load)
       <div class="conv-layout">
         <div class="conv-list">
           <div v-for="group in groups" :key="group.label" class="group">
-            <button type="button" class="group-head" @click="toggleGroup(group.label)">
-              <span class="group-label">{{ group.label }}</span>
-              <span class="group-meta">
-                {{ t('admin.groupMeta', { sessions: group.sessionCount, messages: group.messageCount }) }}
-              </span>
-              <span class="chevron" :class="{ collapsed: collapsedGroups.has(group.label) }">▾</span>
-            </button>
+            <div class="group-head-row">
+              <button type="button" class="group-head" @click="toggleGroup(group.label)">
+                <span class="group-label">{{ group.label }}</span>
+                <span class="group-meta">
+                  {{ t('admin.groupMeta', { sessions: group.sessionCount, messages: group.messageCount }) }}
+                </span>
+                <span class="chevron" :class="{ collapsed: collapsedGroups.has(group.label) }">▾</span>
+              </button>
+              <button
+                type="button"
+                class="btn-outline group-export"
+                :disabled="exportingKey !== null"
+                :title="t('admin.exportPersonHint')"
+                @click="exportParticipant(group.label)"
+              >
+                {{ exportingKey === group.label ? t('admin.exporting') : t('admin.exportPerson') }}
+              </button>
+            </div>
 
             <TransitionGroup v-if="!collapsedGroups.has(group.label)" name="entry" tag="div" class="group-sessions">
               <div v-for="item in group.sessions" :key="item.session_id" class="entry" :class="{ selected: openId === item.session_id }">
                 <div class="entry-row">
                   <button type="button" class="entry-head" @click="toggle(item.session_id)">
                     <span>{{ new Date(item.created_at).toLocaleString() }}</span>
-                    <span class="count">{{ t('history.messageCount', { n: item.message_count }) }}</span>
+                    <span class="count">
+                      {{ t('history.messageCount', { n: item.message_count }) }}
+                      <span v-if="item.record_count > 0" class="record-badge">
+                        {{ t('admin.recordCount', { n: item.record_count }) }}
+                      </span>
+                    </span>
                   </button>
                   <button
                     v-if="confirmingDeleteSession !== item.session_id"
@@ -264,6 +473,16 @@ onMounted(load)
                     <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
                       {{ m.content }}
                     </div>
+                    <div v-if="openRecords.length > 0" class="saved-records">
+                      <div class="saved-records-title">{{ t('admin.savedRecords') }}</div>
+                      <div v-for="rec in openRecords" :key="rec.id" class="saved-record">
+                        <div class="saved-record-type">{{ recordTypeLabel(t, te, rec.record_type) }}</div>
+                        <div v-for="(value, key) in rec.payload" :key="key" class="saved-record-line">
+                          <span class="saved-record-key">{{ fieldLabel(t, te, String(key)) }}</span>
+                          {{ fieldText(value) }}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </Transition>
               </div>
@@ -281,6 +500,16 @@ onMounted(load)
               <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
                 {{ m.content }}
               </div>
+              <div v-if="openRecords.length > 0" class="saved-records">
+                <div class="saved-records-title">{{ t('admin.savedRecords') }}</div>
+                <div v-for="rec in openRecords" :key="rec.id" class="saved-record">
+                  <div class="saved-record-type">{{ recordTypeLabel(t, te, rec.record_type) }}</div>
+                  <div v-for="(value, key) in rec.payload" :key="key" class="saved-record-line">
+                    <span class="saved-record-key">{{ fieldLabel(t, te, String(key)) }}</span>
+                    {{ fieldText(value) }}
+                  </div>
+                </div>
+              </div>
             </div>
           </template>
           <p v-else class="detail-placeholder">{{ t('admin.selectPrompt') }}</p>
@@ -291,17 +520,92 @@ onMounted(load)
     <PromptEditor v-else-if="tab === 'prompts'" />
 
     <template v-else>
-      <p v-if="!usersLoading && users.length === 0" class="empty">{{ t('admin.usersEmpty') }}</p>
+      <div class="account-bar">
+        <button type="button" class="btn-primary" @click="showCreate = !showCreate">
+          {{ showCreate ? t('admin.account.cancel') : t('admin.account.create') }}
+        </button>
+        <span v-if="accountFlash" class="account-flash" role="status">{{ accountFlash }}</span>
+      </div>
+      <form v-if="showCreate" class="create-form" @submit.prevent="doCreateUser">
+        <p class="create-hint">{{ t('admin.account.createHint') }}</p>
+        <div class="create-fields">
+          <label class="filter-field grow">
+            <span>{{ t('auth.username') }}</span>
+            <input
+              v-model="newUser.username"
+              required
+              :pattern="USERNAME_PATTERN"
+              :title="t('auth.usernameRules')"
+              :placeholder="t('auth.usernameRules')"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+          </label>
+          <label class="filter-field grow">
+            <span>{{ t('admin.account.initialPassword') }}</span>
+            <input
+              v-model="newUser.password"
+              type="text"
+              required
+              :minlength="MIN_PASSWORD_LENGTH"
+              :placeholder="t('auth.passwordHint')"
+              autocomplete="off"
+            />
+          </label>
+          <label v-if="isSuperadmin" class="filter-field">
+            <span>{{ t('admin.colRole') }}</span>
+            <select v-model="newUser.role">
+              <option value="user">{{ t('admin.role.user') }}</option>
+              <option value="admin">{{ t('admin.role.admin') }}</option>
+            </select>
+          </label>
+          <button type="submit" class="btn-primary create-submit" :disabled="creating">
+            {{ creating ? t('admin.account.creating') : t('admin.account.submit') }}
+          </button>
+        </div>
+        <p v-if="createError" class="create-error">{{ createError }}</p>
+      </form>
+
+      <div class="filters">
+        <label class="filter-field grow">
+          <span>{{ t('auth.username') }}</span>
+          <input v-model="userFilter.q" type="search" :placeholder="t('admin.filter.idPlaceholder')" />
+        </label>
+        <label v-if="isSuperadmin" class="filter-field">
+          <span>{{ t('admin.colRole') }}</span>
+          <select v-model="userFilter.role">
+            <option value="">{{ t('admin.filter.all') }}</option>
+            <option value="user">{{ t('admin.role.user') }}</option>
+            <option value="admin">{{ t('admin.role.admin') }}</option>
+          </select>
+        </label>
+        <label class="filter-field">
+          <span>{{ t('admin.colStatus') }}</span>
+          <select v-model="userFilter.status">
+            <option value="">{{ t('admin.filter.all') }}</option>
+            <option value="active">{{ t('admin.filter.statusActive') }}</option>
+            <option value="disabled">{{ t('admin.disabled') }}</option>
+          </select>
+        </label>
+        <button v-if="usersFiltered" type="button" class="btn-text filter-reset" @click="resetUserFilter">
+          {{ t('admin.filter.reset') }}
+        </button>
+      </div>
+
+      <p v-if="!usersLoading && users.length === 0" class="empty">
+        {{ usersFiltered ? t('admin.filter.noMatch') : t('admin.usersEmpty') }}
+      </p>
 
       <!-- >=1024px: a real table — user rows are what genuinely benefits
-           from tabular alignment (email/role/status/sessions/date/actions
+           from tabular alignment (ID/role/status/sessions/date/actions
            as real columns), which no amount of widening a stacked card
            actually gives you. <1024px keeps the card list below instead;
            a table forces horizontal scrolling on a narrow screen. -->
       <table v-if="users.length > 0" class="users-table">
         <thead>
           <tr>
-            <th>{{ t('admin.colEmail') }}</th>
+            <th>{{ t('auth.username') }}</th>
             <th>{{ t('admin.colRole') }}</th>
             <th>{{ t('admin.colStatus') }}</th>
             <th>{{ t('admin.colSessions') }}</th>
@@ -311,26 +615,54 @@ onMounted(load)
         </thead>
         <tbody>
           <tr v-for="user in users" :key="user.id">
-            <td class="cell-email">{{ user.email }}</td>
+            <td class="cell-email">{{ user.username }}</td>
             <td><span class="badge" :class="user.role">{{ t(`admin.role.${user.role}`) }}</span></td>
             <td>
-              <span v-if="!user.email_verified" class="badge warn">{{ t('admin.unverified') }}</span>
               <span v-if="!user.is_active" class="badge danger">{{ t('admin.disabled') }}</span>
             </td>
             <td>{{ user.session_count }}</td>
             <td>{{ new Date(user.created_at).toLocaleDateString() }}</td>
             <td class="cell-actions">
-              <template v-if="confirmingDeleteUser === user.id">
+              <template v-if="resettingUser === user.id">
+                <form class="reset-inline" @submit.prevent="doResetPassword(user)">
+                  <input
+                    v-model="resetPassword"
+                    type="text"
+                    required
+                    :minlength="MIN_PASSWORD_LENGTH"
+                    :placeholder="t('admin.account.newPassword')"
+                    autocomplete="off"
+                  />
+                  <button type="submit" class="btn-primary">{{ t('admin.account.save') }}</button>
+                  <button type="button" class="btn-outline" @click="resettingUser = null">
+                    {{ t('history.clearConfirmNo') }}
+                  </button>
+                  <span v-if="resetError" class="create-error">{{ resetError }}</span>
+                </form>
+              </template>
+              <template v-else-if="confirmingDeleteUser === user.id">
                 <span class="confirm-inline">{{ t('admin.deleteUserConfirm') }}</span>
                 <button type="button" class="btn-danger" @click="doDeleteUser(user.id)">{{ t('history.clearConfirmYes') }}</button>
                 <button type="button" class="btn-outline" @click="confirmingDeleteUser = null">{{ t('history.clearConfirmNo') }}</button>
               </template>
               <template v-else>
+                <button
+                  v-if="user.session_count > 0"
+                  type="button"
+                  class="btn-outline"
+                  :disabled="exportingKey !== null"
+                  @click="exportUser(user)"
+                >
+                  {{ exportingKey === user.id ? t('admin.exporting') : t('admin.exportUser') }}
+                </button>
                 <button v-if="isSuperadmin && user.role === 'user'" type="button" class="btn-outline" @click="promote(user)">
                   {{ t('admin.promote') }}
                 </button>
                 <button v-if="isSuperadmin && user.role === 'admin'" type="button" class="btn-outline" @click="demote(user)">
                   {{ t('admin.demote') }}
+                </button>
+                <button type="button" class="btn-outline" @click="startReset(user)">
+                  {{ t('admin.account.resetPassword') }}
                 </button>
                 <button type="button" class="btn-outline" @click="toggleActive(user)">
                   {{ user.is_active ? t('admin.disable') : t('admin.enable') }}
@@ -347,21 +679,32 @@ onMounted(load)
       <div class="user-cards">
         <div v-for="user in users" :key="user.id" class="user-row">
           <div class="user-main">
-            <div class="user-email">{{ user.email }}</div>
+            <div class="user-email">{{ user.username }}</div>
             <div class="user-meta">
               <span class="badge" :class="user.role">{{ t(`admin.role.${user.role}`) }}</span>
-              <span v-if="!user.email_verified" class="badge warn">{{ t('admin.unverified') }}</span>
               <span v-if="!user.is_active" class="badge danger">{{ t('admin.disabled') }}</span>
               <span>{{ t('admin.userSessions', { n: user.session_count }) }}</span>
               <span>{{ new Date(user.created_at).toLocaleDateString() }}</span>
             </div>
           </div>
           <div class="user-actions">
+            <button
+              v-if="user.session_count > 0"
+              type="button"
+              class="btn-outline"
+              :disabled="exportingKey !== null"
+              @click="exportUser(user)"
+            >
+              {{ exportingKey === user.id ? t('admin.exporting') : t('admin.exportUser') }}
+            </button>
             <button v-if="isSuperadmin && user.role === 'user'" type="button" class="btn-outline" @click="promote(user)">
               {{ t('admin.promote') }}
             </button>
             <button v-if="isSuperadmin && user.role === 'admin'" type="button" class="btn-outline" @click="demote(user)">
               {{ t('admin.demote') }}
+            </button>
+            <button type="button" class="btn-outline" @click="startReset(user)">
+              {{ t('admin.account.resetPassword') }}
             </button>
             <button type="button" class="btn-outline" @click="toggleActive(user)">
               {{ user.is_active ? t('admin.disable') : t('admin.enable') }}
@@ -375,6 +718,21 @@ onMounted(load)
               {{ t('admin.deleteUser') }}
             </button>
           </div>
+          <form v-if="resettingUser === user.id" class="confirm-row reset-inline" @submit.prevent="doResetPassword(user)">
+            <input
+              v-model="resetPassword"
+              type="text"
+              required
+              :minlength="MIN_PASSWORD_LENGTH"
+              :placeholder="t('admin.account.newPassword')"
+              autocomplete="off"
+            />
+            <button type="submit" class="btn-primary">{{ t('admin.account.save') }}</button>
+            <button type="button" class="btn-outline" @click="resettingUser = null">
+              {{ t('history.clearConfirmNo') }}
+            </button>
+            <span v-if="resetError" class="create-error">{{ resetError }}</span>
+          </form>
           <div v-if="confirmingDeleteUser === user.id" class="confirm-row">
             <span>{{ t('admin.deleteUserConfirm') }}</span>
             <button type="button" class="btn-danger" @click="doDeleteUser(user.id)">
@@ -387,21 +745,12 @@ onMounted(load)
         </div>
       </div>
     </template>
+  </main>
+    <SiteFooter />
   </div>
 </template>
 
 <style scoped>
-.admin-view {
-  padding: 16px;
-}
-@media (min-width: 640px) {
-  .admin-view {
-    padding: 24px 32px 40px;
-  }
-}
-.header {
-  margin-bottom: 14px;
-}
 .tabs {
   display: flex;
   gap: 8px;
@@ -416,8 +765,6 @@ onMounted(load)
   border-color: var(--accent);
 }
 .page-title {
-  font-size: 17px;
-  font-weight: 700;
   margin-bottom: 6px;
 }
 .note {
@@ -453,6 +800,111 @@ onMounted(load)
   width: 100%;
   margin-bottom: 20px;
 }
+.account-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.account-bar .btn-primary {
+  padding: 9px 16px;
+  font-size: 13.5px;
+}
+.account-flash {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c8a4a;
+}
+.create-form {
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+.create-hint {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.create-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+.create-submit {
+  padding: 8px 18px;
+  font-size: 13.5px;
+}
+.create-error {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+.reset-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.reset-inline input {
+  width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 130px;
+}
+.filter-field.grow {
+  flex: 1 1 200px;
+}
+.filter-field.narrow {
+  min-width: 0;
+  width: 110px;
+}
+.filter-field input,
+.filter-field select {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--text);
+}
+.filter-reset {
+  align-self: flex-end;
+  padding-bottom: 8px;
+}
+@media (max-width: 639px) {
+  .filter-field {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+  .filter-field.grow {
+    flex-basis: 100%;
+  }
+}
 .empty {
   color: var(--text-muted);
   font-size: 14px;
@@ -485,7 +937,7 @@ onMounted(load)
     flex: 1;
     min-width: 0;
     position: sticky;
-    top: 16px;
+    top: calc(var(--site-header-h) + 16px);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 16px;
@@ -521,7 +973,19 @@ onMounted(load)
 .group {
   margin-bottom: 14px;
 }
+.group-head-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.group-export {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+}
 .group-head {
+  flex: 1;
+  min-width: 0;
   width: 100%;
   display: flex;
   align-items: center;
@@ -609,13 +1073,53 @@ onMounted(load)
 }
 .conv-detail .messages {
   padding: 0;
-  /* The detail pane itself (its border/background) fills whatever width
-     the page has, same as everywhere else now — but a chat bubble
-     stretching to 85% of a 2000px-wide pane stops being a "message" and
-     starts being a text block, so the transcript column specifically
-     stays a readable width, centered in that full-width pane. */
-  max-width: 760px;
-  margin: 0 auto;
+}
+/* The transcript uses the pane's full width; only each bubble is capped so
+   a long reply still reads as a message rather than a text block. */
+.conv-detail .message {
+  max-width: 70%;
+}
+.record-badge {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.saved-records {
+  align-self: stretch;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.saved-records-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.saved-record {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.saved-record-type {
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.saved-record-key {
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+.saved-record-key::after {
+  content: '：';
 }
 .message {
   font-size: 13px;
@@ -801,19 +1305,12 @@ onMounted(load)
   max-height: 600px;
 }
 /* Kept last on purpose: these wide-screen overrides must come after the
-   base .header/.tabs/.page-title rules above, or those win on order.
+   base .tabs/.page-title rules above, or those win on order.
    Wide: full width edge to edge, with real vertical breathing room —
    generous top/bottom page padding and a clear header → tabs → content
    rhythm instead of everything stacked tight against the top. */
 @media (min-width: 1024px) {
-  .admin-view {
-    padding: 36px 48px 64px;
-  }
-  .header {
-    margin-bottom: 20px;
-  }
   .page-title {
-    font-size: 22px;
     margin-bottom: 8px;
   }
   .note {

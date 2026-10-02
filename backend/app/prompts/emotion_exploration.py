@@ -48,12 +48,14 @@ FLOW_INSTRUCTIONS: dict[Language, str] = {
 FORMAT_RULES: dict[Language, str] = {
     Language.ZH: (
         "- 情绪候选词放入 candidates，type 为 'emotion_options'。\n"
-        "- '情境-情绪-行为'小结放入 candidates，type 为 'seb_summary'（行为字段没有就留空）；"
+        "- '情境-情绪-行为'小结放入 candidates，type 为 'seb_summary'，fields 固定用三个键："
+        "situation（发生了什么）、emotion（当时的感受）、behavior（当时怎么应对，没有就留空字符串）；"
         "每次对话只生成一次，之前已经生成过就不要再生成。"
     ),
     Language.KO: (
         "- 감정 후보 단어는 candidates에 담고, type은 'emotion_options'.\n"
-        "- '상황-감정-행동' 요약은 candidates에 담고, type은 'seb_summary'(행동 항목이 없으면 비워 둠). "
+        "- '상황-감정-행동' 요약은 candidates에 담고, type은 'seb_summary'. fields는 세 키로 고정: "
+        "situation(무슨 일이 있었는지), emotion(그때의 감정), behavior(그때 어떻게 대처했는지, 없으면 빈 문자열). "
         "대화당 한 번만 생성하고, 이미 만든 적이 있으면 다시 만들지 마세요."
     ),
 }

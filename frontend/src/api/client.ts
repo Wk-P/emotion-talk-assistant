@@ -158,13 +158,25 @@ export async function saveRecord(sessionId: string, recordType: string, payload:
   return data
 }
 
-export async function listRecords(sessionId: string) {
-  const { data } = await api.get<SavedRecord[]>(`/api/records/${sessionId}`)
+export interface OwnRecord extends SavedRecord {
+  session_id: string
+  session_created_at: string
+}
+
+// Same ownership rule as listHistory: the account when logged in, otherwise
+// this browser's device id.
+function ownerParams() {
+  return getAuthToken() ? undefined : { device_id: getDeviceId() }
+}
+
+/** Every record the current user saved, across all their conversations. */
+export async function listMyRecords() {
+  const { data } = await api.get<OwnRecord[]>('/api/records', { params: ownerParams() })
   return data
 }
 
 export async function deleteRecord(recordId: string) {
-  await api.delete(`/api/records/${recordId}`)
+  await api.delete(`/api/records/${recordId}`, { params: ownerParams() })
 }
 
 export interface Resource {
@@ -185,39 +197,36 @@ export async function listResources() {
 
 export type UserRole = 'user' | 'admin' | 'superadmin'
 
+// ID + password accounts — no email anywhere. A forgotten password is reset
+// by an admin (resetAdminUserPassword below).
 export interface AuthUser {
   id: string
-  email: string
-  email_verified: boolean
+  username: string
   role: UserRole
 }
 
-export async function register(email: string, password: string) {
-  const { data } = await api.post<{ message: string }>('/api/auth/register', { email, password })
+interface TokenResponse {
+  access_token: string
+  user: AuthUser
+}
+
+// Same rules as the backend (app/services/auth.py).
+export const USERNAME_PATTERN = '[A-Za-z0-9_.\\-]{3,32}'
+export const MIN_PASSWORD_LENGTH = 8
+
+export async function register(username: string, password: string) {
+  const { data } = await api.post<TokenResponse>('/api/auth/register', { username, password })
   return data
 }
 
-export async function verifyEmail(token: string) {
-  const { data } = await api.post<{ message: string }>('/api/auth/verify-email', { token })
+export async function login(username: string, password: string) {
+  const { data } = await api.post<TokenResponse>('/api/auth/login', { username, password })
   return data
 }
 
-export async function login(email: string, password: string) {
-  const { data } = await api.post<{ access_token: string; user: AuthUser }>('/api/auth/login', { email, password })
-  return data
-}
-
-export async function forgotPassword(email: string) {
-  const { data } = await api.post<{ message: string }>('/api/auth/forgot-password', { email })
-  return data
-}
-
-export async function resetPassword(token: string, newPassword: string) {
-  const { data } = await api.post<{ message: string }>('/api/auth/reset-password', {
-    token,
-    new_password: newPassword,
-  })
-  return data
+/** HTTP status of a failed request, for picking a translated message. */
+export function errorStatus(e: unknown): number | undefined {
+  return (e as { response?: { status?: number } })?.response?.status
 }
 
 export async function fetchMe() {
@@ -232,10 +241,35 @@ export interface AdminSessionItem {
   created_at: string
   ended_at: string | null
   message_count: number
+  record_count: number
 }
 
-export async function listAdminSessions() {
-  const { data } = await api.get<AdminSessionItem[]>('/api/admin/sessions')
+export interface AdminRecordItem {
+  id: string
+  record_type: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+export async function getAdminSessionRecords(sessionId: string) {
+  const { data } = await api.get<AdminRecordItem[]>(`/api/admin/sessions/${sessionId}/records`)
+  return data
+}
+
+// Shared by the session list and export (backend app/api/admin.py
+// SessionFilter): export always means "what the list currently shows".
+// participant/user_id narrow it to one person for a single-user export.
+export interface AdminSessionFilter {
+  participant?: string
+  user_id?: string
+  language?: Language
+  created_from?: string // ISO datetime, inclusive
+  created_to?: string // ISO datetime, exclusive
+  min_messages?: number
+}
+
+export async function listAdminSessions(filter: AdminSessionFilter = {}) {
+  const { data } = await api.get<AdminSessionItem[]>('/api/admin/sessions', { params: filter })
   return data
 }
 
@@ -251,10 +285,11 @@ export interface AdminSessionExport {
   created_at: string
   ended_at: string | null
   messages: HistoryMessageItem[]
+  records: AdminRecordItem[]
 }
 
-export async function exportAdminSessions() {
-  const { data } = await api.get<AdminSessionExport[]>('/api/admin/export')
+export async function exportAdminSessions(filter: AdminSessionFilter = {}) {
+  const { data } = await api.get<AdminSessionExport[]>('/api/admin/export', { params: filter })
   return data
 }
 
@@ -264,16 +299,31 @@ export async function deleteAdminSession(sessionId: string) {
 
 export interface AdminUserItem {
   id: string
-  email: string
-  email_verified: boolean
+  username: string
   role: UserRole
   is_active: boolean
   created_at: string
   session_count: number
 }
 
-export async function listAdminUsers() {
-  const { data } = await api.get<AdminUserItem[]>('/api/admin/users')
+export interface AdminUserFilter {
+  q?: string
+  role?: UserRole
+  status?: 'active' | 'disabled'
+}
+
+export async function listAdminUsers(filter: AdminUserFilter = {}) {
+  const { data } = await api.get<AdminUserItem[]>('/api/admin/users', { params: filter })
+  return data
+}
+
+export async function createAdminUser(username: string, password: string, role: UserRole = 'user') {
+  const { data } = await api.post<AdminUserItem>('/api/admin/users', { username, password, role })
+  return data
+}
+
+export async function resetAdminUserPassword(userId: string, password: string) {
+  const { data } = await api.post<AdminUserItem>(`/api/admin/users/${userId}/password`, { password })
   return data
 }
 

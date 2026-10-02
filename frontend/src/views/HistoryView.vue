@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import SiteFooter from '@/components/SiteFooter.vue'
+import SiteHeader from '@/components/SiteHeader.vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
@@ -20,14 +22,24 @@ const items = ref<SessionHistoryItem[]>([])
 const openId = ref<string | null>(null)
 const openMessages = ref<HistoryMessageItem[]>([])
 const confirmingClear = ref(false)
+const selected = computed(() => items.value.find((i) => i.session_id === openId.value) ?? null)
 
 async function load() {
   items.value = await listHistory()
+  // Wide screens show a detail pane — open the newest conversation so it
+  // isn't an empty half-page on arrival.
+  if (!openId.value && items.value[0] && isWide()) {
+    await toggle(items.value[0].session_id)
+  }
 }
+
+const isWide = () => window.matchMedia('(min-width: 1024px)').matches
 
 async function toggle(sessionId: string) {
   if (openId.value === sessionId) {
-    openId.value = null
+    // Wide: the list is a selector for the detail pane, so re-clicking the
+    // selected entry keeps it open instead of blanking the pane.
+    if (!isWide()) openId.value = null
     return
   }
   openMessages.value = await getSessionMessages(sessionId)
@@ -66,17 +78,20 @@ onMounted(load)
 
 <template>
   <div class="history-view">
-    <div class="page-inner-wide">
-      <header class="header">
-        <button type="button" class="btn-back" @click="router.push('/')"><span class="arrow">&lt;</span> {{ t('history.back') }}</button>
-      </header>
+    <SiteHeader />
+    <main class="page-body">
+    <div class="page-full">
 
       <h1 class="page-title">{{ t('history.title') }}</h1>
 
       <p v-if="items.length === 0" class="empty">{{ t('history.empty') }}</p>
 
+      <!-- >=1024px: list on the left, the selected conversation on the right.
+           Narrower: each entry expands its own transcript inline. -->
+      <div class="hist-layout">
+      <div class="hist-list">
       <TransitionGroup name="entry" tag="div">
-        <div v-for="item in items" :key="item.session_id" class="entry">
+        <div v-for="item in items" :key="item.session_id" class="entry" :class="{ selected: openId === item.session_id }">
           <button type="button" class="entry-head" @click="toggle(item.session_id)">
             <span>{{ new Date(item.created_at).toLocaleString() }}</span>
             <span class="count">{{ t('history.messageCount', { n: item.message_count }) }}</span>
@@ -90,7 +105,7 @@ onMounted(load)
             </button>
           </div>
           <Transition name="expand">
-            <div v-if="openId === item.session_id" class="messages">
+            <div v-if="openId === item.session_id" class="messages inline">
               <p v-if="openMessages.length === 0" class="empty">{{ t('history.noMessages') }}</p>
               <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
                 {{ m.content }}
@@ -112,25 +127,39 @@ onMounted(load)
           </div>
         </div>
       </div>
+      </div>
+
+      <div v-if="items.length > 0" class="hist-detail">
+        <template v-if="selected">
+          <div class="detail-header">
+            <span class="detail-date">{{ new Date(selected.created_at).toLocaleString() }}</span>
+            <div class="detail-actions">
+              <button type="button" class="btn-primary" @click="continueConversation(selected)">
+                {{ t('history.continue') }}
+              </button>
+              <button type="button" class="btn-outline" @click="exportConversation(selected)">
+                {{ t('history.export') }}
+              </button>
+            </div>
+          </div>
+          <div class="messages">
+            <p v-if="openMessages.length === 0" class="empty">{{ t('history.noMessages') }}</p>
+            <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
+              {{ m.content }}
+            </div>
+          </div>
+        </template>
+        <p v-else class="detail-placeholder">{{ t('history.selectHint') }}</p>
+      </div>
+      </div>
     </div>
+  </main>
+    <SiteFooter />
   </div>
 </template>
 
 <style scoped>
-.history-view {
-  padding: 16px;
-}
-@media (min-width: 640px) {
-  .history-view {
-    padding: 32px;
-  }
-}
-.header {
-  margin-bottom: 14px;
-}
 .page-title {
-  font-size: 17px;
-  font-weight: 700;
   margin-bottom: 20px;
 }
 .empty {
@@ -165,6 +194,89 @@ onMounted(load)
   flex: 1;
   padding: 6px 8px;
   font-size: 12.5px;
+}
+.page-full {
+  width: 100%;
+}
+.hist-detail {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .hist-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+  }
+  .hist-list {
+    width: clamp(320px, 28vw, 420px);
+    flex-shrink: 0;
+  }
+  /* The detail pane shows the transcript and the actions instead. */
+  .messages.inline,
+  .entry-actions {
+    display: none;
+  }
+  .entry.selected {
+    border-color: var(--accent);
+  }
+  .entry.selected .entry-head {
+    background: var(--accent-soft);
+  }
+  .hist-detail {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    position: sticky;
+    top: calc(var(--site-header-h) + 24px);
+    max-height: calc(100dvh - var(--site-header-h) - 48px);
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+  }
+  .hist-detail .messages {
+    padding: 20px 24px;
+    gap: 10px;
+  }
+  .hist-detail .message {
+    max-width: 70%;
+    font-size: 14px;
+    padding: 9px 13px;
+  }
+  .hist-detail .message.assistant {
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+}
+.detail-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.detail-date {
+  font-size: 14px;
+  font-weight: 600;
+}
+.detail-actions {
+  display: flex;
+  gap: 8px;
+}
+.detail-actions button {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+.detail-placeholder {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 60px 0;
 }
 .messages {
   padding: 10px 12px;

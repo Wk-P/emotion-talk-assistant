@@ -1,7 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
-import { endSession, getOpening, getSessionMessages, sendChat, startSession, updateConsent } from '@/api/client'
+import {
+  endSession,
+  getOpening,
+  getSessionMessages,
+  errorStatus,
+  saveRecord,
+  sendChat,
+  startSession,
+  updateConsent,
+} from '@/api/client'
+import type { RecordDraft } from '@/utils/fieldLabels'
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -62,6 +72,8 @@ export const useSessionStore = defineStore('session', () => {
       .filter((m): m is typeof m & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, text: m.content }))
     answeredTurnIndices.value = new Set()
+    recordDrafts.value = new Map()
+    savedTurns.value = new Set()
     error.value = null
     lastFailedSend.value = null
   }
@@ -85,10 +97,11 @@ export const useSessionStore = defineStore('session', () => {
         riskLevel: res.risk_level,
       })
       lastFailedSend.value = null
-    } catch {
+    } catch (e) {
       // Keep the user's bubble (their intent was real) but surface a retry
       // affordance instead of leaving the UI silently stuck on "...".
-      error.value = 'send_failed'
+      // 502 = the backend is fine but the AI provider call failed.
+      error.value = errorStatus(e) === 502 ? 'ai_unavailable' : 'send_failed'
       lastFailedSend.value = { message, confirmation }
     } finally {
       sending.value = false
@@ -106,6 +119,32 @@ export const useSessionStore = defineStore('session', () => {
 
   function markAnswered(turnIndex: number) {
     answeredTurnIndices.value = new Set(answeredTurnIndices.value).add(turnIndex)
+  }
+
+  // Confirmed cards the user may keep in "my records", keyed by turn index,
+  // and which of them they actually saved. Nothing is saved unless the user
+  // taps save — records are never written implicitly.
+  const recordDrafts = ref<Map<number, RecordDraft>>(new Map())
+  const savedTurns = ref<Set<number>>(new Set())
+  const savingTurn = ref<number | null>(null)
+
+  function offerRecord(turnIndex: number, draft: RecordDraft) {
+    recordDrafts.value = new Map(recordDrafts.value).set(turnIndex, draft)
+  }
+
+  async function saveTurnRecord(turnIndex: number) {
+    const draft = recordDrafts.value.get(turnIndex)
+    if (!draft || !sessionId.value || savingTurn.value !== null || savedTurns.value.has(turnIndex)) return
+    savingTurn.value = turnIndex
+    try {
+      // Tapping "save" is the user's explicit consent to keep this record
+      // (the backend refuses to save without it).
+      if (!consent.value.emotion_records) await setConsent('emotion_records', true)
+      await saveRecord(sessionId.value, draft.recordType, draft.payload)
+      savedTurns.value = new Set(savedTurns.value).add(turnIndex)
+    } finally {
+      savingTurn.value = null
+    }
   }
 
   async function setConsent(category: string, granted: boolean) {
@@ -129,6 +168,8 @@ export const useSessionStore = defineStore('session', () => {
     turns.value = []
     consent.value = {}
     answeredTurnIndices.value = new Set()
+    recordDrafts.value = new Map()
+    savedTurns.value = new Set()
     error.value = null
     lastFailedSend.value = null
   }
@@ -148,6 +189,11 @@ export const useSessionStore = defineStore('session', () => {
     send,
     retry,
     markAnswered,
+    recordDrafts,
+    savedTurns,
+    savingTurn,
+    offerRecord,
+    saveTurnRecord,
     setConsent,
     finish,
     reset,

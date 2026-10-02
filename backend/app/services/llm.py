@@ -1,7 +1,8 @@
 import json
+import logging
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import APIError, AsyncOpenAI
 
 from app.core.config import get_settings
 
@@ -12,6 +13,19 @@ RESPONSE_INSTRUCTIONS = (
     '"fields": object?}]}. reply_text 是给用户看的简短消息；candidates 是可选的结构化建议，'
     "没有则给空数组。不要在 JSON 之外输出任何文字。"
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+class LLMUnavailable(Exception):
+    """The AI provider call failed (bad key, unknown model, quota, network…).
+    Carries a short, secret-free reason for the API response; the full error
+    goes to the server log."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 class LLMResponse:
@@ -35,11 +49,16 @@ async def generate_turn(
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
 
-    completion = await _client().chat.completions.create(
-        model=settings.openai_model,
-        messages=messages,
-        response_format={"type": "json_object"},
-    )
+    try:
+        completion = await _client().chat.completions.create(
+            model=settings.openai_model,
+            messages=messages,
+            response_format={"type": "json_object"},
+        )
+    except APIError as e:
+        logger.exception("OpenAI call failed (model=%s)", settings.openai_model)
+        status = getattr(e, "status_code", None)
+        raise LLMUnavailable(f"{type(e).__name__}{f' {status}' if status else ''}") from e
     raw = completion.choices[0].message.content or "{}"
     try:
         parsed = json.loads(raw)

@@ -23,6 +23,9 @@
   --shadow-sm: 0 1px 3px rgba(31, 35, 51, 0.06);
   --shadow-md: 0 8px 24px rgba(31, 35, 51, 0.08);
   --shadow-lg: 0 20px 56px rgba(76, 60, 140, 0.16);
+
+  /* Height of the sticky SiteHeader — sticky panels below it offset by this. */
+  --site-header-h: 60px;
 }
 
 * {
@@ -40,7 +43,10 @@ body {
     'PingFang SC',
     'Noto Sans KR',
     sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
@@ -50,26 +56,35 @@ h3 {
   letter-spacing: -0.01em;
 }
 
-/* Baseline motion for every button in the app — hover lift, press settle.
-   Views/components can still override with their own scoped transitions. */
+/* Buttons change color on hover/press, they don't jump or shrink — calmer
+   and closer to how established sites behave. */
 button {
   font-family: inherit;
   cursor: pointer;
   transition:
-    transform 0.12s ease,
     box-shadow 0.15s ease,
     opacity 0.15s ease,
     background 0.15s ease,
-    border-color 0.15s ease;
-}
-button:not(:disabled):hover {
-  transform: translateY(-1px);
-}
-button:not(:disabled):active {
-  transform: translateY(0) scale(0.97);
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 button:disabled {
   cursor: not-allowed;
+}
+
+/* A clear ring for keyboard users only (mouse clicks don't show it). */
+:where(button, a, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
 }
 
 input,
@@ -126,38 +141,120 @@ textarea::placeholder {
 
    On request, every one of these is edge-to-edge full width on wide screens
    now — no floating card, no shadow, no margin boxing it into the middle of
-   the screen. `.page-inner` (used inside the auth/onboarding templates) is
-   the one place a narrower *reading* column still exists, because an
-   `<input>` or a paragraph stretched to the full width of an ultrawide
-   monitor is a usability problem, not a "wide screen isn't being used"
-   problem — but that column lives inside a full-width page, not as the
-   page's own boxed-in width. */
+   the screen. Wide content is laid out in columns/grids inside each view
+   instead; only things that become hard to use when stretched (a login
+   form, a chat bubble) keep their own width within the full-width page. */
 .onboarding,
 .auth-view,
 .records-view,
 .history-view,
 .help-view,
+.privacy-view,
 .admin-view {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-height: 100dvh;
   margin: 0;
   background: var(--surface);
 }
 
-.page-inner {
+/* The content area under SiteHeader on every page except the chat. */
+.page-body {
+  flex: 1;
   width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+@media (min-width: 640px) {
+  .page-body {
+    padding: 32px 32px 56px;
+  }
+}
+@media (min-width: 1024px) {
+  .page-body {
+    padding: 40px 48px 72px;
+  }
+}
+/* One page-title size site-wide (views may still tune margins). */
+.page-body .page-title {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+}
+@media (min-width: 1024px) {
+  .page-body .page-title {
+    font-size: 28px;
+  }
 }
 
-/* Wider sibling of .page-inner for list/data views (History, Records,
-   Help) — cards and rows of short text still need to stop somewhere on an
-   ultrawide monitor, just at a much more generous width than a login form. */
-.page-inner-wide {
+/* Login / register: full-width split on wide screens — a welcome panel on
+   the left, the form filling the right column. Nothing is narrowed into
+   the middle of the screen. */
+.auth-split {
   width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
 }
+.auth-intro {
+  display: none;
+}
+.auth-card {
+  width: 100%;
+}
+@media (min-width: 960px) {
+  .auth-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 32px;
+    min-height: calc(100dvh - var(--site-header-h) - 112px);
+  }
+  .auth-intro {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 48px clamp(32px, 5vw, 80px);
+    border-radius: var(--radius-lg);
+    background: var(--accent-soft);
+  }
+  .auth-intro-logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 16px;
+  }
+  .auth-intro-app {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .auth-intro h2 {
+    font-size: clamp(20px, 2vw, 28px);
+    line-height: 1.45;
+    margin: 0 0 14px;
+    color: var(--text);
+  }
+  .auth-intro p {
+    font-size: 15px;
+    line-height: 1.85;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .auth-card {
+    align-self: center;
+    padding: 0 clamp(0px, 3vw, 48px);
+  }
+  /* The card's own small logo/title duplicate the intro panel's. */
+  .auth-card .logo {
+    display: none;
+  }
+  .auth-card h1 {
+    text-align: left;
+    font-size: 24px;
+  }
+}
+
 
 /* ChatView builds its own responsive shell (sidebar at >=960px) and manages
    its own sizing — it's already full width/full height on its own. */
@@ -179,7 +276,7 @@ textarea::placeholder {
   color: #fff;
   font-size: 15px;
   font-weight: 600;
-  box-shadow: 0 8px 20px rgba(108, 92, 231, 0.28);
+  box-shadow: 0 2px 6px rgba(108, 92, 231, 0.22);
 }
 .btn-primary:not(:disabled):hover {
   background: var(--accent-hover);
@@ -233,29 +330,6 @@ textarea::placeholder {
 
 /* Back-navigation button — accent text/border on a white pill, with the
    arrow nudging left on hover instead of the whole button just lifting. */
-.btn-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 14px 7px 10px;
-  border-radius: 999px;
-  border: 1.5px solid var(--accent);
-  background: var(--surface);
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-}
-.btn-back:not(:disabled):hover {
-  background: var(--accent-soft);
-}
-.btn-back .arrow {
-  display: inline-block;
-  transition: transform 0.15s ease;
-}
-.btn-back:not(:disabled):hover .arrow {
-  transform: translateX(-3px);
-}
-
 .btn-danger {
   padding: 11px 16px;
   border-radius: var(--radius-sm);
@@ -277,6 +351,7 @@ textarea::placeholder {
 .records-view,
 .history-view,
 .help-view,
+.privacy-view,
 .admin-view {
   animation: fade-up 0.35s ease;
 }
