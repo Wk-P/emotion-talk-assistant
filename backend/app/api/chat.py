@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +24,9 @@ async def chat(
     # Only the logged-in owner may continue a conversation — a session id
     # alone used to be enough.
     session = await get_owned_session(payload.session_id, db, user)
+    if session.ended_at:
+        # The user chose "结束对话"; an ended conversation is read-only.
+        raise HTTPException(status_code=409, detail="session ended")
 
     confirmation = payload.confirmation.model_dump() if payload.confirmation else None
 
@@ -61,6 +66,11 @@ async def chat(
             },
         )
     )
+    if confirmation and confirmation.get("card_type") == "end":
+        # Only marks the conversation finished — the turns stay, exactly as
+        # for a conversation the user simply left (unlike consent.end_session,
+        # which also purges them without DIALOGUE_HISTORY consent).
+        session.ended_at = datetime.now(timezone.utc)
     db.add(session)
     await db.commit()
 

@@ -20,7 +20,7 @@ async function loadRecent() {
 
 async function openConversation(item: SessionHistoryItem) {
   if (item.session_id === session.sessionId) return
-  await session.resume(item.session_id, item.language)
+  await session.resume(item.session_id, item.language, !!item.ended_at)
   router.push('/')
 }
 

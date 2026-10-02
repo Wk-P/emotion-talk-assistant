@@ -37,6 +37,9 @@ export const useSessionStore = defineStore('session', () => {
   // retry affordance instead of silently doing nothing.
   const error = ref<string | null>(null)
   const lastFailedSend = ref<{ message?: string; confirmation?: ConfirmationPayload } | null>(null)
+  // The user chose "结束对话" (or reopened one they had ended): the AI's
+  // closing reply is shown and no further messages can be sent.
+  const ended = ref(false)
 
   function begin(lang: Language) {
     reset()
@@ -45,15 +48,16 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   // Re-opens a past conversation instead of starting a new one — the
-  // backend chat endpoint already accepts further messages against an
-  // existing session_id (there is no "closed" state that blocks it), so
-  // this only needs to rehydrate local state from the stored history.
+  // backend chat endpoint accepts further messages against an existing
+  // session_id unless the user ended it, so this only needs to rehydrate
+  // local state from the stored history.
   // Replayed turns never carry candidate cards (history only stores
   // role/content), so they render as plain bubbles, same as a live reply
   // once its card has been confirmed.
-  async function resume(id: string, lang: Language) {
+  async function resume(id: string, lang: Language, isEnded = false) {
     const messages = await getSessionMessages(id)
     pending.value = false
+    ended.value = isEnded
     sessionId.value = id
     language.value = lang
     turns.value = messages
@@ -67,7 +71,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function send(message?: string, confirmation?: ConfirmationPayload, opts?: { skipBubble?: boolean }) {
-    if ((!sessionId.value && !pending.value) || sending.value) return
+    if ((!sessionId.value && !pending.value) || sending.value || ended.value) return
     error.value = null
     if (message && !opts?.skipBubble) turns.value.push({ role: 'user', text: message })
     sending.value = true
@@ -85,7 +89,13 @@ export const useSessionStore = defineStore('session', () => {
         riskLevel: res.risk_level,
       })
       lastFailedSend.value = null
+      if (confirmation?.card_type === 'end') ended.value = true
     } catch (e) {
+      // 409: this conversation was already ended (e.g. in another tab).
+      if (errorStatus(e) === 409) {
+        ended.value = true
+        return
+      }
       // Keep the user's bubble (their intent was real) but surface a retry
       // affordance instead of leaving the UI silently stuck on "...".
       // 503 = the backend is fine but the AI provider call failed.
@@ -156,6 +166,13 @@ export const useSessionStore = defineStore('session', () => {
     await endSession(sessionId.value)
   }
 
+  // "结束对话": the AI writes a short closing reply (no question, no
+  // cards), then the conversation is locked. Never purges the turns.
+  async function endConversation() {
+    if (!sessionId.value || sending.value || ended.value) return
+    await send(undefined, { card_type: 'end' })
+  }
+
   // Drops the in-memory reference to the current session without calling the
   // backend — used after clearing history, which may delete the session
   // that's currently open in ChatView. Without this, the next message send
@@ -170,6 +187,7 @@ export const useSessionStore = defineStore('session', () => {
     savedTurns.value = new Set()
     error.value = null
     lastFailedSend.value = null
+    ended.value = false
   }
 
   return {
@@ -181,6 +199,8 @@ export const useSessionStore = defineStore('session', () => {
     consent,
     answeredTurnIndices,
     error,
+    ended,
+    endConversation,
     begin,
     resume,
     send,

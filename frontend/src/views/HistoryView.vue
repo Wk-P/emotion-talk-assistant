@@ -48,7 +48,7 @@ async function toggle(sessionId: string) {
 }
 
 async function continueConversation(item: SessionHistoryItem) {
-  await session.resume(item.session_id, item.language)
+  await session.resume(item.session_id, item.language, !!item.ended_at)
   router.push('/')
 }
 

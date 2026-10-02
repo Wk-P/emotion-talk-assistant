@@ -105,7 +105,8 @@ async function saveRecordFor(idx: number) {
 
       <div ref="scrollEl" class="turns">
         <div v-if="showEmptyHint" class="chat-empty">
-          <p class="chat-empty-title">{{ t('chat.emptyTitle') }}</p>
+          <!-- documents/02_内容与需求/首选提示题建议.md, verbatim and not edited: the welcome
+               sentence plus the starter list, as plain text (no clickable options). -->
           <p class="chat-empty-hint">{{ t('chat.emptyHint') }}</p>
         </div>
 
@@ -155,8 +156,18 @@ async function saveRecordFor(idx: number) {
         </Transition>
       </div>
 
-      <div class="footer">
-        <BottomToolbar />
+      <div v-if="session.ended" class="footer ended-panel">
+        <p class="ended-title">{{ t('chat.endedTitle') }}</p>
+        <p class="ended-hint">{{ t('chat.endedHint') }}</p>
+        <div class="ended-actions">
+          <button type="button" class="btn-primary" @click="session.reset()">{{ t('chat.newChat') }}</button>
+          <RouterLink to="/reflection" class="btn-outline">{{ t('chat.writeReflection') }}</RouterLink>
+        </div>
+      </div>
+
+      <div v-else class="footer">
+        <!-- Only once there is a conversation to skip / end. -->
+        <BottomToolbar v-if="session.turns.length > 0" />
 
         <form class="composer" @submit.prevent="submit">
           <input
@@ -235,22 +246,19 @@ async function saveRecordFor(idx: number) {
 /* Plain instructional text, not a chat bubble — there is no canned AI
    reply any more for it to be confused with. */
 .chat-empty {
-  max-width: 420px;
+  max-width: 560px;
   margin: 15vh auto 0;
   padding: 0 16px;
   text-align: center;
 }
-.chat-empty-title {
-  margin: 0 0 6px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-}
 .chat-empty-hint {
   margin: 0;
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--text);
+  /* keep the line breaks of the source text (the list of starters) */
+  white-space: pre-line;
+  text-align: left;
 }
 .save-record {
   display: flex;
@@ -394,6 +402,34 @@ async function saveRecordFor(idx: number) {
 }
 .composer input:disabled {
   opacity: 0.6;
+}
+.ended-panel {
+  padding: 16px 16px 20px;
+  text-align: center;
+}
+.ended-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ended-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted, var(--text));
+}
+.ended-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.ended-actions > * {
+  min-width: 140px;
+  padding: 9px 16px;
+  font-size: 14px;
+  text-decoration: none;
+  text-align: center;
 }
 .composer button.send-btn {
   min-width: 64px;

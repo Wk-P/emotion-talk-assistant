@@ -26,8 +26,17 @@ from app.services.model_settings import current_model
 
 HISTORY_TURNS = 12  # most recent messages included as LLM context
 
-
-
+# The only structured cards that may reach the user — the two flowchart
+# checkpoints the user confirms/edits and can save to their records. Pick-list
+# cards (emotion words, methods, encouragement lines) are never shown: the
+# research team's rule is that the AI asks open questions without offering
+# options. Enforced here rather than left to the prompt, because the model
+# kept attaching option cards to nearly every reply and admin-edited prompt
+# text can't override this.
+ALLOWED_CARD_TYPES = {"seb_summary", "plan_form"}
+# The summary needs something to summarize: not before the user has said at
+# least this many things.
+MIN_USER_TURNS_FOR_SUMMARY = 3
 
 _CRISIS_COPY = {
     Language.ZH: (
@@ -84,15 +93,50 @@ async def _crisis_turn(db: AsyncSession, language: Language) -> TurnResult:
     return TurnResult(reply_text=_CRISIS_COPY[language], candidates=candidates, risk_level=RiskLevel.CRISIS)
 
 
-async def _load_recent_history(db: AsyncSession, session_id: str) -> list[dict[str, str]]:
+async def _load_messages(db: AsyncSession, session_id: str) -> list[Message]:
+    # Includes this turn's user message: the API layer adds it before calling
+    # handle_turn and the query autoflushes it.
     result = await db.execute(
-        select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at.desc())
-        .limit(HISTORY_TURNS)
+        select(Message).where(Message.session_id == session_id).order_by(Message.created_at)
     )
-    rows = list(reversed(result.scalars().all()))
-    return [{"role": m.role.value, "content": m.content} for m in rows if m.role != MessageRole.SYSTEM]
+    return [m for m in result.scalars().all() if m.role != MessageRole.SYSTEM]
+
+
+def _history_for_llm(messages: list[Message], current_text: str) -> list[dict[str, str]]:
+    recent = messages[-HISTORY_TURNS:]
+    # generate_turn appends this turn's input itself; without dropping it here
+    # the model saw the user's latest message twice and would apologise for
+    # "not catching" what they'd just said.
+    if recent and recent[-1].role == MessageRole.USER and recent[-1].content == current_text:
+        recent = recent[:-1]
+    return [{"role": m.role.value, "content": m.content} for m in recent]
+
+
+def _cards_already_shown(messages: list[Message]) -> set[str]:
+    return {
+        c.get("type")
+        for m in messages
+        if m.role == MessageRole.ASSISTANT
+        for c in (m.meta or {}).get("candidates", [])
+        if isinstance(c, dict)
+    }
+
+
+def _filter_candidates(candidates: list[dict[str, Any]], messages: list[Message]) -> list[dict[str, Any]]:
+    """At most one card per reply, only an allowed checkpoint type, and each
+    checkpoint at most once per conversation (shown once is enough — if the
+    user didn't confirm it, re-showing it every turn is just noise)."""
+
+    shown = _cards_already_shown(messages)
+    user_turns = sum(1 for m in messages if m.role == MessageRole.USER)
+    for card in candidates:
+        card_type = card.get("type") if isinstance(card, dict) else None
+        if card_type not in ALLOWED_CARD_TYPES or card_type in shown:
+            continue
+        if card_type == "seb_summary" and user_turns < MIN_USER_TURNS_FOR_SUMMARY:
+            continue
+        return [card]
+    return []
 
 
 def merge_confirmation(session: ConversationSession, confirmation: dict[str, Any]) -> None:
@@ -135,6 +179,8 @@ def _describe_confirmation(confirmation: dict[str, Any], language: Language) -> 
     fields = confirmation.get("fields")
     values = [*selected, *([custom] if custom else [])]
 
+    if card_type == "end":
+        return "(用户选择结束本次对话)" if language == Language.ZH else "(사용자가 이번 대화를 끝내기로 했어요)"
     if card_type == "skip":
         # Bottom-toolbar "skip" (design principle 8.2/10.5): distinct from a
         # generic confirmation-only continue so the model doesn't try to act
@@ -156,6 +202,20 @@ def _describe_confirmation(confirmation: dict[str, Any], language: Language) -> 
     return None
 
 
+_CLOSING_INSTRUCTION = {
+    Language.ZH: (
+        "\n\n---\n【本轮：用户选择结束对话】\n"
+        "用两三句话温和地结束这次对话：感谢用户愿意分享，简单肯定他今天说出来的东西"
+        "（只提他真正说过的内容），告诉他需要时随时可以再来。不要提问，不要给建议或选项，"
+        "candidates 给空数组。"
+    ),
+    Language.KO: (
+        "\n\n---\n[이번 차례: 사용자가 대화를 끝내기로 했어요]\n"
+        "두세 문장으로 따뜻하게 대화를 마무리하세요: 이야기해 준 것에 고마움을 전하고, 오늘 꺼내 놓은 이야기를 "
+        "(실제로 말한 내용만) 간단히 인정해 주고, 필요할 때 언제든 다시 와도 된다고 알려 주세요. "
+        "질문하지 말고, 조언이나 선택지를 주지 말고, candidates는 빈 배열로 두세요."
+    ),
+}
 
 
 async def handle_turn(
@@ -188,9 +248,23 @@ async def handle_turn(
         or confirmation_description
         or ("(已确认选择，请继续)" if language == Language.ZH else "(선택을 확인했어요, 계속해 주세요)")
     )
-    effective_intent = DialogueIntent.STABILIZE if risk == RiskLevel.WATCH else DialogueIntent.VENT
+    # Flowchart order, decided in code: overwhelmed → stabilize first;
+    # otherwise explore the experience and emotions (steps 6-7) until the
+    # user confirms the situation-emotion-behavior summary, then move on to
+    # practical next steps (step 10). The self-criticism check (step 8) can
+    # still divert either of the latter to self-kindness (step 9) — see
+    # app/prompts/router.flow_key_for.
+    if risk == RiskLevel.WATCH:
+        effective_intent = DialogueIntent.STABILIZE
+    elif (session.confirmed_context or {}).get("seb_entries"):
+        effective_intent = DialogueIntent.METHOD
+    else:
+        effective_intent = DialogueIntent.VENT
 
-    result = await _continue_flow(db, session, synthetic_text=synthetic_text, intent=effective_intent, risk=risk)
+    ending = bool(confirmation and confirmation.get("card_type") == "end")
+    result = await _continue_flow(
+        db, session, synthetic_text=synthetic_text, intent=effective_intent, risk=risk, ending=ending
+    )
     if not user_text:
         result.user_text_used = synthetic_text
     return result
@@ -202,21 +276,17 @@ async def _continue_flow(
     synthetic_text: str,
     intent: DialogueIntent,
     risk: RiskLevel = RiskLevel.NONE,
+    ending: bool = False,
 ) -> TurnResult:
-    ctx = session.confirmed_context or {}
     system_prompt, prompt_versions = await build_prompt(db, intent, session.language, session.self_criticism_level)
-    history = await _load_recent_history(db, session.id)
+    if ending:
+        system_prompt += _CLOSING_INSTRUCTION[session.language]
+    messages = await _load_messages(db, session.id)
+    history = _history_for_llm(messages, synthetic_text)
 
     model = await current_model(db)
     llm_response = await generate_turn(system_prompt, history, synthetic_text, model)
-    candidates = llm_response.candidates
-    if ctx.get("seb_entries"):
-        # The situation-emotion-behavior summary card is a one-time checkpoint
-        # (BUG 反馈, documents/02_内容与需求/Modified_Log.md): once the user has confirmed
-        # one, the model re-proposing another is a prompt-following slip, not
-        # something the session should surface again. This must be enforced
-        # here rather than left to the prompt (see module docstring).
-        candidates = [c for c in candidates if c.get("type") != "seb_summary"]
+    candidates = [] if ending else _filter_candidates(llm_response.candidates, messages)
     return TurnResult(
         reply_text=llm_response.reply_text,
         candidates=candidates,
