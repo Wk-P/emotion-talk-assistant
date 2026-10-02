@@ -34,7 +34,6 @@ LABELS: dict[str, dict[str, str]] = {
         "system": "系统",
         "lang_zh": "中文",
         "lang_ko": "韩语",
-        "anon": "匿名用户",
     },
     "ko": {
         "title": "대화 데이터 내보내기",
@@ -54,7 +53,6 @@ LABELS: dict[str, dict[str, str]] = {
         "system": "시스템",
         "lang_zh": "중국어",
         "lang_ko": "한국어",
-        "anon": "익명 사용자",
     },
 }
 
@@ -130,7 +128,7 @@ def _document(sessions: list[AdminSessionExport], lang: str, tz_offset: int) -> 
     now = (datetime.utcnow() - timedelta(minutes=tz_offset)).strftime("%Y-%m-%d %H:%M")
     convs = []
     for i, s in enumerate(sessions, 1):
-        who = L["anon"] if s.participant_label == "anon" else s.participant_label
+        who = s.participant_label
         meta = [
             (L["participant"], who),
             (L["language"], L.get(f"lang_{s.language.value}", s.language.value)),

@@ -92,11 +92,8 @@ async def _record_counts(db: AsyncSession, session_ids: list[str]) -> dict[str, 
     return dict(result.all())
 
 
-# Participants are shown by their account ID (username). Conversations from
-# the time anonymous use was allowed have no account; they're labelled
-# ANON_LABEL (the admin UI shows it as "匿名用户" / "익명 사용자").
-ANON_LABEL = "anon"
-_ANON_WORDS = {"anon", "匿名", "匿名用户", "익명", "익명 사용자"}
+# Participants are shown by their account ID (username). Every conversation
+# and reflection belongs to an account — there is no anonymous use.
 
 
 async def _usernames(db: AsyncSession, user_ids: set[str | None]) -> dict[str, str]:
@@ -107,8 +104,7 @@ async def _usernames(db: AsyncSession, user_ids: set[str | None]) -> dict[str, s
 
 
 def _label(user_id: str | None, usernames: dict[str, str]) -> str:
-    # A deleted account's leftover rows (if any) fall back to the anon label.
-    return usernames.get(user_id, ANON_LABEL) if user_id else ANON_LABEL
+    return usernames.get(user_id or "", "")
 
 
 def _participant_condition(column, participant: str, exact: bool = False):
@@ -116,8 +112,6 @@ def _participant_condition(column, participant: str, exact: bool = False):
     default (search box), exact for a one-person export."""
 
     q = participant.strip()
-    if q.lower() in _ANON_WORDS:
-        return column.is_(None)
     users = select(User.id).where(
         func.lower(User.username) == q.lower() if exact else User.username.ilike(f"%{_like_escape(q)}%", escape="\\")
     )
@@ -151,7 +145,7 @@ class SessionFilter:
 
 
 def session_filter(
-    participant: str | None = Query(default=None, max_length=255, description="账号 ID（可只填一部分）；anon = 匿名使用时期的对话"),
+    participant: str | None = Query(default=None, max_length=255, description="账号 ID（可只填一部分）"),
     participant_exact: bool = Query(default=False, description="true = 账号 ID 完全一致（单人导出用）"),
     user_id: str | None = Query(default=None, max_length=36),
     language: Language | None = None,
@@ -238,6 +232,7 @@ async def list_all_sessions(
     stmt = (
         select(ConversationSession, count_subq.c.message_count)
         .join(count_subq, count_subq.c.session_id == ConversationSession.id)
+        .join(User, User.id == ConversationSession.user_id)
         .where(ConversationSession.participated.is_(True))
         .order_by(ConversationSession.created_at.desc())
     )
@@ -298,6 +293,7 @@ async def export_all_sessions(
     stmt = (
         select(ConversationSession)
         .join(count_subq, count_subq.c.session_id == ConversationSession.id)
+        .join(User, User.id == ConversationSession.user_id)
         .where(ConversationSession.participated.is_(True))
         .order_by(ConversationSession.created_at.desc())
     )
@@ -383,7 +379,11 @@ async def list_reflections(
     """每日省察 answers for research review, newest first. Participants are
     shown by account ID, as in the conversation list."""
 
-    stmt = select(DailyReflection).order_by(DailyReflection.day.desc(), DailyReflection.created_at.desc())
+    stmt = (
+        select(DailyReflection)
+        .join(User, User.id == DailyReflection.user_id)
+        .order_by(DailyReflection.day.desc(), DailyReflection.created_at.desc())
+    )
     if participant and participant.strip():
         stmt = stmt.where(_participant_condition(DailyReflection.user_id, participant))
     if day_from:

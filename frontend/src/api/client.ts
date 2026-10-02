@@ -295,7 +295,7 @@ export async function getAdminSessionRecords(sessionId: string) {
 // SessionFilter): export always means "what the list currently shows".
 // participant/user_id narrow it to one person for a single-user export.
 export interface AdminSessionFilter {
-  participant?: string // account ID, partial match; 'anon' = from when anonymous use was allowed
+  participant?: string // account ID, partial match
   participant_exact?: boolean
   user_id?: string
   language?: Language
