@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
   clearHistory,
+  deleteSession,
   getSessionMessages,
   listHistory,
   type HistoryMessageItem,
@@ -62,6 +63,16 @@ async function exportConversation(item: SessionHistoryItem) {
   downloadTextFile(`conversation-${item.created_at.slice(0, 10)}.md`, content)
 }
 
+// One conversation at a time; the open chat is dropped if it was this one.
+const confirmingDelete = ref<string | null>(null)
+async function doDelete(item: SessionHistoryItem) {
+  await deleteSession(item.session_id)
+  confirmingDelete.value = null
+  if (openId.value === item.session_id) openId.value = null
+  if (session.sessionId === item.session_id) session.reset()
+  await load()
+}
+
 async function doClear() {
   await clearHistory()
   confirmingClear.value = false
@@ -103,6 +114,14 @@ onMounted(load)
             <button type="button" class="btn-outline" @click="exportConversation(item)">
               {{ t('history.export') }}
             </button>
+            <button type="button" class="btn-outline danger" @click="confirmingDelete = item.session_id">
+              {{ t('history.delete') }}
+            </button>
+          </div>
+          <div v-if="confirmingDelete === item.session_id" class="delete-confirm entry-confirm">
+            <span>{{ t('history.deleteConfirm') }}</span>
+            <button type="button" class="btn-danger" @click="doDelete(item)">{{ t('history.deleteYes') }}</button>
+            <button type="button" class="btn-outline" @click="confirmingDelete = null">{{ t('history.clearConfirmNo') }}</button>
           </div>
           <Transition name="expand">
             <div v-if="openId === item.session_id" class="messages inline">
@@ -140,6 +159,14 @@ onMounted(load)
               <button type="button" class="btn-outline" @click="exportConversation(selected)">
                 {{ t('history.export') }}
               </button>
+              <button type="button" class="btn-outline danger" @click="confirmingDelete = selected.session_id">
+                {{ t('history.delete') }}
+              </button>
+            </div>
+            <div v-if="confirmingDelete === selected.session_id" class="delete-confirm">
+              <span>{{ t('history.deleteConfirm') }}</span>
+              <button type="button" class="btn-danger" @click="doDelete(selected)">{{ t('history.deleteYes') }}</button>
+              <button type="button" class="btn-outline" @click="confirmingDelete = null">{{ t('history.clearConfirmNo') }}</button>
             </div>
           </div>
           <div class="messages">
@@ -263,6 +290,29 @@ onMounted(load)
 .detail-date {
   font-size: 14px;
   font-weight: 600;
+}
+.btn-outline.danger {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+.delete-confirm {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  font-size: 13px;
+  color: var(--danger);
+}
+.delete-confirm button {
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+.entry-confirm {
+  margin: 0 12px 10px;
 }
 .detail-actions {
   display: flex;

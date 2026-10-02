@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from app.db.session import async_session_maker, init_db
 from app.models.resource import CrisisResource
 
-_SEED_VERIFIED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)  # placeholder — replace on real verification
+_SEED_VERIFIED_AT = datetime(2026, 10, 1, tzinfo=timezone.utc)  # placeholder — replace on real verification
 
 RESOURCES = [
     CrisisResource(

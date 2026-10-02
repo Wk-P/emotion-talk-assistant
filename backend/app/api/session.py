@@ -131,6 +131,22 @@ async def clear_history(
     await db.commit()
 
 
+# Declared after DELETE /history so that path isn't read as a session id.
+@router.delete("/{session_id}", status_code=204)
+async def delete_session(
+    db: AsyncSession = Depends(get_db),
+    session: ConversationSession = Depends(get_owned_session),
+) -> None:
+    """Delete one of the caller's own conversations — its messages and the
+    records saved from it go too. Same rule for every role: you can only
+    delete your own here (admins remove others' via /api/admin)."""
+
+    await db.execute(delete(Message).where(Message.session_id == session.id))
+    await db.execute(delete(SavedRecord).where(SavedRecord.session_id == session.id))
+    await db.execute(delete(ConversationSession).where(ConversationSession.id == session.id))
+    await db.commit()
+
+
 @router.put("/{session_id}/language", response_model=SessionResponse)
 async def update_language(
     payload: SessionCreateRequest,

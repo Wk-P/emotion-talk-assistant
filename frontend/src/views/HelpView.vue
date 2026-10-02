@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { listResources, type Resource } from '@/api/client'
 import SiteFooter from '@/components/SiteFooter.vue'
 import SiteHeader from '@/components/SiteHeader.vue'
 import { CONTACT } from '@/content/contact'
@@ -16,8 +15,11 @@ const SECTIONS = ['about', 'resources', 'faq', 'contact'] as const
 const FAQ = ['password', 'data', 'language', 'research', 'ai'] as const
 const TOPICS = ['research', 'account', 'privacy'] as const
 
-const resources = ref<Resource[]>([])
-const resourcesLoaded = ref(false)
+// 釜山地区心理支持资源指南 (documents/釜山地区心里支持资源指南.pdf), shown as
+// page images with the original PDF to open or download. To update it,
+// replace the files in public/guide/ (images are rendered from the PDF).
+const GUIDE_PDF = '/guide/busan-support-guide.pdf'
+const GUIDE_PAGES = [1, 2, 3].map((n) => `/guide/busan-guide-${n}.png`)
 
 // Only channels that are actually filled in (src/content/contact.ts).
 const channels = computed(() =>
@@ -41,14 +43,6 @@ async function copy(key: string, value: string) {
     // clipboard unavailable — the value is still visible to select by hand
   }
 }
-
-onMounted(async () => {
-  try {
-    resources.value = await listResources()
-  } finally {
-    resourcesLoaded.value = true
-  }
-})
 </script>
 
 <template>
@@ -78,18 +72,24 @@ onMounted(async () => {
               <strong>{{ t('contact.topics.urgent.title') }}</strong>
               {{ t('contact.topics.urgent.body') }}
             </div>
-            <p v-if="resourcesLoaded && resources.length === 0" class="muted">{{ t('help.resourcesEmpty') }}</p>
-            <div class="resource-list">
-              <div v-for="r in resources" :key="r.id" class="resource">
-                <div class="resource-main">
-                  <div class="name">{{ r.name[locale] ?? r.name.ko ?? r.name.zh }}</div>
-                  <div class="desc">{{ r.description[locale] ?? r.description.ko ?? r.description.zh }}</div>
-                </div>
-                <div class="resource-links">
-                  <a class="phone" :href="`tel:${r.contact}`">{{ r.contact }}</a>
-                  <a v-if="r.url" :href="r.url" target="_blank" rel="noopener">{{ t('help.website') }}</a>
-                </div>
+            <div class="guide-head">
+              <div>
+                <h3>{{ t('help.guideTitle') }}</h3>
+                <p class="muted">{{ t('help.guideIntro') }}</p>
               </div>
+              <div class="guide-actions">
+                <a class="btn-outline" :href="GUIDE_PDF" target="_blank" rel="noopener">{{ t('help.openPdf') }}</a>
+                <a class="btn-outline" :href="GUIDE_PDF" download="釜山地区心理支持资源指南.pdf">{{ t('help.downloadPdf') }}</a>
+              </div>
+            </div>
+            <div class="guide-pages">
+              <img
+                v-for="(src, i) in GUIDE_PAGES"
+                :key="src"
+                :src="src"
+                :alt="t('help.guidePage', { n: i + 1, total: GUIDE_PAGES.length })"
+                loading="lazy"
+              />
             </div>
           </section>
 
@@ -253,44 +253,44 @@ p {
   margin-bottom: 2px;
   color: var(--danger);
 }
-.resource-list {
+.guide-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 20px;
+  margin-bottom: 12px;
+}
+.guide-head h3 {
+  margin-bottom: 4px;
+}
+.guide-head .muted {
+  margin: 0;
+}
+.guide-actions {
+  display: flex;
+  gap: 8px;
+}
+.guide-actions a {
+  padding: 7px 14px;
+  font-size: 13px;
+  text-decoration: none;
+}
+.guide-pages {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  background: #fff;
 }
-.resource {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 24px;
-  padding: 14px 18px;
+.guide-pages img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
-.resource + .resource {
+.guide-pages img + img {
   border-top: 1px solid var(--border);
-}
-.resource-main {
-  flex: 1 1 320px;
-}
-.name {
-  font-weight: 700;
-  font-size: 14.5px;
-}
-.desc {
-  margin-top: 3px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-.resource-links {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 13.5px;
-}
-.phone {
-  font-weight: 700;
-  font-size: 15px;
 }
 .faq {
   margin: 0;

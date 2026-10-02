@@ -2,7 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { listHistory, type SessionHistoryItem } from '@/api/client'
+import { deleteSession, listHistory, type SessionHistoryItem } from '@/api/client'
 import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
@@ -22,6 +22,17 @@ async function openConversation(item: SessionHistoryItem) {
   if (item.session_id === session.sessionId) return
   await session.resume(item.session_id, item.language)
   router.push('/')
+}
+
+const confirmingDelete = ref<string | null>(null)
+async function removeConversation(item: SessionHistoryItem) {
+  await deleteSession(item.session_id)
+  confirmingDelete.value = null
+  if (session.sessionId === item.session_id) {
+    session.reset()
+    router.push('/')
+  }
+  await loadRecent()
 }
 
 async function newChat() {
@@ -63,17 +74,37 @@ onMounted(loadRecent)
     <div class="recent">
       <div class="recent-label">{{ t('sidebar.recent') }}</div>
       <p v-if="recent.length === 0" class="recent-empty">{{ t('sidebar.recentEmpty') }}</p>
-      <button
+      <div
         v-for="item in recent"
         :key="item.session_id"
-        type="button"
-        class="recent-item"
-        :class="{ active: item.session_id === session.sessionId }"
-        :title="new Date(item.created_at).toLocaleString()"
-        @click="openConversation(item)"
+        class="recent-row"
+        :class="{ active: item.session_id === session.sessionId, confirming: confirmingDelete === item.session_id }"
       >
-        {{ new Date(item.created_at).toLocaleString() }}
-      </button>
+        <template v-if="confirmingDelete === item.session_id">
+          <span class="recent-confirm">{{ t('history.deleteShort') }}</span>
+          <button type="button" class="recent-yes" @click="removeConversation(item)">{{ t('history.deleteYes') }}</button>
+          <button type="button" class="recent-no" @click="confirmingDelete = null">{{ t('history.clearConfirmNo') }}</button>
+        </template>
+        <template v-else>
+          <button
+            type="button"
+            class="recent-item"
+            :title="new Date(item.created_at).toLocaleString()"
+            @click="openConversation(item)"
+          >
+            {{ new Date(item.created_at).toLocaleString() }}
+          </button>
+          <button
+            type="button"
+            class="recent-delete"
+            :aria-label="t('history.delete')"
+            :title="t('history.delete')"
+            @click="confirmingDelete = item.session_id"
+          >
+            ×
+          </button>
+        </template>
+      </div>
     </div>
 
     <nav class="side-nav">
@@ -150,7 +181,69 @@ onMounted(loadRecent)
   color: var(--text-muted);
   padding: 0 10px;
 }
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.recent-row:hover,
+.recent-row.active {
+  background: var(--accent-soft);
+}
+.recent-row.confirming {
+  padding: 4px 6px;
+  background: var(--danger-soft);
+}
+.recent-delete {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  opacity: 0;
+}
+.recent-row:hover .recent-delete,
+.recent-delete:focus-visible {
+  opacity: 1;
+}
+.recent-delete:hover {
+  color: var(--danger);
+}
+/* touch screens have no hover: keep it visible there */
+@media (hover: none) {
+  .recent-delete {
+    opacity: 1;
+  }
+}
+.recent-confirm {
+  flex: 1;
+  font-size: 12px;
+  color: var(--danger);
+}
+.recent-yes,
+.recent-no {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.recent-yes {
+  background: var(--danger);
+  color: #fff;
+}
+.recent-no {
+  background: var(--surface);
+  color: var(--text);
+}
 .recent-item {
+  flex: 1;
+  min-width: 0;
   width: 100%;
   text-align: left;
   padding: 8px 10px;
@@ -164,14 +257,11 @@ onMounted(loadRecent)
   white-space: nowrap;
   flex-shrink: 0;
 }
-.recent-item:hover {
-  background: var(--accent-soft);
+.recent-item:hover,
+.recent-row.active .recent-item {
   color: var(--accent);
-  transform: none;
 }
-.recent-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+.recent-row.active .recent-item {
   font-weight: 600;
 }
 .side-nav {

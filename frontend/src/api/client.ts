@@ -119,6 +119,11 @@ export async function clearHistory() {
   await api.delete('/api/session/history')
 }
 
+/** Delete one of your own conversations (and the records saved from it). */
+export async function deleteSession(sessionId: string) {
+  await api.delete(`/api/session/${sessionId}`)
+}
+
 export async function sendChat(sessionId: string, message?: string, confirmation?: ConfirmationPayload) {
   const { data } = await api.post<ChatResponse>('/api/chat', {
     session_id: sessionId,

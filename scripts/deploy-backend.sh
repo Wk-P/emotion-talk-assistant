@@ -98,6 +98,15 @@ then
   exit 1
 fi
 
+# The crisis/support resources live in the database, filled from
+# backend/app/db/seed.py. Re-run it on every deploy so edits to that file go
+# live; it upserts by id, so existing rows are updated, never duplicated.
+echo "==> syncing crisis resources from seed.py"
+if ! ssh "$SSH_HOST" "cd $REMOTE_DIR && docker compose exec -T backend python -m app.db.seed"; then
+  echo "seeding crisis resources failed (see the error above)" >&2
+  exit 1
+fi
+
 echo "==> public health check"
 curl -s https://emotion-api.knettf.com/api/health
 echo
