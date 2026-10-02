@@ -150,6 +150,7 @@ textarea::placeholder {
 .history-view,
 .help-view,
 .privacy-view,
+.contact-view,
 .admin-view {
   display: flex;
   flex-direction: column;
@@ -352,6 +353,7 @@ textarea::placeholder {
 .history-view,
 .help-view,
 .privacy-view,
+.contact-view,
 .admin-view {
   animation: fade-up 0.35s ease;
 }

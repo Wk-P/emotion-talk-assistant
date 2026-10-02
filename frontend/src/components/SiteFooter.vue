@@ -14,7 +14,7 @@ const year = new Date().getFullYear()
     <div class="footer-links">
       <RouterLink to="/privacy">{{ t('privacy.title') }}</RouterLink>
       <RouterLink to="/help">{{ t('toolbar.help') }}</RouterLink>
-      <a href="mailto:xiaoaijin12@gmail.com">{{ t('site.footer.contact') }}</a>
+      <RouterLink to="/contact">{{ t('site.footer.contact') }}</RouterLink>
     </div>
     <div class="footer-copy">© {{ year }} {{ t('site.footer.org') }} · {{ t('site.footer.disclaimer') }}</div>
   </footer>

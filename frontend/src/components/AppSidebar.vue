@@ -80,6 +80,7 @@ onMounted(loadRecent)
       <button type="button" @click="router.push('/records')">{{ t('toolbar.records') }}</button>
       <button type="button" @click="router.push('/help')">{{ t('toolbar.help') }}</button>
       <button type="button" @click="router.push('/privacy')">{{ t('privacy.title') }}</button>
+      <button type="button" @click="router.push('/contact')">{{ t('contact.title') }}</button>
       <button v-if="auth.user && auth.user.role !== 'user'" type="button" @click="router.push('/admin')">
         {{ t('admin.entry') }}
       </button>

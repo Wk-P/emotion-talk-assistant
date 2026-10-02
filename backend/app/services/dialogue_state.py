@@ -60,7 +60,7 @@ _INTENT_OPTION_COPY = {
     },
 }
 
-# Clickable starters under the welcome message (documents/首选提示题建议.md).
+# Clickable starters under the opening disclaimer (documents/首选提示题建议.md).
 # Picking one sends its label as the user's first message; "custom" just
 # focuses the input box (handled in the frontend, never sent).
 _STARTER_OPTIONS = {
@@ -230,18 +230,17 @@ def _describe_confirmation(confirmation: dict[str, Any], language: Language) -> 
 
 
 async def opening_turn(db: AsyncSession, language: Language) -> TurnResult:
-    """What a new chat opens with, before the user says anything:
-    disclaimer + welcome message + clickable starters. No LLM call. Served
-    read-only before any session exists (app/api/session.py), so a chat is
-    only created once the user actually sends something."""
+    """What a new chat opens with, before the user says anything: the
+    disclaimer + clickable starters (the welcome text itself is on the
+    pre-chat screen, not repeated here). No LLM call. Served read-only
+    before any session exists (app/api/session.py), so a chat is only
+    created once the user actually sends something."""
 
-    welcome = (await registry.resolve(db, [registry.ASSISTANT_WELCOME], language))[registry.ASSISTANT_WELCOME]
     # Modified_Log.md "系统提示：开始之前加入免责声明" — sent once, verbatim,
     # by code rather than left to the model (design principle 8.1).
     return TurnResult(
-        reply_text=f"{_DISCLAIMER[language]}\n\n{welcome.content}",
+        reply_text=_DISCLAIMER[language],
         candidates=[{"type": "starter_options", "items": _STARTER_OPTIONS[language]}],
-        prompt_versions={registry.ASSISTANT_WELCOME: welcome.version},
     )
 
 

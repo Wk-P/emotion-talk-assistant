@@ -24,7 +24,6 @@ from app.prompts import (
     recovery_plan,
     self_kindness,
     stabilization,
-    welcome,
 )
 
 # The common principles, one key per section (e.g. "rules.listening").
@@ -33,7 +32,6 @@ FLOW_EMOTION_EXPLORATION = "flow.emotion_exploration"
 FLOW_STABILIZATION = "flow.stabilization"
 FLOW_RECOVERY_PLAN = "flow.recovery_plan"
 FLOW_SELF_KINDNESS = "flow.self_kindness"
-ASSISTANT_WELCOME = "assistant.welcome"
 ASSISTANT_INTENT_QUESTION = "assistant.intent_question"
 
 # Ordered as the admin UI lists them.
@@ -43,7 +41,6 @@ DEFAULTS: dict[str, dict[Language, str]] = {
     FLOW_STABILIZATION: stabilization.FLOW_INSTRUCTIONS,
     FLOW_RECOVERY_PLAN: recovery_plan.FLOW_INSTRUCTIONS,
     FLOW_SELF_KINDNESS: self_kindness.FLOW_INSTRUCTIONS,
-    ASSISTANT_WELCOME: welcome.TEXT,
     ASSISTANT_INTENT_QUESTION: intent_question.TEXT,
 }
 
