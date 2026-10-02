@@ -10,6 +10,7 @@ import {
   type ReflectionAnswers,
 } from '@/api/client'
 import SiteFooter from '@/components/SiteFooter.vue'
+import { chatLangFor } from '@/i18n/langPreference'
 import SiteHeader from '@/components/SiteHeader.vue'
 
 // 每日省察 — the daily usage reflection questionnaire
@@ -50,7 +51,7 @@ async function submit() {
   saving.value = true
   error.value = ''
   try {
-    const lang: Language = locale.value === 'ko' ? 'ko' : 'zh'
+    const lang: Language = chatLangFor(locale.value)
     const entry = await saveReflection(today, lang, { ...form })
     entries.value = [entry, ...entries.value.filter((e) => e.day !== today)]
     saved.value = true

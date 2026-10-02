@@ -25,7 +25,7 @@ i18n.global.locale.value = detectLang()
 watch(
   i18n.global.locale,
   (lang) => {
-    document.documentElement.lang = lang === 'ko' ? 'ko' : 'zh-CN'
+    document.documentElement.lang = lang === 'ko' ? 'ko' : lang === 'en' ? 'en' : 'zh-CN'
     document.title = i18n.global.t('app.title')
     document.querySelector('meta[name="description"]')?.setAttribute('content', i18n.global.t('site.description'))
   },

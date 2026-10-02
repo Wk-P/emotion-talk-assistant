@@ -1,28 +1,29 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import type { Language } from '@/api/client'
-import { saveLang } from '@/i18n/langPreference'
+import { saveLang, type UiLang } from '@/i18n/langPreference'
 import { useSessionStore } from '@/stores/session'
 
 // The one language control used everywhere (chat sidebar, site header,
-// mobile menu): switches the interface at once, remembers the choice, and
-// moves an ongoing conversation over to the new language too.
+// mobile menu): switches the interface at once and remembers the choice.
+// Chinese / Korean also move an ongoing conversation to that language;
+// English is interface-only, so the conversation stays as it was.
 withDefaults(defineProps<{ showLabel?: boolean }>(), { showLabel: false })
 
 const { t, locale } = useI18n()
 const session = useSessionStore()
 
-const LANGS: { id: Language; label: string }[] = [
+const LANGS: { id: UiLang; label: string }[] = [
   { id: 'zh', label: '中文' },
   { id: 'ko', label: '한국어' },
+  { id: 'en', label: 'EN' },
 ]
 
-function choose(lang: Language) {
+function choose(lang: UiLang) {
   if (locale.value === lang) return
   locale.value = lang
   saveLang(lang)
   // Best effort: the interface has already switched even if this fails.
-  session.setLanguage(lang).catch(() => {})
+  if (lang !== 'en') session.setLanguage(lang).catch(() => {})
 }
 </script>
 

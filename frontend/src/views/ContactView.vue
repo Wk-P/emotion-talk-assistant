@@ -6,7 +6,7 @@ import SiteHeader from '@/components/SiteHeader.vue'
 import { CONTACT } from '@/content/contact'
 
 const { t, locale } = useI18n()
-const lang = computed(() => (locale.value === 'ko' ? 'ko' : 'zh'))
+const lang = computed(() => (locale.value === 'ko' || locale.value === 'en' ? locale.value : 'zh'))
 
 // What people usually get in touch about — each says which channel to use.
 // Emergencies deliberately point to the help page, not to an inbox.

@@ -347,7 +347,7 @@ _EXPORT_FORMATS = {
 @router.get("/export/file")
 async def export_sessions_file(
     format: Literal["md", "txt", "docx", "pdf"],
-    lang: Literal["zh", "ko"] = "zh",
+    lang: Literal["zh", "ko", "en"] = "zh",
     tz_offset: int = Query(default=0, ge=-840, le=840, description="浏览器 getTimezoneOffset()，用于显示本地时间"),
     name: str = Query(default="export", max_length=60, pattern=r"^[A-Za-z0-9_.-]+$"),
     f: SessionFilter = Depends(session_filter),

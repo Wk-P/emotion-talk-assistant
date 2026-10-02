@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Language } from '@/api/client'
-import { detectLang, saveLang } from '@/i18n/langPreference'
+import { detectChatLang, detectLang, saveChatLang, saveLang, type UiLang } from '@/i18n/langPreference'
 
 // Informed-notice gate shown before every new conversation (replaces the
 // old landing page). Nothing is stored until the user then sends their
@@ -11,13 +11,28 @@ const emit = defineEmits<{ start: [lang: Language] }>()
 
 const { t, locale } = useI18n()
 
-const selected = ref<Language>(detectLang())
+const UI_LANGS: { id: UiLang; label: string }[] = [
+  { id: 'zh', label: '中文' },
+  { id: 'ko', label: '한국어' },
+  { id: 'en', label: 'English' },
+]
+
+const selected = ref<UiLang>(detectLang())
+// Conversations are in Chinese or Korean; with the English interface the
+// user picks which one separately.
+const chatLang = ref<Language>(detectChatLang())
 locale.value = selected.value
 
-function choose(lang: Language) {
+function choose(lang: UiLang) {
   selected.value = lang
   locale.value = lang
   saveLang(lang)
+  if (lang !== 'en') chatLang.value = lang
+}
+
+function chooseChat(lang: Language) {
+  chatLang.value = lang
+  saveChatLang(lang)
 }
 </script>
 
@@ -29,12 +44,30 @@ function choose(lang: Language) {
       <h2 id="consent-title">{{ t('app.title') }}</h2>
 
       <div class="segmented" role="radiogroup" :aria-label="t('onboarding.chooseLanguage')">
-        <button type="button" role="radio" :aria-checked="selected === 'zh'" :class="{ on: selected === 'zh' }" @click="choose('zh')">
-          中文
+        <button
+          v-for="l in UI_LANGS"
+          :key="l.id"
+          type="button"
+          role="radio"
+          :aria-checked="selected === l.id"
+          :class="{ on: selected === l.id }"
+          @click="choose(l.id)"
+        >
+          {{ l.label }}
         </button>
-        <button type="button" role="radio" :aria-checked="selected === 'ko'" :class="{ on: selected === 'ko' }" @click="choose('ko')">
-          한국어
-        </button>
+      </div>
+
+      <div v-if="selected === 'en'" class="chat-lang">
+        <span class="chat-lang-label">{{ t('onboarding.chatLanguage') }}</span>
+        <div class="segmented small" role="radiogroup" :aria-label="t('onboarding.chatLanguage')">
+          <button type="button" role="radio" :aria-checked="chatLang === 'zh'" :class="{ on: chatLang === 'zh' }" @click="chooseChat('zh')">
+            中文
+          </button>
+          <button type="button" role="radio" :aria-checked="chatLang === 'ko'" :class="{ on: chatLang === 'ko' }" @click="chooseChat('ko')">
+            한국어
+          </button>
+        </div>
+        <p class="chat-lang-hint">{{ t('onboarding.chatLanguageHint') }}</p>
       </div>
 
       <!-- documents/首页提示词.md — shown here, before the chat starts, and
@@ -50,7 +83,7 @@ function choose(lang: Language) {
 
       <div class="dialog-side">
 
-      <button type="button" class="btn-primary start" @click="emit('start', selected)">
+      <button type="button" class="btn-primary start" @click="emit('start', chatLang)">
         {{ t('onboarding.acknowledge') }}
       </button>
 
@@ -126,6 +159,31 @@ h2 {
 .segmented button:not(:disabled):hover {
   transform: none;
   color: var(--accent);
+}
+.chat-lang {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: -8px 0 18px;
+}
+.chat-lang-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.segmented.small {
+  margin-bottom: 0;
+}
+.segmented.small button {
+  padding: 5px 14px;
+  font-size: 12.5px;
+}
+.chat-lang-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 .tagline {
   margin: 0 0 10px;

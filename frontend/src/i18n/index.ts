@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import { en } from './en'
 
 // UI chrome text only. The AI's own replies and candidate labels come from
 // the backend already localized to the session language — never translated
@@ -791,6 +792,7 @@ const messages = {
       signedOut: '로그아웃되었어요',
     },
   },
+  en,
 }
 
 export const i18n = createI18n({

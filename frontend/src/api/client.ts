@@ -330,7 +330,7 @@ export type ExportFormat = 'json' | 'pdf' | 'docx' | 'md' | 'txt'
 export async function exportAdminFile(
   filter: AdminSessionFilter,
   format: Exclude<ExportFormat, 'json'>,
-  lang: Language,
+  lang: Language | 'en', // labels follow the admin's interface language
 ) {
   const { data } = await api.get<Blob>('/api/admin/export/file', {
     params: { ...filter, format, lang, tz_offset: new Date().getTimezoneOffset() },

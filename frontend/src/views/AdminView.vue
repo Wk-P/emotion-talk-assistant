@@ -233,7 +233,7 @@ async function runExport(key: string, filter: AdminSessionFilter, name: string) 
       const data = await exportAdminSessions(filter)
       download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), name, 'json')
     } else {
-      download(await exportAdminFile(filter, format, locale.value === 'ko' ? 'ko' : 'zh'), name, format)
+      download(await exportAdminFile(filter, format, locale.value as 'zh' | 'ko' | 'en'), name, format)
     }
   } finally {
     exportingKey.value = null

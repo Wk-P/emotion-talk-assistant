@@ -54,6 +54,26 @@ LABELS: dict[str, dict[str, str]] = {
         "lang_zh": "중국어",
         "lang_ko": "한국어",
     },
+    # English is an interface language only (conversations are zh/ko).
+    "en": {
+        "title": "Conversation data export",
+        "exported_at": "Exported at",
+        "count": "Conversations",
+        "conversation": "Conversation",
+        "participant": "Participant",
+        "language": "Conversation language",
+        "started": "Started",
+        "ended": "Ended",
+        "not_ended": "Not ended",
+        "messages": "Messages",
+        "no_messages": "(No messages were kept)",
+        "records": "Records saved by the user",
+        "user": "User",
+        "assistant": "Assistant",
+        "system": "System",
+        "lang_zh": "Chinese",
+        "lang_ko": "Korean",
+    },
 }
 
 # Same labels as the frontend (src/utils/fieldLabels.ts, src/i18n records.types).
@@ -76,6 +96,15 @@ RECORD_TYPES = {
         "recovery_plan": "실행 계획",
         "weekly_reflection": "주간 돌아보기",
     },
+    "en": {
+        "situation_emotion_behavior": "Situation · feeling · response",
+        "cause_interpretation": "Causes and understanding",
+        "value_goal": "What matters and goals",
+        "self_kindness": "Kind words to myself",
+        "self_encouragement": "Words of encouragement",
+        "recovery_plan": "Action plan",
+        "weekly_reflection": "Weekly review",
+    },
 }
 FIELDS = {
     "zh": {
@@ -97,6 +126,16 @@ FIELDS = {
         "support": "필요한 도움",
         "backup": "어려울 때의 대안",
         "text": "내용",
+    },
+    "en": {
+        "situation": "What happened",
+        "emotion": "How I felt",
+        "behavior": "How I responded",
+        "action": "First action",
+        "when": "When",
+        "support": "Help needed",
+        "backup": "Backup plan",
+        "text": "Content",
     },
 }
 
