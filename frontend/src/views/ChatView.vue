@@ -44,12 +44,6 @@ function exportConversation() {
 // dialog shows every time; nothing is stored until the first send.
 const needsAck = computed(() => !session.sessionId && !session.pending)
 
-// Welcome tips (documents/首页提示词.md) sit above a not-yet-started
-// conversation and go away once the user actually says or picks something.
-// Not shown for a resumed conversation, which already has a sessionId.
-const showWelcome = computed(
-  () => !session.sessionId && !session.sending && !session.turns.some((turn) => turn.role === 'user'),
-)
 
 function onAcknowledge(lang: Language) {
   session.begin(lang)
@@ -122,18 +116,6 @@ async function saveRecordFor(idx: number) {
       </header>
 
       <div ref="scrollEl" class="turns">
-        <Transition name="welcome">
-          <section v-if="showWelcome" class="welcome" :aria-label="t('welcome.title')">
-            <div class="welcome-main">
-              <h2 class="welcome-title">{{ t('welcome.title') }}</h2>
-              <p class="welcome-body">{{ t('welcome.body') }}</p>
-            </div>
-            <div class="welcome-note">
-              <span class="welcome-note-title">{{ t('welcome.noteTitle') }}</span>
-              {{ t('welcome.note') }}
-            </div>
-          </section>
-        </Transition>
 
         <TransitionGroup name="turn" tag="div" class="turns-inner">
           <div v-for="(turn, idx) in session.turns" :key="idx" class="turn" :class="turn.role">
@@ -335,50 +317,6 @@ async function saveRecordFor(idx: number) {
   font-weight: 600;
   color: #1c8a4a;
 }
-.welcome {
-  margin: 4px 0 18px;
-  padding: 18px 20px;
-  border-radius: var(--radius-lg);
-  background: var(--accent-soft);
-  text-align: center;
-}
-.welcome-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--accent);
-  margin: 0 0 8px;
-  line-height: 1.5;
-}
-.welcome-body {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.75;
-  color: var(--text);
-}
-.welcome-note {
-  margin: 14px 0 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border);
-  font-size: 12.5px;
-  line-height: 1.65;
-  color: var(--text-muted);
-  text-align: left;
-}
-.welcome-note-title {
-  display: block;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 2px;
-}
-.welcome-leave-active {
-  transition:
-    opacity 0.3s ease,
-    transform 0.3s ease;
-}
-.welcome-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
 .turns-inner {
   display: flex;
   flex-direction: column;
@@ -536,26 +474,6 @@ async function saveRecordFor(idx: number) {
   }
   .bubble {
     max-width: 70%;
-  }
-  .welcome {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-    gap: 28px;
-    align-items: center;
-    padding: 24px 28px;
-    text-align: left;
-  }
-  .welcome-title {
-    font-size: 19px;
-  }
-  .welcome-body {
-    font-size: 14.5px;
-  }
-  .welcome-note {
-    margin: 0;
-    padding: 0 0 0 24px;
-    border-top: none;
-    border-left: 1px dashed var(--border);
   }
 }
 </style>

@@ -288,6 +288,21 @@ export interface AdminSessionExport {
   records: AdminRecordItem[]
 }
 
+export type ExportFormat = 'json' | 'pdf' | 'docx' | 'md' | 'txt'
+
+/** A readable export document (everything but JSON), same filters as above. */
+export async function exportAdminFile(
+  filter: AdminSessionFilter,
+  format: Exclude<ExportFormat, 'json'>,
+  lang: Language,
+) {
+  const { data } = await api.get<Blob>('/api/admin/export/file', {
+    params: { ...filter, format, lang, tz_offset: new Date().getTimezoneOffset() },
+    responseType: 'blob',
+  })
+  return data
+}
+
 export async function exportAdminSessions(filter: AdminSessionFilter = {}) {
   const { data } = await api.get<AdminSessionExport[]>('/api/admin/export', { params: filter })
   return data

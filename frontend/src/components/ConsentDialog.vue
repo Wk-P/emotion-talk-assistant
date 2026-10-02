@@ -41,7 +41,14 @@ function choose(lang: Language) {
         </button>
       </div>
 
-      <p class="intro">{{ t('onboarding.intro') }}</p>
+      <!-- documents/首页提示词.md — shown here, before the chat starts, and
+           not repeated inside the conversation. -->
+      <p class="tagline">{{ t('welcome.title') }}</p>
+      <p class="intro">{{ t('welcome.body') }}</p>
+      <div class="tip">
+        <span class="tip-title">{{ t('welcome.noteTitle') }}</span>
+        {{ t('welcome.note') }}
+      </div>
       <p class="note">{{ t('onboarding.consentNote') }}</p>
       </div>
 
@@ -131,6 +138,30 @@ h2 {
 .segmented button:not(:disabled):hover {
   transform: none;
   color: var(--accent);
+}
+.tagline {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--accent);
+}
+.tip {
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  text-align: left;
+}
+.tip-title {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
 }
 .intro {
   margin: 0 0 12px;
@@ -234,9 +265,17 @@ h2 {
   h2 {
     font-size: clamp(22px, 2.2vw, 32px);
   }
+  .tagline {
+    font-size: clamp(18px, 1.6vw, 22px);
+  }
   .intro {
     font-size: 16px;
     line-height: 1.85;
+  }
+  .tip {
+    font-size: 14px;
+    padding: 14px 16px;
+    background: var(--surface);
   }
   .note {
     font-size: 14px;

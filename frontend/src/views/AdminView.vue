@@ -7,6 +7,7 @@ import {
   createAdminUser,
   deleteAdminSession,
   deleteAdminUser,
+  exportAdminFile,
   exportAdminSessions,
   getAdminSessionMessages,
   getAdminSessionRecords,
@@ -22,6 +23,7 @@ import {
   type AdminSessionItem,
   type AdminUserFilter,
   type AdminUserItem,
+  type ExportFormat,
   type HistoryMessageItem,
   type Language,
   type UserRole,
@@ -31,7 +33,7 @@ import PromptEditor from '@/components/admin/PromptEditor.vue'
 import { useAuthStore } from '@/stores/auth'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
 
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const auth = useAuthStore()
 
 const tab = ref<'conversations' | 'users' | 'prompts'>('conversations')
@@ -186,12 +188,32 @@ async function toggle(sessionId: string) {
   openId.value = sessionId
 }
 
-function download(data: unknown, name: string) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+// One format choice drives every export button on the page (all / filtered /
+// one participant / one user). Remembered per browser.
+const EXPORT_FORMATS: ExportFormat[] = ['json', 'pdf', 'docx', 'md', 'txt']
+const exportFormat = ref<ExportFormat>(
+  (() => {
+    try {
+      const saved = localStorage.getItem('emotion-talk-export-format') as ExportFormat | null
+      return saved && EXPORT_FORMATS.includes(saved) ? saved : 'json'
+    } catch {
+      return 'json'
+    }
+  })(),
+)
+watch(exportFormat, (f) => {
+  try {
+    localStorage.setItem('emotion-talk-export-format', f)
+  } catch {
+    // storage unavailable — the choice just isn't remembered
+  }
+})
+
+function download(blob: Blob, name: string, ext: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `emotion-ai-${name}-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = `emotion-ai-${name}-${new Date().toISOString().slice(0, 10)}.${ext}`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -204,7 +226,13 @@ async function runExport(key: string, filter: AdminSessionFilter, name: string) 
   if (exportingKey.value) return
   exportingKey.value = key
   try {
-    download(await exportAdminSessions(filter), name)
+    const format = exportFormat.value
+    if (format === 'json') {
+      const data = await exportAdminSessions(filter)
+      download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), name, 'json')
+    } else {
+      download(await exportAdminFile(filter, format, locale.value === 'ko' ? 'ko' : 'zh'), name, format)
+    }
   } finally {
     exportingKey.value = null
   }
@@ -393,8 +421,14 @@ onMounted(load)
         </div>
       </div>
 
+      <div v-if="!loading && items.length > 0" class="export-row">
+      <label class="export-format">
+        <span>{{ t('admin.exportFormat') }}</span>
+        <select v-model="exportFormat">
+          <option v-for="f in EXPORT_FORMATS" :key="f" :value="f">{{ t(`admin.formats.${f}`) }}</option>
+        </select>
+      </label>
       <button
-        v-if="!loading && items.length > 0"
         type="button"
         class="btn-outline export-btn"
         :disabled="exportingKey !== null"
@@ -408,6 +442,7 @@ onMounted(load)
               : t('admin.export')
         }}
       </button>
+      </div>
 
       <p v-if="!loading && items.length === 0" class="empty">
         {{ convFiltered ? t('admin.filter.noMatch') : t('admin.empty') }}
@@ -796,9 +831,31 @@ onMounted(load)
   color: var(--text-muted);
   margin-top: 2px;
 }
-.export-btn {
-  width: 100%;
+.export-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
   margin-bottom: 20px;
+}
+.export-format {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.export-format select {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--text);
+}
+.export-btn {
+  flex: 1;
+  min-width: 200px;
 }
 .account-bar {
   display: flex;

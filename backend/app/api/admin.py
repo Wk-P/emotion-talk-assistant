@@ -2,7 +2,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,7 @@ from app.schemas.admin import (
     SetRoleRequest,
 )
 from app.services.auth import hash_password, normalize_username
+from app.services import export_docs
 from app.services.crypto import decrypt_json
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -299,6 +302,43 @@ async def export_all_sessions(
         )
         for session in sessions
     ]
+
+
+_EXPORT_FORMATS = {
+    # format: (renderer, media type, file extension)
+    "md": (export_docs.to_markdown, "text/markdown; charset=utf-8", "md"),
+    "txt": (export_docs.to_text, "text/plain; charset=utf-8", "txt"),
+    "docx": (
+        export_docs.to_docx,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "docx",
+    ),
+    "pdf": (export_docs.to_pdf, "application/pdf", "pdf"),
+}
+
+
+@router.get("/export/file")
+async def export_sessions_file(
+    format: Literal["md", "txt", "docx", "pdf"],
+    lang: Literal["zh", "ko"] = "zh",
+    tz_offset: int = Query(default=0, ge=-840, le=840, description="浏览器 getTimezoneOffset()，用于显示本地时间"),
+    name: str = Query(default="export", max_length=60, pattern=r"^[A-Za-z0-9_.-]+$"),
+    f: SessionFilter = Depends(session_filter),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_required),
+) -> Response:
+    """The same export as GET /export (same filters, same permissions), as
+    a readable document instead of JSON: Markdown, plain text, Word or PDF."""
+
+    sessions = await export_all_sessions(f=f, db=db, admin=admin)
+    render, media_type, ext = _EXPORT_FORMATS[format]
+    content = render(sessions, lang, tz_offset)
+    filename = f"emotion-ai-{name}-{datetime.now().strftime('%Y-%m-%d')}.{ext}"
+    return Response(
+        content=content.encode("utf-8") if isinstance(content, str) else content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

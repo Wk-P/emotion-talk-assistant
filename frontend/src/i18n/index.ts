@@ -8,7 +8,6 @@ const messages = {
   zh: {
     app: { title: '自我共情对话' },
     onboarding: {
-      intro: '这是一个帮助你在适应韩国生活过程中，识别和表达情绪、练习自我友善的对话工具。它不提供诊断或治疗，不能替代专业咨询。',
       chooseLanguage: '请选择语言',
       consentNote: '继续即表示你了解以上说明。是否保存记录由你在对话中随时选择。',
       acknowledge: '我已了解，开始对话',
@@ -102,6 +101,8 @@ const messages = {
       exportPerson: '导出',
       exportPersonHint: '只导出这位参与者的对话（会保留当前的筛选条件）',
       exportUser: '导出对话',
+      exportFormat: '导出格式',
+      formats: { json: 'JSON（数据分析用）', pdf: 'PDF', docx: 'Word', md: 'Markdown', txt: '纯文本 TXT' },
       recordCount: '{n} 条记录',
       savedRecords: '用户保存的记录',
       account: {
@@ -318,7 +319,6 @@ const messages = {
   ko: {
     app: { title: '자기공감 대화' },
     onboarding: {
-      intro: '이 도구는 한국 생활 적응 과정에서 감정을 알아차리고 표현하며 자기친절을 연습하도록 돕는 대화형 도구입니다. 진단이나 치료를 제공하지 않으며 전문 상담을 대체하지 않습니다.',
       chooseLanguage: '언어를 선택하세요',
       consentNote: '계속 진행하면 위 안내를 이해한 것으로 간주합니다. 기록 저장 여부는 대화 중 언제든 선택할 수 있습니다.',
       acknowledge: '확인했어요, 대화 시작하기',
@@ -412,6 +412,8 @@ const messages = {
       exportPerson: '내보내기',
       exportPersonHint: '이 참여자의 대화만 내보내요 (현재 필터 조건 유지)',
       exportUser: '대화 내보내기',
+      exportFormat: '내보내기 형식',
+      formats: { json: 'JSON (데이터 분석용)', pdf: 'PDF', docx: 'Word', md: 'Markdown', txt: '텍스트 TXT' },
       recordCount: '기록 {n}개',
       savedRecords: '사용자가 저장한 기록',
       account: {
