@@ -3,12 +3,14 @@ import SiteFooter from '@/components/SiteFooter.vue'
 import SiteHeader from '@/components/SiteHeader.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { errorStatus } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { redirectTarget } from '@/utils/authRedirect'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const username = ref('')
@@ -21,7 +23,7 @@ async function submit() {
   error.value = null
   try {
     await auth.login(username.value, password.value)
-    router.push('/')
+    router.push(redirectTarget(route))
   } catch (e: unknown) {
     error.value = errorStatus(e) === 403 ? t('auth.accountDisabled') : t('auth.loginFailed')
   } finally {
@@ -45,6 +47,7 @@ async function submit() {
       <div class="auth-card">
       <img class="logo" src="/emotion-talk.png" :alt="t('app.title')" />
       <h1>{{ t('auth.loginTitle') }}</h1>
+      <p class="login-required">{{ t('auth.loginRequired') }}</p>
 
       <form class="form" @submit.prevent="submit">
         <label>
@@ -61,7 +64,7 @@ async function submit() {
 
       <p class="forgot-hint">{{ t('auth.forgotHint') }}</p>
       <div class="links">
-        <button type="button" class="btn-text" @click="router.push('/register')">{{ t('auth.needAccount') }}</button>
+        <button type="button" class="btn-text" @click="router.push({ path: '/register', query: route.query })">{{ t('auth.needAccount') }}</button>
       </div>
       </div>
     </div>
@@ -92,6 +95,12 @@ input {
 .error {
   color: var(--danger);
   font-size: 13px;
+}
+.login-required {
+  margin: -8px 0 18px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
 }
 .forgot-hint {
   margin-top: 14px;

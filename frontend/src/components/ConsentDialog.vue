@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import type { Language } from '@/api/client'
 import { detectLang, saveLang } from '@/i18n/langPreference'
-import { useAuthStore } from '@/stores/auth'
 
 // Informed-notice gate shown before every new conversation (replaces the
 // old landing page). Nothing is stored until the user then sends their
@@ -12,8 +10,6 @@ import { useAuthStore } from '@/stores/auth'
 const emit = defineEmits<{ start: [lang: Language] }>()
 
 const { t, locale } = useI18n()
-const router = useRouter()
-const auth = useAuthStore()
 
 const selected = ref<Language>(detectLang())
 locale.value = selected.value
@@ -58,14 +54,6 @@ function choose(lang: Language) {
         {{ t('onboarding.acknowledge') }}
       </button>
 
-      <div v-if="!auth.user" class="account">
-        <div class="divider"><span>{{ t('onboarding.haveAccount') }}</span></div>
-        <div class="account-actions">
-          <button type="button" class="btn-outline" @click="router.push('/login')">{{ t('toolbar.login') }}</button>
-          <button type="button" class="btn-outline" @click="router.push('/register')">{{ t('auth.register') }}</button>
-        </div>
-        <p class="login-hint">{{ t('onboarding.loginHint') }}</p>
-      </div>
       </div>
     </div>
   </div>
@@ -183,40 +171,6 @@ h2 {
 .start {
   width: 100%;
 }
-.account {
-  width: 100%;
-  margin-top: 20px;
-}
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 12px;
-}
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-.account-actions {
-  display: flex;
-  gap: 10px;
-}
-.account-actions .btn-outline {
-  flex: 1;
-  padding: 10px 14px;
-  font-size: 14px;
-}
-.login-hint {
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
 .dialog-main,
 .dialog-side {
   display: contents;
@@ -224,7 +178,7 @@ h2 {
 
 /* >=960px: not a small box in the middle of the screen — the notice takes
    the whole screen as a split: what this is on the left, the choices
-   (language, start, account) on the right. */
+   (language, start) on the right. */
 @media (min-width: 960px) {
   .backdrop {
     padding: 0;

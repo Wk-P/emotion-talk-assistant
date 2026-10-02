@@ -29,6 +29,7 @@ import {
   type UserRole,
   USERNAME_PATTERN,
 } from '@/api/client'
+import AdminReflections from '@/components/admin/AdminReflections.vue'
 import PromptEditor from '@/components/admin/PromptEditor.vue'
 import { useAuthStore } from '@/stores/auth'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
@@ -36,7 +37,7 @@ import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
 const { t, te, locale } = useI18n()
 const auth = useAuthStore()
 
-const tab = ref<'conversations' | 'users' | 'prompts'>('conversations')
+const tab = ref<'conversations' | 'users' | 'reflections' | 'prompts'>('conversations')
 
 const items = ref<AdminSessionItem[]>([])
 // Doubles as "selected session" for the >=1024px master-detail layout and
@@ -347,7 +348,7 @@ async function doDeleteUser(userId: string) {
   await loadUsers()
 }
 
-function switchTab(next: 'conversations' | 'users' | 'prompts') {
+function switchTab(next: 'conversations' | 'users' | 'reflections' | 'prompts') {
   tab.value = next
   if (next === 'users' && users.value.length === 0 && !usersLoading.value && !usersFiltered.value) loadUsers()
 }
@@ -369,6 +370,9 @@ onMounted(load)
       </button>
       <button type="button" class="btn-outline" :class="{ active: tab === 'users' }" @click="switchTab('users')">
         {{ t('admin.tabUsers') }}
+      </button>
+      <button type="button" class="btn-outline" :class="{ active: tab === 'reflections' }" @click="switchTab('reflections')">
+        {{ t('admin.tabReflections') }}
       </button>
       <button type="button" class="btn-outline" :class="{ active: tab === 'prompts' }" @click="switchTab('prompts')">
         {{ t('admin.tabPrompts') }}
@@ -553,6 +557,8 @@ onMounted(load)
     </template>
 
     <PromptEditor v-else-if="tab === 'prompts'" />
+
+    <AdminReflections v-else-if="tab === 'reflections'" />
 
     <template v-else>
       <div class="account-bar">

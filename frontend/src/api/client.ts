@@ -1,24 +1,6 @@
 import axios from 'axios'
 
 const AUTH_TOKEN_KEY = 'emotion-talk-auth-token'
-const DEVICE_ID_KEY = 'emotion-talk-device-id'
-
-// Only used when signed out — groups an anonymous visitor's sessions on this
-// browser so history/records work without an account. Once they log in,
-// user_id takes over and this is ignored server-side.
-export function getDeviceId(): string {
-  try {
-    let id = localStorage.getItem(DEVICE_ID_KEY)
-    if (!id) {
-      id = crypto.randomUUID()
-      localStorage.setItem(DEVICE_ID_KEY, id)
-    }
-    return id
-  } catch {
-    return crypto.randomUUID()
-  }
-}
-
 export function getAuthToken(): string | null {
   try {
     return localStorage.getItem(AUTH_TOKEN_KEY)
@@ -44,6 +26,20 @@ api.interceptors.request.use((config) => {
   const token = getAuthToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
+})
+
+// Everything a participant does needs a login. If the token has expired or
+// the account was disabled mid-use, drop it and send them to sign in again
+// (then back to where they were) instead of leaving the page half-broken.
+// Login itself is exempt: a 401 there just means a wrong password.
+api.interceptors.response.use(undefined, (error) => {
+  const url: string = error?.config?.url ?? ''
+  if (error?.response?.status === 401 && !url.includes('/api/auth/login') && getAuthToken()) {
+    setAuthToken(null)
+    const here = window.location.pathname + window.location.search
+    window.location.assign(`/login?redirect=${encodeURIComponent(here)}`)
+  }
+  return Promise.reject(error)
 })
 
 export type Language = 'zh' | 'ko'
@@ -79,7 +75,6 @@ export interface ConfirmationPayload {
 export async function startSession(language: Language) {
   const { data } = await api.post<{ session_id: string; language: Language }>('/api/session/start', {
     language,
-    device_id: getAuthToken() ? undefined : getDeviceId(),
   })
   return data
 }
@@ -106,8 +101,7 @@ export async function getOpening(language: Language) {
 }
 
 export async function listHistory() {
-  const params = getAuthToken() ? undefined : { device_id: getDeviceId() }
-  const { data } = await api.get<SessionHistoryItem[]>('/api/session/history', { params })
+  const { data } = await api.get<SessionHistoryItem[]>('/api/session/history')
   return data
 }
 
@@ -117,8 +111,7 @@ export async function getSessionMessages(sessionId: string) {
 }
 
 export async function clearHistory() {
-  const params = getAuthToken() ? undefined : { device_id: getDeviceId() }
-  await api.delete('/api/session/history', { params })
+  await api.delete('/api/session/history')
 }
 
 export async function sendChat(sessionId: string, message?: string, confirmation?: ConfirmationPayload) {
@@ -163,20 +156,57 @@ export interface OwnRecord extends SavedRecord {
   session_created_at: string
 }
 
-// Same ownership rule as listHistory: the account when logged in, otherwise
-// this browser's device id.
-function ownerParams() {
-  return getAuthToken() ? undefined : { device_id: getDeviceId() }
-}
-
 /** Every record the current user saved, across all their conversations. */
 export async function listMyRecords() {
-  const { data } = await api.get<OwnRecord[]>('/api/records', { params: ownerParams() })
+  const { data } = await api.get<OwnRecord[]>('/api/records')
   return data
 }
 
 export async function deleteRecord(recordId: string) {
-  await api.delete(`/api/records/${recordId}`, { params: ownerParams() })
+  await api.delete(`/api/records/${recordId}`)
+}
+
+// ---- 每日省察 (daily reflection questionnaire, backend app/api/reflections.py) ----
+
+export interface ReflectionAnswers {
+  helpful: string
+  changed: string
+  improve: string
+}
+
+export interface Reflection {
+  id: string
+  day: string // the writer's local date, YYYY-MM-DD
+  language: Language
+  answers: ReflectionAnswers
+  created_at: string
+  updated_at: string | null
+}
+
+export async function listMyReflections() {
+  const { data } = await api.get<Reflection[]>('/api/reflections')
+  return data
+}
+
+export async function saveReflection(day: string, language: Language, answers: ReflectionAnswers) {
+  const { data } = await api.put<Reflection>(`/api/reflections/${day}`, {
+    language,
+    answers,
+  })
+  return data
+}
+
+export async function deleteReflection(id: string) {
+  await api.delete(`/api/reflections/${id}`)
+}
+
+export interface AdminReflection extends Reflection {
+  participant_label: string
+}
+
+export async function listAdminReflections(filter: { participant?: string; day_from?: string; day_to?: string } = {}) {
+  const { data } = await api.get<AdminReflection[]>('/api/admin/reflections', { params: filter })
+  return data
 }
 
 export interface Resource {

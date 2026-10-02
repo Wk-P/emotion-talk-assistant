@@ -3,12 +3,14 @@ import SiteFooter from '@/components/SiteFooter.vue'
 import SiteHeader from '@/components/SiteHeader.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { errorStatus, MIN_PASSWORD_LENGTH, USERNAME_PATTERN } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { redirectTarget } from '@/utils/authRedirect'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const username = ref('')
@@ -26,7 +28,7 @@ async function submit() {
   submitting.value = true
   try {
     await auth.register(username.value, password.value)
-    router.push('/')
+    router.push(redirectTarget(route))
   } catch (e: unknown) {
     const status = errorStatus(e)
     error.value =
@@ -89,7 +91,7 @@ async function submit() {
       </form>
 
       <div class="links">
-        <button type="button" class="btn-text" @click="router.push('/login')">{{ t('auth.haveAccount') }}</button>
+        <button type="button" class="btn-text" @click="router.push({ path: '/login', query: route.query })">{{ t('auth.haveAccount') }}</button>
       </div>
       </div>
     </div>

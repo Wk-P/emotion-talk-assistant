@@ -82,6 +82,7 @@ function chooseLang(lang: Language) {
         <nav v-if="open" class="app-menu-panel" :style="{ top: panelPos.top + 'px', left: panelPos.left + 'px' }">
           <button type="button" class="app-menu-item" @click="go('/history')">{{ t('toolbar.history') }}</button>
           <button type="button" class="app-menu-item" @click="go('/records')">{{ t('toolbar.records') }}</button>
+          <button type="button" class="app-menu-item" @click="go('/reflection')">{{ t('reflection.title') }}</button>
           <button type="button" class="app-menu-item" @click="go('/help')">{{ t('toolbar.help') }}</button>
           <button type="button" class="app-menu-item" @click="go('/privacy')">{{ t('privacy.title') }}</button>
           <button type="button" class="app-menu-item" @click="go('/contact')">{{ t('contact.title') }}</button>

@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_required, get_owned_session
 from app.db.session import get_db
 from app.models.enums import MessageRole
 from app.models.message import Message
-from app.models.session import ConversationSession
+from app.models.user import User
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.dialogue_state import handle_turn
 from app.services.llm import LLMUnavailable
@@ -14,11 +14,14 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 @router.post("", response_model=ChatResponse)
-async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> ChatResponse:
-    session_query = await db.execute(select(ConversationSession).where(ConversationSession.id == payload.session_id))
-    session = session_query.scalar_one_or_none()
-    if session is None:
-        raise HTTPException(status_code=404, detail="session not found")
+async def chat(
+    payload: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user_required),
+) -> ChatResponse:
+    # Only the logged-in owner may continue a conversation — a session id
+    # alone used to be enough.
+    session = await get_owned_session(payload.session_id, db, user)
 
     confirmation = payload.confirmation.model_dump() if payload.confirmation else None
 

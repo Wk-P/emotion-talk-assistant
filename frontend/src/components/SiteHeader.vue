@@ -17,6 +17,7 @@ const links = [
   { to: '/', label: 'site.nav.chat' },
   { to: '/history', label: 'toolbar.history' },
   { to: '/records', label: 'toolbar.records' },
+  { to: '/reflection', label: 'reflection.title' },
   { to: '/help', label: 'toolbar.help' },
   { to: '/privacy', label: 'privacy.title' },
 ]

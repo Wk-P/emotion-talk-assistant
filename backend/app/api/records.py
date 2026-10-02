@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_optional
+from app.api.deps import get_current_user_required, get_owned_session
 from app.db.session import get_db
 from app.models.enums import ConsentCategory
 from app.models.record import SavedRecord
@@ -19,22 +19,16 @@ router = APIRouter(prefix="/api/records", tags=["records"])
 _CULTURE_TAGGED_TYPES = {"cause_interpretation"}
 
 
-def _owner_filter(user: User | None, device_id: str | None) -> ColumnElement[bool]:
-    """Same ownership rule as GET /api/session/history: the account when
-    logged in, otherwise the browser's device_id."""
+def _owner_filter(user: User) -> ColumnElement[bool]:
+    """Same ownership rule as GET /api/session/history: the account."""
 
-    if user is not None:
-        return ConversationSession.user_id == user.id
-    if device_id:
-        return ConversationSession.device_id == device_id
-    raise HTTPException(status_code=400, detail="device_id required when not logged in")
+    return ConversationSession.user_id == user.id
 
 
 @router.get("", response_model=list[OwnRecordItem])
 async def list_my_records(
-    device_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> list[OwnRecordItem]:
     """Every record the caller saved, across all their conversations,
     newest first."""
@@ -42,7 +36,7 @@ async def list_my_records(
     result = await db.execute(
         select(SavedRecord, ConversationSession.created_at)
         .join(ConversationSession, ConversationSession.id == SavedRecord.session_id)
-        .where(_owner_filter(user, device_id))
+        .where(_owner_filter(user))
         .order_by(SavedRecord.created_at.desc())
     )
     return [
@@ -59,11 +53,12 @@ async def list_my_records(
 
 
 @router.post("", response_model=RecordResponse, status_code=201)
-async def save_record(payload: SaveRecordRequest, db: AsyncSession = Depends(get_db)) -> RecordResponse:
-    result = await db.execute(select(ConversationSession).where(ConversationSession.id == payload.session_id))
-    session = result.scalar_one_or_none()
-    if session is None:
-        raise HTTPException(status_code=404, detail="session not found")
+async def save_record(
+    payload: SaveRecordRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user_required),
+) -> RecordResponse:
+    session = await get_owned_session(payload.session_id, db, user)
 
     category = (
         ConsentCategory.CULTURE_ADAPTATION_INFO
@@ -91,8 +86,11 @@ async def save_record(payload: SaveRecordRequest, db: AsyncSession = Depends(get
 
 
 @router.get("/{session_id}", response_model=list[RecordResponse])
-async def list_records(session_id: str, db: AsyncSession = Depends(get_db)) -> list[RecordResponse]:
-    result = await db.execute(select(SavedRecord).where(SavedRecord.session_id == session_id))
+async def list_records(
+    session: ConversationSession = Depends(get_owned_session),
+    db: AsyncSession = Depends(get_db),
+) -> list[RecordResponse]:
+    result = await db.execute(select(SavedRecord).where(SavedRecord.session_id == session.id))
     records = result.scalars().all()
     return [
         RecordResponse(
@@ -108,15 +106,14 @@ async def list_records(session_id: str, db: AsyncSession = Depends(get_db)) -> l
 @router.delete("/{record_id}", status_code=204)
 async def delete_record(
     record_id: str,
-    device_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> None:
     # Only the owner can delete — a record id alone used to be enough.
     result = await db.execute(
         select(SavedRecord)
         .join(ConversationSession, ConversationSession.id == SavedRecord.session_id)
-        .where(SavedRecord.id == record_id, _owner_filter(user, device_id))
+        .where(SavedRecord.id == record_id, _owner_filter(user))
     )
     record = result.scalar_one_or_none()
     if record is None:

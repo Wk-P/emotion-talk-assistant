@@ -44,6 +44,22 @@ async def get_current_user_required(user: User | None = Depends(get_current_user
     return user
 
 
+async def get_owned_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user_required),
+) -> ConversationSession:
+    """A conversation of the logged-in caller's own. Login is required for
+    everything a participant does (there is no anonymous use); someone
+    else's session id reads as not found rather than forbidden, so ids can't
+    be probed. Admin endpoints use get_session_or_404 instead."""
+
+    session = await get_session_or_404(session_id, db)
+    if session.user_id != user.id:
+        raise HTTPException(status_code=404, detail="session not found")
+    return session
+
+
 async def get_current_admin_required(user: User = Depends(get_current_user_required)) -> User:
     if user.role not in (UserRole.ADMIN, UserRole.SUPERADMIN):
         raise HTTPException(status_code=403, detail="admin access required")

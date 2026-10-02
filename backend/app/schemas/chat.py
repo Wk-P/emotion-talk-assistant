@@ -7,7 +7,6 @@ from app.models.enums import Language, RiskLevel
 
 class SessionCreateRequest(BaseModel):
     language: Language = Language.ZH
-    device_id: str | None = None
 
 
 class SessionResponse(BaseModel):

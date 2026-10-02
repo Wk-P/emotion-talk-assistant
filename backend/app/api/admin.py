@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.enums import Language, UserRole
 from app.models.message import Message
 from app.models.record import SavedRecord
+from app.models.reflection import DailyReflection
 from app.models.session import ConversationSession
 from app.models.user import User
 from app.schemas.admin import (
@@ -27,6 +28,8 @@ from app.schemas.admin import (
     SetRoleRequest,
 )
 from app.services.auth import hash_password, normalize_username
+from app.api.reflections import to_item as _reflection_item
+from app.schemas.reflection import AdminReflectionItem
 from app.services import export_docs
 from app.services.crypto import decrypt_json
 
@@ -187,6 +190,7 @@ async def _delete_user_data(db: AsyncSession, user_id: str) -> None:
     await db.execute(delete(Message).where(Message.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(ConversationSession).where(ConversationSession.user_id == user_id))
+    await db.execute(delete(DailyReflection).where(DailyReflection.user_id == user_id))
 
 
 @router.get("/sessions", response_model=list[AdminSessionItem])
@@ -339,6 +343,35 @@ async def export_sessions_file(
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
+
+
+@router.get("/reflections", response_model=list[AdminReflectionItem])
+async def list_reflections(
+    participant: str | None = Query(default=None, max_length=40),
+    day_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    day_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_required),
+) -> list[AdminReflectionItem]:
+    """每日省察 answers for research review, newest first. De-identified
+    like the conversation list: participants appear only as P-xxxxxxxx."""
+
+    stmt = select(DailyReflection).order_by(DailyReflection.day.desc(), DailyReflection.created_at.desc())
+    if participant:
+        code = participant.strip().lower().removeprefix("p-")
+        if code == "anon":
+            stmt = stmt.where(DailyReflection.user_id.is_(None))
+        elif code:
+            stmt = stmt.where(DailyReflection.user_id.like(f"{_like_escape(code)}%", escape="\\"))
+    if day_from:
+        stmt = stmt.where(DailyReflection.day >= day_from)
+    if day_to:
+        stmt = stmt.where(DailyReflection.day <= day_to)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        AdminReflectionItem(**_reflection_item(r).model_dump(), participant_label=f"P-{(r.user_id or 'anon')[:8]}")
+        for r in rows
+    ]
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_session_or_404
+from app.api.deps import get_owned_session
 from app.db.session import get_db
 from app.models.enums import ConsentCategory
 from app.models.message import Message
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/session", tags=["consent"])
 async def update_consent(
     payload: ConsentUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    session: ConversationSession = Depends(get_session_or_404),
+    session: ConversationSession = Depends(get_owned_session),
 ) -> ConsentStateResponse:
     """PRD 8.5/8.6: the user can grant or revoke each data-use category at any
     time. Revoking DIALOGUE_HISTORY here immediately purges stored turns —
@@ -37,7 +37,7 @@ async def update_consent(
 @router.post("/{session_id}/end")
 async def end_session(
     db: AsyncSession = Depends(get_db),
-    session: ConversationSession = Depends(get_session_or_404),
+    session: ConversationSession = Depends(get_owned_session),
 ) -> dict[str, str]:
     """Purges ephemeral working data (raw dialogue turns) unless the user has
     opted in to keeping them. Saved records (app/api/records.py) are a

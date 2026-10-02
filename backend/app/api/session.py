@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_optional, get_session_or_404
+from app.api.deps import get_current_user_required, get_owned_session
 from app.db.session import get_db
 from app.models.enums import Language, MessageRole
 from app.models.message import Message
@@ -29,17 +29,12 @@ async def get_opening(language: Language = Language.ZH, db: AsyncSession = Depen
 async def start_session(
     payload: SessionCreateRequest,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> SessionResponse:
-    if user is None and not payload.device_id:
-        raise HTTPException(status_code=400, detail="device_id required when not logged in")
-
     # Clean up this owner's earlier chats that were started but never used
     # (no user message) — they're hidden everywhere already, this just keeps
     # them from piling up in the database.
-    owner_filter = (
-        ConversationSession.user_id == user.id if user else ConversationSession.device_id == payload.device_id
-    )
+    owner_filter = ConversationSession.user_id == user.id
     blank_ids = select(ConversationSession.id).where(owner_filter, ConversationSession.participated.is_(False))
     blank = list((await db.execute(blank_ids)).scalars().all())
     if blank:
@@ -49,8 +44,7 @@ async def start_session(
 
     session = ConversationSession(
         language=payload.language,
-        user_id=user.id if user else None,
-        device_id=None if user else payload.device_id,
+        user_id=user.id,
         consent={},
         confirmed_context={"disclaimer_shown": True},
     )
@@ -75,20 +69,12 @@ async def start_session(
 
 @router.get("/history", response_model=list[SessionHistoryItem])
 async def list_history(
-    device_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> list[SessionHistoryItem]:
-    """Logged in: history is scoped to the account regardless of which
-    device it was created on. Anonymous: scoped to the browser-generated
-    device_id instead — there's no account to key off of."""
+    """The caller's own conversations, on whichever device they were held."""
 
-    if user is not None:
-        owner_filter = ConversationSession.user_id == user.id
-    elif device_id:
-        owner_filter = ConversationSession.device_id == device_id
-    else:
-        raise HTTPException(status_code=400, detail="device_id required when not logged in")
+    owner_filter = ConversationSession.user_id == user.id
 
     count_subq = (
         select(Message.session_id, func.count(Message.id).label("message_count"))
@@ -116,7 +102,7 @@ async def list_history(
 @router.get("/{session_id}/messages", response_model=list[HistoryMessageItem])
 async def get_session_messages(
     db: AsyncSession = Depends(get_db),
-    session: ConversationSession = Depends(get_session_or_404),
+    session: ConversationSession = Depends(get_owned_session),
 ) -> list[HistoryMessageItem]:
     result = await db.execute(
         select(Message).where(Message.session_id == session.id).order_by(Message.created_at.asc())
@@ -129,22 +115,15 @@ async def get_session_messages(
 
 @router.delete("/history", status_code=204)
 async def clear_history(
-    device_id: str | None = None,
     db: AsyncSession = Depends(get_db),
-    user: User | None = Depends(get_current_user_optional),
+    user: User = Depends(get_current_user_required),
 ) -> None:
     """User-facing 'clear my records' control. Deletes everything owned by
-    this account (or, anonymously, this device_id): messages, saved records,
-    and the sessions themselves. SQLite's ON DELETE CASCADE is not reliable
-    via aiosqlite here, so each table is cleared explicitly rather than
-    relying on FK cascade."""
+    this account: messages, saved records, and the sessions themselves.
+    SQLite's ON DELETE CASCADE is not reliable via aiosqlite here, so each
+    table is cleared explicitly rather than relying on FK cascade."""
 
-    if user is not None:
-        owner_filter = ConversationSession.user_id == user.id
-    elif device_id:
-        owner_filter = ConversationSession.device_id == device_id
-    else:
-        raise HTTPException(status_code=400, detail="device_id required when not logged in")
+    owner_filter = ConversationSession.user_id == user.id
     session_ids_subq = select(ConversationSession.id).where(owner_filter).subquery()
     await db.execute(delete(Message).where(Message.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(select(session_ids_subq))))
@@ -156,7 +135,7 @@ async def clear_history(
 async def update_language(
     payload: SessionCreateRequest,
     db: AsyncSession = Depends(get_db),
-    session: ConversationSession = Depends(get_session_or_404),
+    session: ConversationSession = Depends(get_owned_session),
 ) -> SessionResponse:
     """Design principle 10.5: switching zh/ko mid-conversation must not
     re-derive or reclassify anything already confirmed — only which language
