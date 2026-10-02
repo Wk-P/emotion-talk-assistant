@@ -42,6 +42,7 @@ def _admin_message(m: Message) -> AdminMessageItem:
         content=m.content,
         created_at=m.created_at.isoformat(),
         prompt_versions=(m.meta or {}).get("prompt_versions"),
+        model=(m.meta or {}).get("model"),
     )
 
 

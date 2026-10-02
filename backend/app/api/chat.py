@@ -57,6 +57,7 @@ async def chat(
                 "candidates": result.candidates,
                 "risk_level": result.risk_level.value,
                 "prompt_versions": result.prompt_versions,
+                "model": result.model,
             },
         )
     )

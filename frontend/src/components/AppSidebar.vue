@@ -76,9 +76,9 @@ onMounted(loadRecent)
     </div>
 
     <nav class="side-nav">
+      <button type="button" @click="router.push('/reflection')">{{ t('reflection.title') }}</button>
       <button type="button" @click="router.push('/history')">{{ t('toolbar.history') }}</button>
       <button type="button" @click="router.push('/records')">{{ t('toolbar.records') }}</button>
-      <button type="button" @click="router.push('/reflection')">{{ t('reflection.title') }}</button>
       <button type="button" @click="router.push('/help')">{{ t('toolbar.help') }}</button>
       <button type="button" @click="router.push('/privacy')">{{ t('privacy.title') }}</button>
       <button type="button" @click="router.push('/contact')">{{ t('contact.title') }}</button>

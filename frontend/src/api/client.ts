@@ -386,6 +386,37 @@ export async function setAdminUserRole(userId: string, role: UserRole) {
   return data
 }
 
+// ---- AI model choice (backend app/api/ai_model.py) ----
+
+export interface ModelCandidate {
+  id: string
+  released: string // YYYY-MM-DD
+  usable: boolean
+  error: string | null
+}
+
+export interface ModelOverview {
+  current: string
+  default: string
+  chosen_here: boolean
+  updated_at: string | null
+  updated_by: string | null
+  candidates: ModelCandidate[]
+  checked_at: string
+  recent_days: number
+}
+
+export async function getModelOverview(refresh = false) {
+  const { data } = await api.get<ModelOverview>('/api/admin/model', { params: refresh ? { refresh: true } : {} })
+  return data
+}
+
+/** `null` goes back to the server's default model. */
+export async function setModel(model: string | null) {
+  const { data } = await api.put<ModelOverview>('/api/admin/model', { model })
+  return data
+}
+
 // ---- Prompt editing (see backend app/api/prompts.py) ----
 
 export interface PromptItem {

@@ -73,21 +73,28 @@ if ! ssh "$SSH_HOST" "for i in \$(seq 15); do curl -sf http://localhost:8000/api
 fi
 echo
 
-# /api/health only proves the server is up. Ask OpenAI about the configured
-# model with the container's own settings, so a bad key or model name fails
-# the deploy here instead of surfacing as a broken chat for users.
+# /api/health only proves the server is up. Send one real JSON-mode request
+# with the model actually in use (the one chosen on the admin page, else
+# OPENAI_MODEL), so a bad key or model fails the deploy here instead of
+# surfacing as a broken chat for users.
 echo "==> AI key check"
 if ! ssh "$SSH_HOST" "cd $REMOTE_DIR && docker compose exec -T backend python -" <<'PY'
 import asyncio
-from openai import AsyncOpenAI
-from app.core.config import get_settings
+from app.db.session import async_session_maker
+from app.services.model_settings import current_model, probe
 
-s = get_settings()
-asyncio.run(AsyncOpenAI(api_key=s.openai_api_key).models.retrieve(s.openai_model))
-print(f"    OpenAI key OK, model {s.openai_model} available")
+async def main():
+    async with async_session_maker() as db:
+        model = await current_model(db)
+    ok, err = await probe(model)
+    if not ok:
+        raise SystemExit(f"    model {model} not usable: {err}")
+    print(f"    OpenAI key OK, model {model} answers")
+
+asyncio.run(main())
 PY
 then
-  echo "AI check failed: the server's OPENAI_API_KEY or OPENAI_MODEL is wrong (see the error above)" >&2
+  echo "AI check failed: the server's OPENAI_API_KEY or the chosen model is wrong (see the error above)" >&2
   exit 1
 fi
 

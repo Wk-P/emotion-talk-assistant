@@ -43,20 +43,21 @@ async def generate_turn(
     system_prompt: str,
     history: list[dict[str, str]],
     user_message: str,
+    model: str,
 ) -> LLMResponse:
-    settings = get_settings()
+    # `model` comes from model_settings.current_model (admin choice, else .env).
     messages = [{"role": "system", "content": system_prompt + RESPONSE_INSTRUCTIONS}]
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
 
     try:
         completion = await _client().chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=messages,
             response_format={"type": "json_object"},
         )
     except APIError as e:
-        logger.exception("OpenAI call failed (model=%s)", settings.openai_model)
+        logger.exception("OpenAI call failed (model=%s)", model)
         status = getattr(e, "status_code", None)
         raise LLMUnavailable(f"{type(e).__name__}{f' {status}' if status else ''}") from e
     raw = completion.choices[0].message.content or "{}"

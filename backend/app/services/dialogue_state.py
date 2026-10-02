@@ -23,6 +23,7 @@ from app.prompts import registry
 from app.prompts.router import build_prompt
 from app.services import safety
 from app.services.llm import generate_turn
+from app.services.model_settings import current_model
 
 HISTORY_TURNS = 12  # most recent messages included as LLM context
 
@@ -112,6 +113,8 @@ class TurnResult:
     # {prompt key: version} this reply was generated from (0 = code default,
     # see app/models/prompt.py). None for turns that use no editable prompt.
     prompt_versions: dict[str, int] | None = None
+    # Which OpenAI model wrote this reply (None when no LLM call was made).
+    model: str | None = None
 
 
 def _intent_from_id(value: str | None) -> DialogueIntent | None:
@@ -321,7 +324,8 @@ async def _continue_flow(
     system_prompt, prompt_versions = await build_prompt(db, intent, session.language, session.self_criticism_level)
     history = await _load_recent_history(db, session.id)
 
-    llm_response = await generate_turn(system_prompt, history, synthetic_text)
+    model = await current_model(db)
+    llm_response = await generate_turn(system_prompt, history, synthetic_text, model)
     candidates = llm_response.candidates
     if ctx.get("seb_entries"):
         # The situation-emotion-behavior summary card is a one-time checkpoint
@@ -336,4 +340,5 @@ async def _continue_flow(
         risk_level=risk,
         intent=intent,
         prompt_versions=prompt_versions,
+        model=model,
     )

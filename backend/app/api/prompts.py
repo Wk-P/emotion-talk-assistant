@@ -22,7 +22,8 @@ from app.schemas.prompt import (
     PromptSaveRequest,
     PromptVersionItem,
 )
-from app.services.llm import RESPONSE_INSTRUCTIONS, generate_turn
+from app.services.llm import RESPONSE_INSTRUCTIONS, LLMUnavailable, generate_turn
+from app.services.model_settings import current_model
 
 router = APIRouter(prefix="/api/admin/prompts", tags=["admin-prompts"])
 
@@ -150,11 +151,15 @@ async def preview_prompt(
         1.0 if payload.self_kindness else 0.0,
         overrides=payload.overrides,
     )
-    response = await generate_turn(
-        system_prompt,
-        [m.model_dump() for m in payload.history],
-        payload.message,
-    )
+    try:
+        response = await generate_turn(
+            system_prompt,
+            [m.model_dump() for m in payload.history],
+            payload.message,
+            await current_model(db),
+        )
+    except LLMUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"ai service unavailable: {e.reason}") from e
     return PromptPreviewResponse(
         reply_text=response.reply_text,
         candidates=response.candidates,

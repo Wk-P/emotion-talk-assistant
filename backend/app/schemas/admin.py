@@ -23,6 +23,8 @@ class AdminMessageItem(BaseModel):
     # {prompt key: version} an assistant reply was generated with — see
     # app/models/prompt.py. None for user messages and older replies.
     prompt_versions: dict[str, int] | None = None
+    # The OpenAI model that wrote an assistant reply (None for older ones).
+    model: str | None = None
 
 
 class AdminRecordItem(BaseModel):
