@@ -122,7 +122,7 @@ export const useSessionStore = defineStore('session', () => {
   async function setLanguage(lang: Language) {
     if (language.value === lang) return
     language.value = lang
-    if (sessionId.value) await updateSessionLanguage(sessionId.value, lang)
+    if (sessionId.value && !ended.value) await updateSessionLanguage(sessionId.value, lang)
   }
 
   function markAnswered(turnIndex: number) {

@@ -61,12 +61,16 @@ FIXED_CONVERSATION_RULES: dict[Language, str] = {
 }
 
 
-def build_system_prompt(rules_text: str, flow_instructions: str, language: Language, flow_format: str) -> str:
-    # rules_text (the common principles, see principles.build_rules_text) and
-    # flow_instructions are passed in because admins can override them (see
+def build_system_prompt(
+    rules_text: str, flow_instructions: str, language: Language, flow_format: str, other_text: str = ""
+) -> str:
+    # rules_text (the common principles), flow_instructions and other_text
+    # (admin-added "其他" blocks) are passed in because admins edit them (see
     # app/prompts/registry.py); the format rules are never overridable.
+    sections = [s for s in (rules_text, flow_instructions, other_text) if s.strip()]
     return (
-        f"{rules_text}\n\n---\n{flow_instructions}\n\n---\n{FORMAT_RULES[language]}\n{flow_format}"
+        "\n\n---\n".join(sections)
+        + f"\n\n---\n{FORMAT_RULES[language]}\n{flow_format}"
         f"\n{REPLY_LANGUAGE[language]}"
         f"\n\n---\n{FIXED_CONVERSATION_RULES[language]}"
     )

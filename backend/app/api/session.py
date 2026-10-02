@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,6 +130,9 @@ async def update_language(
     re-derive or reclassify anything already confirmed — only which language
     future replies are generated in changes."""
 
+    if session.ended_at:
+        # Ended (终止) conversations are sealed — nothing about them changes.
+        raise HTTPException(status_code=409, detail="session ended")
     session.language = payload.language
     db.add(session)
     await db.commit()

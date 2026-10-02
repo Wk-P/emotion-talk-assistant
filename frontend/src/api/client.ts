@@ -433,8 +433,22 @@ export interface PromptItem {
   updated_by: string | null
 }
 
+export type PromptGroup = 'rules' | 'flow' | 'other'
+
+// One block on the admin page: built-in (rename / disable only) or added by
+// an admin (also deletable). See backend app/prompts/registry.load_modules.
+export interface PromptModuleItem {
+  key: string
+  group: PromptGroup
+  built_in: boolean
+  enabled: boolean
+  names: Partial<Record<Language, string>>
+  flow_key: string | null
+}
+
 export interface PromptOverview {
   items: PromptItem[]
+  modules: PromptModuleItem[]
   output_format: string
 }
 
@@ -482,4 +496,25 @@ export async function savePrompt(key: string, language: Language, content: strin
 export async function previewPrompt(payload: PromptPreviewRequest) {
   const { data } = await api.post<PromptPreviewResponse>('/api/admin/prompts/preview', payload)
   return data
+}
+
+export async function createPromptModule(group: PromptGroup, name: string, flowKey?: string) {
+  const { data } = await api.post<PromptModuleItem>('/api/admin/prompts/modules', {
+    group,
+    name,
+    flow_key: flowKey ?? null,
+  })
+  return data
+}
+
+export async function updatePromptModule(
+  key: string,
+  change: { language?: Language; name?: string; enabled?: boolean },
+) {
+  const { data } = await api.patch<PromptModuleItem>(`/api/admin/prompts/modules/${key}`, change)
+  return data
+}
+
+export async function deletePromptModule(key: string) {
+  await api.delete(`/api/admin/prompts/modules/${key}`)
 }

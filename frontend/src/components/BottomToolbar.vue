@@ -42,7 +42,7 @@ async function endConversation() {
     <button type="button" class="btn-outline" :disabled="session.sending" @click="skipQuestion">
       {{ t('toolbar.skip') }}
     </button>
-    <button type="button" class="btn-outline" :disabled="session.sending" @click="confirmingEnd = true">
+    <button type="button" class="btn-outline end-btn" :disabled="session.sending" @click="confirmingEnd = true">
       {{ t('toolbar.end') }}
     </button>
   </nav>
@@ -58,6 +58,15 @@ async function endConversation() {
   flex: 1;
   padding: 8px 6px;
   font-size: 12.5px;
+}
+.end-btn {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+.end-btn:not(:disabled):hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 .toolbar.confirm {
   align-items: center;

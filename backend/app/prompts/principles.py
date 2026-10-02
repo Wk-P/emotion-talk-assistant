@@ -1,7 +1,8 @@
 """Common interaction principles used in every conversation, one admin-editable
 block per prompt-composition area of documents/03_技术文档/指导意见2.md §四 (from
-documents/01_研究资料/프롬프트 구성.pdf, p.97). The section titles are fixed here and
-added in code (build_rules_text); admins only edit each section's body.
+documents/01_研究资料/프롬프트 구성.pdf, p.97). Each section is sent under its
+title (titled_sections); admins can rename, disable or edit any section and
+add their own (app/prompts/registry.load_modules).
 
 Order matters: sections are concatenated in this order into the system
 prompt, before the flow-specific instructions.
@@ -236,9 +237,9 @@ TITLES: dict[str, dict[Language, str]] = {KEY_PREFIX + suffix: titles for suffix
 DEFAULTS: dict[str, dict[Language, str]] = {KEY_PREFIX + suffix: bodies for suffix, _, bodies in SECTIONS}
 
 
-def build_rules_text(bodies: dict[str, str], language: Language) -> str:
-    """The sections in order, each under its fixed title. A section an admin
-    emptied out is left out entirely rather than sent as a bare title."""
+def titled_sections(sections: list[tuple[str, str]]) -> str:
+    """(title, body) pairs, each body under its 【title】, in order. A section
+    an admin emptied out is left out entirely rather than sent as a bare
+    title."""
 
-    parts = [f"【{TITLES[key][language]}】\n{bodies[key].strip()}" for key in KEYS if bodies.get(key, "").strip()]
-    return "\n\n".join(parts)
+    return "\n\n".join(f"【{title}】\n{body.strip()}" for title, body in sections if body.strip())
