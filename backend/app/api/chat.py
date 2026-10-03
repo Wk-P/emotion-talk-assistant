@@ -63,6 +63,7 @@ async def chat(
                 "risk_level": result.risk_level.value,
                 "prompt_versions": result.prompt_versions,
                 "model": result.model,
+                **({"analysis": result.analysis} if result.analysis else {}),
             },
         )
     )

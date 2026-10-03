@@ -11,6 +11,7 @@ Which candidate cards may reach the user at all is enforced in code too
 """
 
 from app.models.enums import Language
+from app.prompts import framework
 
 # Machine-facing rules (candidate field/type names the frontend renders) are
 # kept out of the admin-editable text above, so non-technical admins only
@@ -39,38 +40,25 @@ REPLY_LANGUAGE: dict[Language, str] = {
 }
 
 
-# Fixed conversation rules, set by the research team — not admin-editable and
-# placed last so they win over any example wording in the editable text
-# (e.g. "比如……还是……" in a flow description).
-FIXED_CONVERSATION_RULES: dict[Language, str] = {
-    Language.ZH: (
-        "【固定对话规则（优先于以上所有说明）】\n"
-        "- 提问时只问开放式问题，不要在问题里给出选项或列举可能的答案让用户挑选"
-        "（例如不要说「是 A、B，还是 C？」「比如 X、Y、Z」）。\n"
-        "- 默认用户会主动继续输入更多内容：每次回复简短回应，最多提一个开放式问题，"
-        "不要急着追问，也不要替用户补充或猜测还没说的内容，留出空间让用户自己继续说。"
-    ),
-    Language.KO: (
-        "[고정 대화 규칙 (위의 모든 안내보다 우선)]\n"
-        "- 질문할 때는 열린 질문만 하고, 질문 안에 선택지나 예상 답변을 나열해 고르게 하지 마세요"
-        "(예: 「A인가요, B인가요, 아니면 C인가요?」「예를 들면 X, Y, Z」 같은 표현 금지).\n"
-        "- 사용자가 스스로 더 많은 내용을 입력할 것이라고 기본적으로 가정하세요: 답변은 짧게 반응하고 "
-        "열린 질문은 최대 하나만 하며, 서둘러 추가 질문을 하거나 사용자가 아직 말하지 않은 내용을 "
-        "대신 채우거나 추측하지 말고, 사용자가 스스로 이어서 말할 여지를 남겨 두세요."
-    ),
-}
-
-
 def build_system_prompt(
-    rules_text: str, flow_instructions: str, language: Language, flow_format: str, other_text: str = ""
+    rules_text: str,
+    flow_instructions: str,
+    language: Language,
+    flow_key: str,
+    flow_format: str,
+    other_text: str = "",
 ) -> str:
     # rules_text (the common principles), flow_instructions and other_text
     # (admin-added "其他" blocks) are passed in because admins edit them (see
-    # app/prompts/registry.py); the format rules are never overridable.
+    # app/prompts/registry.py); the format rules and the research framework
+    # are never overridable. The framework goes last so it wins any conflict
+    # with admin text (see app/prompts/framework.py).
     sections = [s for s in (rules_text, flow_instructions, other_text) if s.strip()]
     return (
-        "\n\n---\n".join(sections)
+        framework.EDITABLE_HEADER[language]
+        + "\n\n"
+        + "\n\n---\n".join(sections)
         + f"\n\n---\n{FORMAT_RULES[language]}\n{flow_format}"
         f"\n{REPLY_LANGUAGE[language]}"
-        f"\n\n---\n{FIXED_CONVERSATION_RULES[language]}"
+        f"\n\n---\n{framework.framework_text(flow_key, language)}"
     )

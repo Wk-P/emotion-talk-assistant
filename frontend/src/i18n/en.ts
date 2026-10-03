@@ -281,7 +281,7 @@ export const en = {
     tip1: 'Write the way you would brief a new colleague — plain everyday language, no special format needed.',
     tip2: 'Say directly what you want the AI to do, e.g. “keep replies short” or “don’t ask several questions at once”.',
     tip3: 'Try a few lines first and check the result before saving.',
-    safetyNote: 'How option buttons and summary cards are produced, and how crises are detected and support information is given, are all handled by the system and not edited here — so you can’t break them.',
+    safetyNote: 'What you write here sets the AI’s tone, reply length and wording. The research framework from the project documents (the AI’s role, how deep it goes, what it must never do, and the goal of each conversation step), option buttons and summary cards, and crisis detection and support information are fixed by the system and always take priority — so your edits can’t break them.',
     testTitle: 'Try it out',
     testDesc: 'Chat with the AI using the text currently in the editor. Real users are not affected and nothing is saved.',
     testFlow: 'Which flow to test',

@@ -9,6 +9,8 @@ The LLM only ever produces the reply text and candidate suggestions for the
 turn; it never decides safety routing or writes directly into confirmed_context.
 """
 
+import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,8 +23,10 @@ from app.models.resource import CrisisResource
 from app.models.session import ConversationSession
 from app.prompts.router import build_prompt
 from app.services import safety
-from app.services.llm import generate_turn
+from app.services.llm import LLMUnavailable, analyze_turn, generate_turn
 from app.services.model_settings import current_model
+
+logger = logging.getLogger(__name__)
 
 HISTORY_TURNS = 12  # most recent messages included as LLM context
 
@@ -68,6 +72,9 @@ class TurnResult:
     prompt_versions: dict[str, int] | None = None
     # Which OpenAI model wrote this reply (None when no LLM call was made).
     model: str | None = None
+    # Set only on the turn the analysis pass ran; stored in the message meta
+    # and reused from there by later turns (see _latest_analysis).
+    analysis: dict[str, Any] | None = None
 
 
 async def _crisis_turn(db: AsyncSession, language: Language) -> TurnResult:
@@ -242,6 +249,93 @@ _CLOSING_INSTRUCTION = {
 }
 
 
+# Analysis pass — documents/02_内容与需求/Modified_Log.md "根据设计原理的修正":
+# once the user has confirmed the situation-emotion-behavior summary, code
+# first sorts out what is known (_rough_summary), then one extra model call
+# analyses it along design principles 1-3 (documents/01_研究资料/최종설계원리2.pdf),
+# and the reply is written with that analysis in hand. Runs once per
+# conversation; later turns reuse the stored result. The analysis is the
+# model's guess, never shown to the user and never written into
+# confirmed_context (only user-confirmed data goes there).
+_ANALYSIS_INSTRUCTION = {
+    Language.ZH: (
+        "【内部分析任务：这次不要回复用户】\n"
+        "用户已经确认了下面这份整理。请根据整段对话，按三条设计原理做分析：\n"
+        "1. 情绪与情境：用户有哪些情绪（可能同时有几种）、大概多强烈，与哪些具体情境相连；\n"
+        "2. 想法与解释：困难的原因分别在个人、关系、环境、文化适应哪些方面；哪些是实际发生的事、哪些是用户的解释；"
+        "不要把环境或文化带来的困难归成用户个人的问题；\n"
+        "3. 价值与目标：用户在意的是什么、留学想达成什么，现在的做法和这些目标的关系。\n"
+        "用户没说过的内容不要编，写「未知」。只输出一个 JSON 对象，字段用简体中文："
+        '{"emotions": [string], "intensity": string, "causes": {"personal": string, "relationship": string, '
+        '"environment": string, "acculturation": string}, "facts": [string], "interpretations": [string], '
+        '"needs_values": [string], "self_criticism": string, "next_focus": string}。'
+        "next_focus 写接下来对话最值得一起探索的一点。\n\n"
+    ),
+    Language.KO: (
+        "[내부 분석 작업: 이번에는 사용자에게 답하지 마세요]\n"
+        "사용자가 아래 정리를 확인했어요. 전체 대화를 바탕으로 세 가지 설계원리에 따라 분석하세요:\n"
+        "1. 감정과 상황: 사용자의 감정(여러 가지일 수 있음)과 대략적인 강도, 그리고 연결된 구체적 상황;\n"
+        "2. 생각과 해석: 어려움의 원인이 개인, 관계, 환경, 문화적응 중 어디에 있는지; 실제로 일어난 일과 사용자의 해석 구분; "
+        "환경이나 문화에서 오는 어려움을 사용자 개인의 문제로 돌리지 마세요;\n"
+        "3. 가치와 목표: 사용자가 중요하게 여기는 것, 유학에서 이루고 싶은 것, 지금의 행동과 그 목표의 관계.\n"
+        "사용자가 말하지 않은 내용은 지어내지 말고 '알 수 없음'이라고 쓰세요. JSON 객체 하나만 출력하고 내용은 한국어로 쓰세요: "
+        '{"emotions": [string], "intensity": string, "causes": {"personal": string, "relationship": string, '
+        '"environment": string, "acculturation": string}, "facts": [string], "interpretations": [string], '
+        '"needs_values": [string], "self_criticism": string, "next_focus": string}. '
+        "next_focus에는 앞으로 함께 탐색할 가장 중요한 한 가지를 쓰세요.\n\n"
+    ),
+}
+
+_ANALYSIS_NOTE_HEADER = {
+    Language.ZH: (
+        "【内部分析（只供你理解用户，不要直接念给用户，也不要提到「分析」；都是暂定的推测，"
+        "需要用到时用确认的语气向用户求证）】\n"
+    ),
+    Language.KO: (
+        "[내부 분석 (사용자를 이해하기 위한 참고용이에요. 그대로 읽어 주거나 '분석'이라고 언급하지 마세요. "
+        "모두 잠정적인 추측이니 활용할 때는 확인하는 말투로 사용자에게 물어보세요)]\n"
+    ),
+}
+
+
+def _latest_analysis(messages: list[Message]) -> dict[str, Any] | None:
+    for m in reversed(messages):
+        if m.role == MessageRole.ASSISTANT and (m.meta or {}).get("analysis"):
+            return m.meta["analysis"]
+    return None
+
+
+def _rough_summary(session: ConversationSession, risk: RiskLevel, language: Language) -> str:
+    """What code already knows, handed to the analysis call: the summary the
+    user confirmed (last one wins) plus the code-side screening signals."""
+
+    entry = ((session.confirmed_context or {}).get("seb_entries") or [{}])[-1]
+    level = session.self_criticism_level
+    if language == Language.ZH:
+        criticism = "明显" if level >= 0.5 else "有一些" if level > 0 else "未发现"
+        return (
+            "【程序整理（用户已确认）】\n"
+            f"- 发生了什么：{entry.get('situation') or '未知'}\n"
+            f"- 当时的感受：{entry.get('emotion') or '未知'}\n"
+            f"- 当时怎么应对：{entry.get('behavior') or '未知'}\n"
+            f"- 自我批评的说法：{criticism}\n"
+            f"- 情绪是否激动：{'是' if risk == RiskLevel.WATCH else '否'}"
+        )
+    criticism = "뚜렷함" if level >= 0.5 else "약간 있음" if level > 0 else "발견되지 않음"
+    return (
+        "[프로그램 정리 (사용자 확인 완료)]\n"
+        f"- 무슨 일이 있었는지: {entry.get('situation') or '알 수 없음'}\n"
+        f"- 그때의 감정: {entry.get('emotion') or '알 수 없음'}\n"
+        f"- 그때 어떻게 대처했는지: {entry.get('behavior') or '알 수 없음'}\n"
+        f"- 자기비판적 표현: {criticism}\n"
+        f"- 감정이 격한 상태인지: {'예' if risk == RiskLevel.WATCH else '아니요'}"
+    )
+
+
+def _analysis_note(analysis: dict[str, Any], language: Language) -> str:
+    return _ANALYSIS_NOTE_HEADER[language] + json.dumps(analysis, ensure_ascii=False, indent=1)
+
+
 async def handle_turn(
     db: AsyncSession,
     session: ConversationSession,
@@ -310,7 +404,19 @@ async def _continue_flow(
     history = _history_for_llm(messages, synthetic_text)
 
     model = await current_model(db)
-    llm_response = await generate_turn(system_prompt, history, synthetic_text, model)
+    analysis = _latest_analysis(messages)
+    new_analysis = None
+    if analysis is None and not ending and (session.confirmed_context or {}).get("seb_entries"):
+        instruction = _ANALYSIS_INSTRUCTION[session.language] + _rough_summary(session, risk, session.language)
+        try:
+            new_analysis = await analyze_turn(system_prompt, history, synthetic_text, instruction, model)
+        except LLMUnavailable:
+            # The reply below can still be written without it; the next turn retries.
+            logger.warning("analysis pass failed; replying without it")
+        analysis = new_analysis
+    tail = _analysis_note(analysis, session.language) if analysis else None
+
+    llm_response = await generate_turn(system_prompt, history, synthetic_text, model, tail=tail)
     candidates = [] if ending else _filter_candidates(llm_response.candidates, messages)
     return TurnResult(
         reply_text=llm_response.reply_text,
@@ -319,4 +425,5 @@ async def _continue_flow(
         intent=intent,
         prompt_versions=prompt_versions,
         model=model,
+        analysis=new_analysis,
     )

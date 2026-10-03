@@ -71,6 +71,7 @@ async def build_prompt(
         text("rules"),
         flow_text,
         language,
+        flow_key,
         registry.FLOW_FORMAT_RULES[flow_key][language],
         text("other"),
     )
