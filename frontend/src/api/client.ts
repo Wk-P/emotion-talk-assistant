@@ -458,6 +458,8 @@ export interface PromptModuleItem {
   enabled: boolean
   names: Partial<Record<Language, string>>
   flow_key: string | null
+  /** A conversation step (built-in or added as a step of its own), not a block attached to one. */
+  is_stage: boolean
 }
 
 export interface PromptOverview {
@@ -474,12 +476,10 @@ export interface PromptVersionItem {
   created_by: string | null
 }
 
-export type PreviewIntent = 'vent' | 'organize' | 'stabilize' | 'method'
-
 export interface PromptPreviewRequest {
   language: Language
-  intent: PreviewIntent
-  self_kindness: boolean
+  /** The stage to test: a built-in flow key, e.g. 'flow.explore'. */
+  stage: string
   overrides: Record<string, string>
   history: { role: 'user' | 'assistant'; content: string }[]
   message: string
@@ -526,6 +526,38 @@ export async function updatePromptModule(
   change: { language?: Language; name?: string; enabled?: boolean },
 ) {
   const { data } = await api.patch<PromptModuleItem>(`/api/admin/prompts/modules/${key}`, change)
+  return data
+}
+
+export interface PurposeOption {
+  id: string
+  labels: Partial<Record<Language, string>>
+  /** A later step this button jumps to; null = just the next step. */
+  jump: string | null
+}
+
+/** Admin-set flow settings (backend app/services/flow_config.py). */
+export interface FlowConfig {
+  /** Per step: [minimum, maximum] user turns. */
+  limits: Record<string, [number, number]>
+  purposes: PurposeOption[]
+  /** How many recent messages the AI sees each turn. */
+  history_turns: number
+}
+
+export async function getFlowConfig() {
+  const { data } = await api.get<FlowConfig & { defaults: FlowConfig }>('/api/admin/prompts/flow-config')
+  return data
+}
+
+export async function saveFlowConfig(config: FlowConfig) {
+  const { data } = await api.put<FlowConfig & { defaults: FlowConfig }>('/api/admin/prompts/flow-config', config)
+  return data
+}
+
+/** The order conversations go through the steps (closing is always last). */
+export async function saveFlowOrder(order: string[]) {
+  const { data } = await api.put<{ order: string[] }>('/api/admin/prompts/flow-order', { order })
   return data
 }
 

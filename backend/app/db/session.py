@@ -26,6 +26,8 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_sessions_participated)
+        await conn.run_sync(_add_sessions_flow_state)
+        await conn.run_sync(_remap_retired_flow_keys)
         await conn.run_sync(_delete_unused_sessions)
 
 
@@ -51,6 +53,28 @@ def _add_sessions_participated(conn) -> None:
             "AND (ended_at IS NOT NULL OR id IN (SELECT session_id FROM saved_records)))"
         )
     )
+
+
+def _add_sessions_flow_state(conn) -> None:
+    """One-off in-place migration: the stage column (app/services/flow.py).
+    Existing sessions start empty and get a stage inferred on their next turn."""
+
+    from sqlalchemy import inspect, text
+
+    columns = {c["name"] for c in inspect(conn).get_columns("sessions")}
+    if "flow_state" not in columns:
+        conn.execute(text("ALTER TABLE sessions ADD COLUMN flow_state JSON NOT NULL DEFAULT '{}'"))
+
+
+def _remap_retired_flow_keys(conn) -> None:
+    """The four old flows became the flowchart stages (app/prompts/stages.py).
+    Blocks admins had added under a retired flow move to the stage that
+    replaced it. Runs on every startup; a no-op once done."""
+
+    from sqlalchemy import text
+
+    for old, new in (("flow.emotion_exploration", "flow.explore"), ("flow.recovery_plan", "flow.act")):
+        conn.execute(text("UPDATE prompt_modules SET flow_key = :new WHERE flow_key = :old"), {"old": old, "new": new})
 
 
 def _delete_unused_sessions(conn) -> None:

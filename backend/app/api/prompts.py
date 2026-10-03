@@ -19,6 +19,9 @@ from app.models.user import User
 from app.prompts import registry
 from app.prompts.router import build_prompt
 from app.schemas.prompt import (
+    FlowConfigOverview,
+    FlowConfigPayload,
+    FlowOrder,
     PromptItem,
     PromptModuleCreateRequest,
     PromptModuleItem,
@@ -29,6 +32,7 @@ from app.schemas.prompt import (
     PromptSaveRequest,
     PromptVersionItem,
 )
+from app.services import flow_config
 from app.services.llm import RESPONSE_INSTRUCTIONS, LLMUnavailable, generate_turn
 from app.services.model_settings import current_effort, current_model
 
@@ -45,7 +49,13 @@ async def _check_key(db: AsyncSession, key: str) -> None:
 
 def _module_item(m: registry.Module) -> PromptModuleItem:
     return PromptModuleItem(
-        key=m.key, group=m.group, built_in=m.built_in, enabled=m.enabled, names=m.names, flow_key=m.flow_key
+        key=m.key,
+        group=m.group,
+        built_in=m.built_in,
+        enabled=m.enabled,
+        names=m.names,
+        flow_key=m.flow_key,
+        is_stage=m.is_stage,
     )
 
 
@@ -85,6 +95,62 @@ async def list_prompts(
     )
 
 
+@router.get("/flow-order", response_model=FlowOrder)
+async def get_flow_order(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_required),
+) -> FlowOrder:
+    return FlowOrder(order=registry.flow_sequence(await registry.load_modules(db)))
+
+
+@router.put("/flow-order", response_model=FlowOrder)
+async def set_flow_order(
+    payload: FlowOrder,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_required),
+) -> FlowOrder:
+    """Saves the order of the steps. Must list every orderable step exactly
+    once; conversations follow it from their next turn on (app/services/flow.py)."""
+
+    current = registry.flow_sequence(await registry.load_modules(db))
+    if sorted(payload.order) != sorted(current):
+        raise HTTPException(status_code=422, detail="order must list every step exactly once")
+    await registry.save_flow_order(db, payload.order, admin.id)
+    await db.commit()
+    return FlowOrder(order=payload.order)
+
+
+@router.get("/flow-config", response_model=FlowConfigOverview)
+async def get_flow_config(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_required),
+) -> FlowConfigOverview:
+    return FlowConfigOverview(**await flow_config.for_admin(db))
+
+
+@router.put("/flow-config", response_model=FlowConfigOverview)
+async def set_flow_config(
+    payload: FlowConfigPayload,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_required),
+) -> FlowConfigOverview:
+    """Saves the per-step turn limits, the purpose buttons and the history
+    length. Conversations use them from their next turn on."""
+
+    data = payload.model_dump()
+    data["purposes"] = [
+        {**p, "labels": {k: v.strip() for k, v in p["labels"].items() if k in {lang.value for lang in Language}}}
+        for p in data["purposes"]
+    ]
+    stage_keys = {m.key for m in await registry.load_modules(db) if m.is_stage}
+    reason = flow_config.validate(data, stage_keys)
+    if reason:
+        raise HTTPException(status_code=422, detail=reason)
+    await flow_config.save(db, data, admin.id)
+    await db.commit()
+    return FlowConfigOverview(**await flow_config.for_admin(db))
+
+
 @router.post("/modules", response_model=PromptModuleItem)
 async def create_module(
     payload: PromptModuleCreateRequest,
@@ -98,9 +164,12 @@ async def create_module(
     if not name:
         raise HTTPException(status_code=422, detail="name required")
     flow_key = None
-    if payload.group == "flow":
-        if payload.flow_key not in registry.FLOW_KEYS:
-            raise HTTPException(status_code=422, detail="flow_key must be one of the built-in flows")
+    if payload.group == "flow" and payload.flow_key:
+        # A block attached to a step; without flow_key it is a step of its own,
+        # placed last (before closing) until admins move it.
+        stage_keys = {m.key for m in await registry.load_modules(db) if m.is_stage}
+        if payload.flow_key not in stage_keys:
+            raise HTTPException(status_code=422, detail="flow_key must be a stage")
         flow_key = payload.flow_key
     row = PromptModule(
         key=f"{registry.CUSTOM_PREFIX}{uuid.uuid4().hex[:12]}",
@@ -113,7 +182,15 @@ async def create_module(
     )
     db.add(row)
     await db.commit()
-    return PromptModuleItem(key=row.key, group=row.group, built_in=False, enabled=True, names=row.names, flow_key=flow_key)
+    return PromptModuleItem(
+        key=row.key,
+        group=row.group,
+        built_in=False,
+        enabled=True,
+        names=row.names,
+        flow_key=flow_key,
+        is_stage=row.group == "flow" and not flow_key,
+    )
 
 
 @router.patch("/modules/{key}", response_model=PromptModuleItem)
@@ -177,6 +254,11 @@ async def delete_module(
     row = await db.get(PromptModule, key)
     if row is None:
         raise HTTPException(status_code=404, detail="unknown prompt key")
+    if row.group == "flow" and not row.flow_key:
+        # A step of its own: blocks attached to it would be left pointing at nothing.
+        attached = await db.execute(select(PromptModule.key).where(PromptModule.flow_key == key).limit(1))
+        if attached.first():
+            raise HTTPException(status_code=409, detail="step still has blocks attached")
     await db.delete(row)
     await db.commit()
     return Response(status_code=204)
@@ -259,13 +341,9 @@ async def preview_prompt(
         if not content or len(content) > registry.MAX_CONTENT_LENGTH:
             raise HTTPException(status_code=422, detail=f"invalid draft for {key}")
 
-    system_prompt, versions = await build_prompt(
-        db,
-        payload.intent,
-        payload.language,
-        1.0 if payload.self_kindness else 0.0,
-        overrides=payload.overrides,
-    )
+    if payload.stage not in {m.key for m in await registry.load_modules(db) if m.is_stage}:
+        raise HTTPException(status_code=422, detail="stage must be one of the built-in stages")
+    system_prompt, versions = await build_prompt(db, payload.stage, payload.language, overrides=payload.overrides)
     try:
         response = await generate_turn(
             system_prompt,

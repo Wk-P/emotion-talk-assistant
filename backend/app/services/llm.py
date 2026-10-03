@@ -28,10 +28,18 @@ class LLMUnavailable(Exception):
         self.reason = reason
 
 
+# Progress signals the model reports alongside the reply (app/prompts/stages.
+# signal_rules), consumed by app/services/flow.after_reply.
+SIGNAL_FIELDS = ("stage_done", "user_request", "self_criticism")
+
+
 class LLMResponse:
-    def __init__(self, reply_text: str, candidates: list[dict[str, Any]]):
+    def __init__(
+        self, reply_text: str, candidates: list[dict[str, Any]], signals: dict[str, Any] | None = None
+    ):
         self.reply_text = reply_text
         self.candidates = candidates
+        self.signals = signals or {}
 
 
 def _client() -> AsyncOpenAI:
@@ -39,18 +47,10 @@ def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.openai_api_key)
 
 
-def _messages(
-    system_prompt: str, history: list[dict[str, str]], user_message: str, tail: str | None
-) -> list[dict[str, str]]:
-    # Everything up to the user message is identical between analyze_turn and
-    # generate_turn in the same turn, so the provider's automatic prompt
-    # caching serves the second call's input from cache. Turn-specific text
-    # therefore goes in a trailing system message, never into system_prompt.
+def _messages(system_prompt: str, history: list[dict[str, str]], user_message: str) -> list[dict[str, str]]:
     messages = [{"role": "system", "content": system_prompt + RESPONSE_INSTRUCTIONS}]
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
-    if tail:
-        messages.append({"role": "system", "content": tail})
     return messages
 
 
@@ -91,32 +91,16 @@ async def generate_turn(
     history: list[dict[str, str]],
     user_message: str,
     model: str,
-    tail: str | None = None,
     effort: str | None = None,
 ) -> LLMResponse:
     # `model` and `effort` come from model_settings (admin choice; model
     # falls back to .env, effort to OpenAI's default for the model).
-    parsed = await _complete_json(_messages(system_prompt, history, user_message, tail), model, effort)
+    parsed = await _complete_json(_messages(system_prompt, history, user_message), model, effort)
     if isinstance(parsed, str):
         parsed = {"reply_text": parsed, "candidates": []}
 
     return LLMResponse(
         reply_text=parsed.get("reply_text", ""),
         candidates=parsed.get("candidates", []) or [],
+        signals={k: parsed.get(k) for k in SIGNAL_FIELDS},
     )
-
-
-async def analyze_turn(
-    system_prompt: str,
-    history: list[dict[str, str]],
-    user_message: str,
-    instruction: str,
-    model: str,
-    effort: str | None = None,
-) -> dict[str, Any] | None:
-    """An extra, user-invisible call that returns the model's analysis as a
-    JSON object (see dialogue_state._ANALYSIS_INSTRUCTION). None if the
-    output wasn't a JSON object."""
-
-    parsed = await _complete_json(_messages(system_prompt, history, user_message, instruction), model, effort)
-    return parsed if isinstance(parsed, dict) else None

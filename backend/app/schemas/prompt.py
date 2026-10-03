@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import DialogueIntent, Language
+from app.models.enums import Language
 from app.prompts.registry import MAX_CONTENT_LENGTH, MAX_MODULE_NAME_LENGTH
 from app.schemas.chat import CandidateCard
 
@@ -26,6 +26,9 @@ class PromptModuleItem(BaseModel):
     # name (built-in blocks) or the other language's name (added blocks).
     names: dict[str, str]
     flow_key: str | None
+    # A conversation step (built-in, or added as a step of its own) rather
+    # than a block attached to one.
+    is_stage: bool = False
 
 
 class PromptOverview(BaseModel):
@@ -49,6 +52,31 @@ class PromptSaveRequest(BaseModel):
     note: str | None = Field(default=None, max_length=200)
 
 
+class FlowOrder(BaseModel):
+    # The steps admins can order, in order (turned-off ones too); closing
+    # (always last) and stabilization (not in the sequence) are left out.
+    order: list[str] = Field(max_length=100)
+
+
+class PurposeOption(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    # By language value ("zh"/"ko").
+    labels: dict[str, str]
+    # A later step this button jumps to; None = just the next step.
+    jump: str | None = None
+
+
+class FlowConfigPayload(BaseModel):
+    # Per step: [minimum, maximum] user turns (see app/services/flow_config.py).
+    limits: dict[str, tuple[int, int]]
+    purposes: list[PurposeOption] = Field(max_length=8)
+    history_turns: int
+
+
+class FlowConfigOverview(FlowConfigPayload):
+    defaults: FlowConfigPayload
+
+
 class PromptModuleCreateRequest(BaseModel):
     group: Literal["rules", "flow", "other"]
     name: str = Field(min_length=1, max_length=MAX_MODULE_NAME_LENGTH)
@@ -70,9 +98,8 @@ class PreviewMessage(BaseModel):
 
 class PromptPreviewRequest(BaseModel):
     language: Language
-    intent: DialogueIntent = DialogueIntent.VENT
-    # Forces the self-kindness flow, as a high self-criticism level would.
-    self_kindness: bool = False
+    # The stage to test (a built-in flow key, app/prompts/stages.py).
+    stage: str = "flow.listen"
     # Unsaved draft text per prompt key, used instead of the saved version.
     overrides: dict[str, str] = {}
     history: list[PreviewMessage] = Field(default=[], max_length=40)

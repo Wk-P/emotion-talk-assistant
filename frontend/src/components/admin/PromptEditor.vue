@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import FlowOrderEditor from './FlowOrderEditor.vue'
 import {
   createPromptModule,
   deletePromptModule,
+  errorStatus,
   listPromptVersions,
   listPrompts,
   previewPrompt,
@@ -11,7 +13,6 @@ import {
   updatePromptModule,
   type CandidateCard,
   type Language,
-  type PreviewIntent,
   type PromptGroup,
   type PromptItem,
   type PromptModuleItem,
@@ -49,7 +50,20 @@ const langItems = computed(() => items.value.filter((i) => i.language === lang.v
 // by the blocks admins added to it), then admins' own "其他" blocks. The
 // backend sends `modules` already in this order.
 const GROUPS: PromptGroup[] = ['rules', 'flow', 'other']
-const FLOW_KEYS = ['flow.emotion_exploration', 'flow.stabilization', 'flow.recovery_plan', 'flow.self_kindness']
+// Every step (built-in or admin-added), in the admins' order.
+const FLOW_KEYS = computed(() => modules.value.filter((m) => m.is_stage).map((m) => m.key))
+// Steps with no text in the language being edited (flagged by the order editor).
+const emptyStageKeys = computed(() =>
+  langItems.value.filter((i) => FLOW_KEYS.value.includes(i.key) && !i.content.trim()).map((i) => i.key),
+)
+
+// "编辑问法" on a step card: select it and bring the editor into view.
+const editorEl = ref<HTMLElement | null>(null)
+async function editStep(key: string) {
+  selectedKey.value = key
+  await nextTick()
+  editorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 const groupedItems = computed(() =>
   GROUPS.map((group) => ({
     group,
@@ -78,6 +92,7 @@ function nameOf(key: string): string {
 
 function descOf(m: PromptModuleItem): string {
   if (m.built_in) return t(`prompts.keys.${m.key}.desc`)
+  if (m.is_stage) return t('prompts.customDesc.stage')
   if (m.group === 'flow') return t('prompts.customDesc.flow', { flow: nameOf(m.flow_key ?? '') })
   return t(`prompts.customDesc.${m.group}`)
 }
@@ -85,14 +100,14 @@ function descOf(m: PromptModuleItem): string {
 // ---- Adding / renaming / turning off / deleting blocks ----
 const addingGroup = ref<PromptGroup | null>(null)
 const newName = ref('')
-const newFlowKey = ref(FLOW_KEYS[0]!)
+const newFlowKey = ref('flow.listen')
 const moduleBusy = ref(false)
 const moduleError = ref('')
 
 function startAdd(group: PromptGroup) {
   addingGroup.value = group
   newName.value = ''
-  newFlowKey.value = FLOW_KEYS[0]!
+  newFlowKey.value = FLOW_KEYS.value[0] ?? 'flow.listen'
   moduleError.value = ''
 }
 
@@ -171,8 +186,8 @@ async function removeModule() {
     drafts.value = next
     selectedKey.value = m.group === 'flow' && m.flow_key ? m.flow_key : 'rules.role_scope'
     await load()
-  } catch {
-    moduleError.value = t('prompts.actionFailed')
+  } catch (e) {
+    moduleError.value = errorStatus(e) === 409 ? t('prompts.stageHasBlocks') : t('prompts.actionFailed')
   } finally {
     moduleBusy.value = false
   }
@@ -194,8 +209,10 @@ function isDirty(item: PromptItem) {
 const dirty = computed(() => (current.value ? isDirty(current.value) : false))
 const draftIsDefault = computed(() => current.value !== null && draft.value === current.value.default_content)
 
-async function load() {
-  loading.value = true
+// `silent`: refresh in place (after changing the step order or a step's
+// on/off) without hiding the page.
+async function load(silent = false) {
+  if (!silent) loading.value = true
   try {
     const data = await listPrompts()
     items.value = data.items
@@ -279,9 +296,9 @@ interface TestTurn {
 }
 // One per flow the router can pick (vent and organize both map to the
 // exploration flow, so only one of them is offered).
-const INTENTS: PreviewIntent[] = ['vent', 'stabilize', 'method']
-const testIntent = ref<PreviewIntent>('vent')
-const testSelfKindness = ref(false)
+// In a real conversation the stage is chosen by the system; here the admin
+// picks one to try.
+const testStage = ref('flow.listen')
 const testTurns = ref<TestTurn[]>([])
 const testInput = ref('')
 const testSending = ref(false)
@@ -328,8 +345,7 @@ async function sendTest() {
   try {
     const res = await previewPrompt({
       language: lang.value,
-      intent: testIntent.value,
-      self_kindness: testSelfKindness.value,
+      stage: testStage.value,
       overrides: draftOverrides.value,
       history,
       message,
@@ -353,7 +369,7 @@ function clearTest() {
   testError.value = ''
 }
 
-onMounted(load)
+onMounted(() => load())
 </script>
 
 <template>
@@ -380,6 +396,15 @@ onMounted(load)
       </div>
     </div>
 
+    <FlowOrderEditor
+      v-if="!loading"
+      :modules="modules"
+      :name-of="nameOf"
+      :empty-keys="emptyStageKeys"
+      @edit="editStep"
+      @reload="load(true)"
+    />
+
     <!-- Narrow: stacked. >=1024px: list | editor, test panel below.
          >=1360px: full-width three-column workspace — list | editor | a
          sticky, full-height test chat on the right. -->
@@ -395,7 +420,7 @@ onMounted(load)
             :key="m.key"
             type="button"
             class="block"
-            :class="{ selected: m.key === selectedKey, child: !m.built_in && m.group === 'flow', off: !m.enabled }"
+            :class="{ selected: m.key === selectedKey, child: !m.is_stage && m.group === 'flow', off: !m.enabled }"
             @click="selectedKey = m.key"
           >
             <span class="block-name">{{ nameOf(m.key) }}</span>
@@ -428,7 +453,7 @@ onMounted(load)
         </template>
       </nav>
 
-      <section v-if="current" class="editor panel">
+      <section v-if="current" ref="editorEl" class="editor panel">
         <h2 class="panel-title">{{ nameOf(current.key) }}</h2>
         <p v-if="currentModule" class="panel-desc">{{ descOf(currentModule) }}</p>
 
@@ -547,28 +572,18 @@ onMounted(load)
           <div class="option-label">{{ t('prompts.testFlow') }}</div>
           <div class="chips" role="radiogroup">
             <button
-              v-for="intent in INTENTS"
-              :key="intent"
+              v-for="stage in FLOW_KEYS"
+              :key="stage"
               type="button"
               role="radio"
               class="chip"
-              :class="{ on: testIntent === intent }"
-              :aria-checked="testIntent === intent"
-              @click="testIntent = intent"
+              :class="{ on: testStage === stage }"
+              :aria-checked="testStage === stage"
+              @click="testStage = stage"
             >
-              {{ t(`prompts.intent.${intent}`) }}
+              {{ nameOf(stage) }}
             </button>
           </div>
-          <button
-            type="button"
-            role="switch"
-            class="switch-row"
-            :aria-checked="testSelfKindness"
-            @click="testSelfKindness = !testSelfKindness"
-          >
-            <span class="switch" :class="{ on: testSelfKindness }"><span class="knob" /></span>
-            <span>{{ t('prompts.forceSelfKindness') }}</span>
-          </button>
           <div v-if="draftCount > 0" class="draft-banner">
             <span class="draft-dot" />
             {{ t('prompts.testDrafts', { n: draftCount }) }}
@@ -1133,46 +1148,6 @@ pre {
   border-color: var(--accent);
   color: #fff;
   box-shadow: 0 4px 12px rgba(108, 92, 231, 0.25);
-}
-.switch-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: none;
-  background: none;
-  padding: 2px 0;
-  font-size: 12.5px;
-  color: var(--text);
-  text-align: left;
-}
-.switch-row:not(:disabled):hover {
-  transform: none;
-}
-.switch {
-  position: relative;
-  flex-shrink: 0;
-  width: 34px;
-  height: 20px;
-  border-radius: 999px;
-  background: var(--border);
-  transition: background 0.18s ease;
-}
-.switch.on {
-  background: var(--accent);
-}
-.knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(31, 35, 51, 0.2);
-  transition: transform 0.18s ease;
-}
-.switch.on .knob {
-  transform: translateX(14px);
 }
 .draft-banner {
   display: flex;

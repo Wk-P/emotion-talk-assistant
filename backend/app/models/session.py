@@ -48,5 +48,10 @@ class ConversationSession(Base):
     #  "seb_entries": [...]}
     confirmed_context: Mapped[dict] = mapped_column(JSON, default=dict)
 
+    # Where the conversation is in the flowchart, kept by app/services/flow.py:
+    # {"stage": "flow.listen"|…, "turns": int, "purpose": str|None,
+    #  "branch": "strong"|"weak"|"none"|None}. Decided in code, never by the model.
+    flow_state: Mapped[dict] = mapped_column(JSON, default=dict)
+
     # Per-category booleans, see ConsentCategory. Defaults are all False (opt-in only).
     consent: Mapped[dict] = mapped_column(JSON, default=dict)
