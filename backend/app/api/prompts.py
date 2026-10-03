@@ -29,7 +29,7 @@ from app.schemas.prompt import (
     PromptVersionItem,
 )
 from app.services.llm import RESPONSE_INSTRUCTIONS, LLMUnavailable, generate_turn
-from app.services.model_settings import current_model
+from app.services.model_settings import current_effort, current_model
 
 router = APIRouter(prefix="/api/admin/prompts", tags=["admin-prompts"])
 
@@ -271,6 +271,7 @@ async def preview_prompt(
             [m.model_dump() for m in payload.history],
             payload.message,
             await current_model(db),
+            effort=await current_effort(db),
         )
     except LLMUnavailable as e:
         raise HTTPException(status_code=503, detail=f"ai service unavailable: {e.reason}") from e

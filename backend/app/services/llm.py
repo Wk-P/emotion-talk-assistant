@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Any
 
-from openai import APIError, AsyncOpenAI
+from openai import APIError, AsyncOpenAI, BadRequestError
 
 from app.core.config import get_settings
 
@@ -54,13 +54,26 @@ def _messages(
     return messages
 
 
-async def _complete_json(messages: list[dict[str, str]], model: str) -> dict[str, Any] | str:
+async def _create(messages: list[dict[str, str]], model: str, effort: str | None):
+    kwargs: dict[str, Any] = {"reasoning_effort": effort} if effort else {}
     try:
-        completion = await _client().chat.completions.create(
-            model=model,
-            messages=messages,
-            response_format={"type": "json_object"},
+        return await _client().chat.completions.create(
+            model=model, messages=messages, response_format={"type": "json_object"}, **kwargs
         )
+    except BadRequestError as e:
+        # The admin set an effort, then switched to a model that doesn't take
+        # one: answer at the model's default rather than failing every turn.
+        if effort and "reasoning" in str(e).lower():
+            logger.warning("model %s rejected reasoning_effort=%s; retrying without it", model, effort)
+            return await _client().chat.completions.create(
+                model=model, messages=messages, response_format={"type": "json_object"}
+            )
+        raise
+
+
+async def _complete_json(messages: list[dict[str, str]], model: str, effort: str | None) -> dict[str, Any] | str:
+    try:
+        completion = await _create(messages, model, effort)
     except APIError as e:
         logger.exception("OpenAI call failed (model=%s)", model)
         status = getattr(e, "status_code", None)
@@ -79,9 +92,11 @@ async def generate_turn(
     user_message: str,
     model: str,
     tail: str | None = None,
+    effort: str | None = None,
 ) -> LLMResponse:
-    # `model` comes from model_settings.current_model (admin choice, else .env).
-    parsed = await _complete_json(_messages(system_prompt, history, user_message, tail), model)
+    # `model` and `effort` come from model_settings (admin choice; model
+    # falls back to .env, effort to OpenAI's default for the model).
+    parsed = await _complete_json(_messages(system_prompt, history, user_message, tail), model, effort)
     if isinstance(parsed, str):
         parsed = {"reply_text": parsed, "candidates": []}
 
@@ -97,10 +112,11 @@ async def analyze_turn(
     user_message: str,
     instruction: str,
     model: str,
+    effort: str | None = None,
 ) -> dict[str, Any] | None:
     """An extra, user-invisible call that returns the model's analysis as a
     JSON object (see dialogue_state._ANALYSIS_INSTRUCTION). None if the
     output wasn't a JSON object."""
 
-    parsed = await _complete_json(_messages(system_prompt, history, user_message, instruction), model)
+    parsed = await _complete_json(_messages(system_prompt, history, user_message, instruction), model, effort)
     return parsed if isinstance(parsed, dict) else None

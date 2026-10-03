@@ -24,7 +24,7 @@ from app.models.session import ConversationSession
 from app.prompts.router import build_prompt
 from app.services import safety
 from app.services.llm import LLMUnavailable, analyze_turn, generate_turn
-from app.services.model_settings import current_model
+from app.services.model_settings import current_effort, current_model
 
 logger = logging.getLogger(__name__)
 
@@ -404,19 +404,20 @@ async def _continue_flow(
     history = _history_for_llm(messages, synthetic_text)
 
     model = await current_model(db)
+    effort = await current_effort(db)
     analysis = _latest_analysis(messages)
     new_analysis = None
     if analysis is None and not ending and (session.confirmed_context or {}).get("seb_entries"):
         instruction = _ANALYSIS_INSTRUCTION[session.language] + _rough_summary(session, risk, session.language)
         try:
-            new_analysis = await analyze_turn(system_prompt, history, synthetic_text, instruction, model)
+            new_analysis = await analyze_turn(system_prompt, history, synthetic_text, instruction, model, effort)
         except LLMUnavailable:
             # The reply below can still be written without it; the next turn retries.
             logger.warning("analysis pass failed; replying without it")
         analysis = new_analysis
     tail = _analysis_note(analysis, session.language) if analysis else None
 
-    llm_response = await generate_turn(system_prompt, history, synthetic_text, model, tail=tail)
+    llm_response = await generate_turn(system_prompt, history, synthetic_text, model, tail=tail, effort=effort)
     candidates = [] if ending else _filter_candidates(llm_response.candidates, messages)
     return TurnResult(
         reply_text=llm_response.reply_text,

@@ -1,8 +1,9 @@
-"""Admin choice of the OpenAI model (see app/services/model_settings.py).
-Any admin (admin or superadmin) can view and change it; a change is only
-accepted after a test call to the model succeeds."""
+"""Admin choice of the OpenAI model and its reasoning effort (see
+app/services/model_settings.py). Any admin (admin or superadmin) can view
+and change them; a change is only accepted after a test call succeeds."""
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -23,6 +24,8 @@ class ModelCandidate(BaseModel):
     released: str  # YYYY-MM-DD
     usable: bool
     error: str | None = None
+    supports_effort: bool = False
+    tags: list[str] = []
 
 
 class ModelOverview(BaseModel):
@@ -34,11 +37,17 @@ class ModelOverview(BaseModel):
     candidates: list[ModelCandidate]
     checked_at: str
     recent_days: int
+    effort: str | None  # None = OpenAI's default for the model
 
 
 class SetModelRequest(BaseModel):
     # None = go back to the .env default.
     model: str | None = Field(default=None, max_length=100)
+
+
+class SetEffortRequest(BaseModel):
+    # None = back to OpenAI's default for the model.
+    effort: Literal["low", "medium", "high"] | None = None
 
 
 def _day(ts: float) -> str:
@@ -61,9 +70,20 @@ async def _overview(db: AsyncSession, refresh: bool) -> ModelOverview:
         chosen_here=bool(row and row.value),
         updated_at=row.updated_at.isoformat() if row and row.updated_at else None,
         updated_by=updated_by,
-        candidates=[ModelCandidate(id=c.id, released=_day(c.created), usable=c.usable, error=c.error) for c in checks],
+        candidates=[
+            ModelCandidate(
+                id=c.id,
+                released=_day(c.created),
+                usable=c.usable,
+                error=c.error,
+                supports_effort=c.supports_effort,
+                tags=c.tags,
+            )
+            for c in checks
+        ],
         checked_at=datetime.fromtimestamp(checked_at, UTC).isoformat(),
         recent_days=model_settings.RECENT_DAYS,
+        effort=await model_settings.current_effort(db),
     )
 
 
@@ -99,3 +119,25 @@ async def set_model(
     return await _overview(db, refresh=False)
 
 
+@router.put("/effort", response_model=ModelOverview)
+async def set_effort(
+    payload: SetEffortRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_required),
+) -> ModelOverview:
+    row = await db.get(AppSetting, model_settings.EFFORT_KEY)
+    if payload.effort:
+        # Only if the model in use accepts it (llm.py also falls back, in
+        # case the model is switched afterwards).
+        ok, err = await model_settings.probe(await model_settings.current_model(db), payload.effort)
+        if not ok:
+            raise HTTPException(status_code=422, detail=f"effort not supported: {err}")
+        if row is None:
+            row = AppSetting(key=model_settings.EFFORT_KEY, value=payload.effort)
+        row.value = payload.effort
+        row.updated_by_id = admin.id
+        db.add(row)
+    elif row is not None:
+        await db.delete(row)
+    await db.commit()
+    return await _overview(db, refresh=False)

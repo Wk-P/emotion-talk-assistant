@@ -397,7 +397,12 @@ export interface ModelCandidate {
   released: string // YYYY-MM-DD
   usable: boolean
   error: string | null
+  supports_effort: boolean
+  /** Plain-language traits, translated under admin model.tags.* */
+  tags: string[]
 }
+
+export type ReasoningEffort = 'low' | 'medium' | 'high'
 
 export interface ModelOverview {
   current: string
@@ -408,6 +413,8 @@ export interface ModelOverview {
   candidates: ModelCandidate[]
   checked_at: string
   recent_days: number
+  /** `null` = OpenAI's default for the model. */
+  effort: ReasoningEffort | null
 }
 
 export async function getModelOverview(refresh = false) {
@@ -418,6 +425,12 @@ export async function getModelOverview(refresh = false) {
 /** `null` goes back to the server's default model. */
 export async function setModel(model: string | null) {
   const { data } = await api.put<ModelOverview>('/api/admin/model', { model })
+  return data
+}
+
+/** `null` goes back to OpenAI's default for the model. */
+export async function setEffort(effort: ReasoningEffort | null) {
+  const { data } = await api.put<ModelOverview>('/api/admin/model/effort', { effort })
   return data
 }
 
