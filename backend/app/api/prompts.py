@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timefmt import kst_iso
 from app.api.deps import get_current_admin_required
 from app.db.session import get_db
 from app.models.enums import Language
@@ -63,7 +64,7 @@ def _item(key: str, language: Language, row: PromptVersion | None, usernames: di
         version=row.version if row else 0,
         content=row.content if row else default,
         default_content=default,
-        updated_at=row.created_at.isoformat() if row else None,
+        updated_at=kst_iso(row.created_at) if row else None,
         updated_by=usernames.get(row.created_by_id) if row and row.created_by_id else None,
     )
 
@@ -201,7 +202,7 @@ async def list_versions(
             version=r.version,
             content=r.content,
             note=r.note,
-            created_at=r.created_at.isoformat(),
+            created_at=kst_iso(r.created_at),
             created_by=usernames.get(r.created_by_id) if r.created_by_id else None,
         )
         for r in rows

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timefmt import kst_iso
 from app.db.session import get_db
 from app.models.resource import CrisisResource
 
@@ -24,7 +25,7 @@ async def list_resources(db: AsyncSession = Depends(get_db)) -> list[dict]:
             "description": r.description,
             "contact": r.contact,
             "url": r.url,
-            "verified_at": r.verified_at.isoformat(),
+            "verified_at": kst_iso(r.verified_at),
         }
         for r in rows
     ]

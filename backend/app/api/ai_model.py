@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timefmt import KST, kst_iso, kst_iso_or_none
 from app.api.deps import get_current_admin_required
 from app.core.config import get_settings
 from app.db.session import get_db
@@ -51,7 +52,7 @@ class SetEffortRequest(BaseModel):
 
 
 def _day(ts: float) -> str:
-    return datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(ts, KST).strftime("%Y-%m-%d")
 
 
 async def _overview(db: AsyncSession, refresh: bool) -> ModelOverview:
@@ -68,7 +69,7 @@ async def _overview(db: AsyncSession, refresh: bool) -> ModelOverview:
         current=await model_settings.current_model(db),
         default=get_settings().openai_model,
         chosen_here=bool(row and row.value),
-        updated_at=row.updated_at.isoformat() if row and row.updated_at else None,
+        updated_at=kst_iso_or_none(row.updated_at) if row else None,
         updated_by=updated_by,
         candidates=[
             ModelCandidate(
@@ -81,7 +82,7 @@ async def _overview(db: AsyncSession, refresh: bool) -> ModelOverview:
             )
             for c in checks
         ],
-        checked_at=datetime.fromtimestamp(checked_at, UTC).isoformat(),
+        checked_at=kst_iso(datetime.fromtimestamp(checked_at, UTC)),
         recent_days=model_settings.RECENT_DAYS,
         effort=await model_settings.current_effort(db),
     )

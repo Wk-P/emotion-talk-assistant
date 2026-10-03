@@ -14,6 +14,7 @@ import {
 } from '@/api/client'
 import { useSessionStore } from '@/stores/session'
 import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
+import { displayDay, formatDateTime } from '@/utils/time'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -60,7 +61,7 @@ async function exportConversation(item: SessionHistoryItem) {
     user: t('chat.you'),
     assistant: t('chat.assistant'),
   })
-  downloadTextFile(`conversation-${item.created_at.slice(0, 10)}.md`, content)
+  downloadTextFile(`conversation-${displayDay(item.created_at)}.md`, content)
 }
 
 // One conversation at a time; the open chat is dropped if it was this one.
@@ -104,7 +105,7 @@ onMounted(load)
       <TransitionGroup name="entry" tag="div">
         <div v-for="item in items" :key="item.session_id" class="entry" :class="{ selected: openId === item.session_id }">
           <button type="button" class="entry-head" @click="toggle(item.session_id)">
-            <span>{{ new Date(item.created_at).toLocaleString() }}</span>
+            <span>{{ formatDateTime(item.created_at) }}</span>
             <span class="count">{{ t('history.messageCount', { n: item.message_count }) }}</span>
           </button>
           <div class="entry-actions">
@@ -151,7 +152,7 @@ onMounted(load)
       <div v-if="items.length > 0" class="hist-detail">
         <template v-if="selected">
           <div class="detail-header">
-            <span class="detail-date">{{ new Date(selected.created_at).toLocaleString() }}</span>
+            <span class="detail-date">{{ formatDateTime(selected.created_at) }}</span>
             <div class="detail-actions">
               <button type="button" class="btn-primary" @click="continueConversation(selected)">
                 {{ t('history.continue') }}

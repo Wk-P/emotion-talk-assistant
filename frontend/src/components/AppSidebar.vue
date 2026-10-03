@@ -6,6 +6,7 @@ import { deleteSession, listHistory, type SessionHistoryItem } from '@/api/clien
 import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
+import { formatDateTime } from '@/utils/time'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -89,10 +90,10 @@ onMounted(loadRecent)
           <button
             type="button"
             class="recent-item"
-            :title="new Date(item.created_at).toLocaleString()"
+            :title="formatDateTime(item.created_at)"
             @click="openConversation(item)"
           >
-            {{ new Date(item.created_at).toLocaleString() }}
+            {{ formatDateTime(item.created_at) }}
           </button>
           <button
             type="button"

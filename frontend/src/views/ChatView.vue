@@ -10,6 +10,7 @@ import ConsentDialog from '@/components/ConsentDialog.vue'
 import { useSessionStore } from '@/stores/session'
 import { recordFromConfirmation } from '@/utils/fieldLabels'
 import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
+import { displayDay } from '@/utils/time'
 
 const { t } = useI18n()
 const session = useSessionStore()
@@ -22,7 +23,7 @@ function exportConversation() {
     session.turns.map((turn) => ({ role: turn.role, content: turn.text, created_at: '' })),
     { title: t('app.title'), createdAt: t('history.title'), user: t('chat.you'), assistant: t('chat.assistant') },
   )
-  downloadTextFile(`conversation-${new Date().toISOString().slice(0, 10)}.md`, content)
+  downloadTextFile(`conversation-${displayDay()}.md`, content)
 }
 
 // Neither a resumed conversation nor an acknowledged new one — i.e. a fresh

@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timefmt import kst_iso
 from app.models.enums import DialogueIntent, Language, MessageRole, RiskLevel
 from app.models.message import Message
 from app.models.resource import CrisisResource
@@ -91,7 +92,7 @@ async def _crisis_turn(db: AsyncSession, language: Language) -> TurnResult:
                     "description": r.description.get(language.value, r.description.get("ko", "")),
                     "contact": r.contact,
                     "url": r.url,
-                    "verified_at": r.verified_at.isoformat(),
+                    "verified_at": kst_iso(r.verified_at),
                 }
                 for r in resources
             ],

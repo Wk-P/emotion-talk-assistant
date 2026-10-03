@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CandidateCard } from '@/api/client'
 import { useI18n } from 'vue-i18n'
+import { formatDate } from '@/utils/time'
 
 defineProps<{ card: CandidateCard }>()
 const { t } = useI18n()
@@ -16,7 +17,7 @@ const { t } = useI18n()
         <a :href="`tel:${item.contact}`">{{ item.contact }}</a>
         <a v-if="item.url" :href="item.url" target="_blank" rel="noopener">{{ item.url }}</a>
       </div>
-      <div class="verified">{{ item.verified_at }}</div>
+      <div class="verified">{{ item.verified_at ? formatDate(item.verified_at) : '' }}</div>
     </div>
   </div>
 </template>

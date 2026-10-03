@@ -34,6 +34,7 @@ import ModelPicker from '@/components/admin/ModelPicker.vue'
 import PromptEditor from '@/components/admin/PromptEditor.vue'
 import { useAuthStore } from '@/stores/auth'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
+import { displayDay, displayDayStart, formatDate, formatDateTime } from '@/utils/time'
 
 const { t, te, locale } = useI18n()
 const auth = useAuthStore()
@@ -78,20 +79,16 @@ const userFilter = reactive({
   status: '' as NonNullable<AdminUserFilter['status']> | '',
 })
 
-// Dates are picked in the admin's local time zone, so turn them into exact
-// instants here rather than letting the server guess; "to" is inclusive in
-// the UI, so it becomes the start of the following day.
-function localDayStart(day: string, addDays = 0): string {
-  const [y, m, d] = day.split('-').map(Number)
-  return new Date(y!, m! - 1, d! + addDays).toISOString()
-}
+// Dates are picked as Korea-time days (like every time shown on the site),
+// so turn them into exact instants here rather than letting the server
+// guess; "to" is inclusive in the UI, so it becomes the start of the next day.
 
 function sessionQuery(): AdminSessionFilter {
   const f: AdminSessionFilter = {}
   if (convFilter.participant.trim()) f.participant = convFilter.participant.trim()
   if (convFilter.language) f.language = convFilter.language
-  if (convFilter.dateFrom) f.created_from = localDayStart(convFilter.dateFrom)
-  if (convFilter.dateTo) f.created_to = localDayStart(convFilter.dateTo, 1)
+  if (convFilter.dateFrom) f.created_from = displayDayStart(convFilter.dateFrom)
+  if (convFilter.dateTo) f.created_to = displayDayStart(convFilter.dateTo, 1)
   if (convFilter.minMessages && convFilter.minMessages > 0) f.min_messages = convFilter.minMessages
   return f
 }
@@ -215,7 +212,7 @@ function download(blob: Blob, name: string, ext: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `emotion-ai-${name}-${new Date().toISOString().slice(0, 10)}.${ext}`
+  a.download = `emotion-ai-${name}-${displayDay()}.${ext}`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -486,7 +483,7 @@ onMounted(load)
               <div v-for="item in group.sessions" :key="item.session_id" class="entry" :class="{ selected: openId === item.session_id }">
                 <div class="entry-row">
                   <button type="button" class="entry-head" @click="toggle(item.session_id)">
-                    <span>{{ new Date(item.created_at).toLocaleString() }}</span>
+                    <span>{{ formatDateTime(item.created_at) }}</span>
                     <span class="count">
                       {{ t('history.messageCount', { n: item.message_count }) }}
                       <span v-if="item.record_count > 0" class="record-badge">
@@ -538,7 +535,7 @@ onMounted(load)
           <template v-if="selectedSession">
             <div class="detail-header">
               <span class="detail-participant">{{ selectedSession.participant_label }}</span>
-              <span>{{ new Date(selectedSession.created_at).toLocaleString() }}</span>
+              <span>{{ formatDateTime(selectedSession.created_at) }}</span>
             </div>
             <div class="messages">
               <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
@@ -670,7 +667,7 @@ onMounted(load)
               <span v-if="!user.is_active" class="badge danger">{{ t('admin.disabled') }}</span>
             </td>
             <td>{{ user.session_count }}</td>
-            <td>{{ new Date(user.created_at).toLocaleDateString() }}</td>
+            <td>{{ formatDate(user.created_at) }}</td>
             <td class="cell-actions">
               <template v-if="resettingUser === user.id">
                 <form class="reset-inline" @submit.prevent="doResetPassword(user)">
@@ -733,7 +730,7 @@ onMounted(load)
               <span class="badge" :class="user.role">{{ t(`admin.role.${user.role}`) }}</span>
               <span v-if="!user.is_active" class="badge danger">{{ t('admin.disabled') }}</span>
               <span>{{ t('admin.userSessions', { n: user.session_count }) }}</span>
-              <span>{{ new Date(user.created_at).toLocaleDateString() }}</span>
+              <span>{{ formatDate(user.created_at) }}</span>
             </div>
           </div>
           <div class="user-actions">

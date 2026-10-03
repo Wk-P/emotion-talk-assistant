@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { DISPLAY_TZ_OFFSET } from '@/utils/time'
 
 const AUTH_TOKEN_KEY = 'emotion-talk-auth-token'
 export function getAuthToken(): string | null {
@@ -331,7 +332,7 @@ export async function exportAdminFile(
   lang: Language | 'en', // labels follow the admin's interface language
 ) {
   const { data } = await api.get<Blob>('/api/admin/export/file', {
-    params: { ...filter, format, lang, tz_offset: new Date().getTimezoneOffset() },
+    params: { ...filter, format, lang, tz_offset: DISPLAY_TZ_OFFSET },
     responseType: 'blob',
   })
   return data

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from urllib.parse import quote
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timefmt import kst_iso, kst_iso_or_none
 from app.api.deps import get_current_admin_required, get_session_or_404
 from app.db.session import get_db
 from app.models.enums import Language, UserRole
@@ -40,7 +41,7 @@ def _admin_message(m: Message) -> AdminMessageItem:
     return AdminMessageItem(
         role=m.role.value,
         content=m.content,
-        created_at=m.created_at.isoformat(),
+        created_at=kst_iso(m.created_at),
         prompt_versions=(m.meta or {}).get("prompt_versions"),
         model=(m.meta or {}).get("model"),
     )
@@ -77,7 +78,7 @@ def _admin_record(r: SavedRecord) -> AdminRecordItem:
         id=r.id,
         record_type=r.record_type.value,
         payload=decrypt_json(r.payload_encrypted),
-        created_at=r.created_at.isoformat(),
+        created_at=kst_iso(r.created_at),
     )
 
 
@@ -194,7 +195,7 @@ async def _user_item(db: AsyncSession, user: User) -> AdminUserItem:
         username=user.username,
         role=user.role,
         is_active=user.is_active,
-        created_at=user.created_at.isoformat(),
+        created_at=kst_iso(user.created_at),
         session_count=session_count.scalar_one(),
     )
 
@@ -245,8 +246,8 @@ async def list_all_sessions(
             session_id=session.id,
             participant_label=_label(session.user_id, usernames),
             language=session.language,
-            created_at=session.created_at.isoformat(),
-            ended_at=session.ended_at.isoformat() if session.ended_at else None,
+            created_at=kst_iso(session.created_at),
+            ended_at=kst_iso_or_none(session.ended_at),
             message_count=message_count,
             record_count=record_counts.get(session.id, 0),
         )
@@ -322,8 +323,8 @@ async def export_all_sessions(
             session_id=session.id,
             participant_label=_label(session.user_id, usernames),
             language=session.language,
-            created_at=session.created_at.isoformat(),
-            ended_at=session.ended_at.isoformat() if session.ended_at else None,
+            created_at=kst_iso(session.created_at),
+            ended_at=kst_iso_or_none(session.ended_at),
             messages=[_admin_message(m) for m in messages_by_session.get(session.id, [])],
             records=[_admin_record(rec) for rec in records_by_session.get(session.id, [])],
         )
@@ -360,7 +361,7 @@ async def export_sessions_file(
     sessions = await export_all_sessions(f=f, db=db, admin=admin)
     render, media_type, ext = _EXPORT_FORMATS[format]
     content = render(sessions, lang, tz_offset)
-    filename = f"emotion-ai-{name}-{datetime.now().strftime('%Y-%m-%d')}.{ext}"
+    filename = f"emotion-ai-{name}-{(datetime.now(UTC) - timedelta(minutes=tz_offset)).strftime('%Y-%m-%d')}.{ext}"
     return Response(
         content=content.encode("utf-8") if isinstance(content, str) else content,
         media_type=media_type,
@@ -458,7 +459,7 @@ async def list_users(
             username=user.username,
             role=user.role,
             is_active=user.is_active,
-            created_at=user.created_at.isoformat(),
+            created_at=kst_iso(user.created_at),
             session_count=session_count,
         )
         for user, session_count in result.all()

@@ -10,6 +10,7 @@ import {
   type ReasoningEffort,
 } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import { formatDateTime } from '@/utils/time'
 
 // Which OpenAI model answers every conversation, and how hard it thinks.
 // Candidates are the chat models OpenAI released in the last year, each
@@ -202,7 +203,7 @@ onMounted(() => load())
         >
           {{ t('model.resetDefault', { model: overview.default }) }}
         </button>
-        <span class="muted">{{ t('model.checkedAt', { time: new Date(overview.checked_at).toLocaleString() }) }}</span>
+        <span class="muted">{{ t('model.checkedAt', { time: formatDateTime(overview.checked_at) }) }}</span>
         <span v-if="flash" class="flash">{{ flash }}</span>
       </div>
     </template>

@@ -1,7 +1,7 @@
-from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.core.timefmt import KSTDateTime
 from app.models.enums import Language
 
 
@@ -22,8 +22,8 @@ class ReflectionItem(BaseModel):
     day: str
     language: Language
     answers: ReflectionAnswers
-    created_at: datetime
-    updated_at: datetime | None
+    created_at: KSTDateTime
+    updated_at: KSTDateTime | None
 
 
 class AdminReflectionItem(ReflectionItem):

@@ -12,6 +12,7 @@ import {
 import SiteFooter from '@/components/SiteFooter.vue'
 import { chatLangFor } from '@/i18n/langPreference'
 import SiteHeader from '@/components/SiteHeader.vue'
+import { displayDay } from '@/utils/time'
 
 // 每日省察 — the daily usage reflection questionnaire
 // (documents/02_内容与需求/每日省察功能.md). One per day; today's can be edited.
@@ -19,11 +20,7 @@ const { t, te, locale } = useI18n()
 
 const QUESTIONS = ['helpful', 'changed', 'improve'] as const
 
-function localDay(d = new Date()) {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-const today = localDay()
+const today = displayDay()
 
 const entries = ref<Reflection[]>([])
 const loaded = ref(false)

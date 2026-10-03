@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timefmt import kst_iso, kst_iso_or_none
 from app.api.deps import get_current_user_required, get_owned_session
 from app.db.session import get_db
 from app.models.message import Message
@@ -64,8 +65,8 @@ async def list_history(
         SessionHistoryItem(
             session_id=session.id,
             language=session.language,
-            created_at=session.created_at.isoformat(),
-            ended_at=session.ended_at.isoformat() if session.ended_at else None,
+            created_at=kst_iso(session.created_at),
+            ended_at=kst_iso_or_none(session.ended_at),
             message_count=message_count,
         )
         for session, message_count in result.all()
@@ -81,7 +82,7 @@ async def get_session_messages(
         select(Message).where(Message.session_id == session.id).order_by(Message.created_at.asc())
     )
     return [
-        HistoryMessageItem(role=m.role.value, content=m.content, created_at=m.created_at.isoformat())
+        HistoryMessageItem(role=m.role.value, content=m.content, created_at=kst_iso(m.created_at))
         for m in result.scalars().all()
     ]
 

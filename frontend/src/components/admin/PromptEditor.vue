@@ -17,6 +17,7 @@ import {
   type PromptModuleItem,
   type PromptVersionItem,
 } from '@/api/client'
+import { formatDateTime } from '@/utils/time'
 
 const { t } = useI18n()
 
@@ -471,7 +472,7 @@ onMounted(load)
           <template v-if="current.version > 0">
             {{ t('prompts.inEffect', { v: current.version }) }}
             · {{ current.updated_by ?? '—' }}
-            · {{ current.updated_at ? new Date(current.updated_at).toLocaleString() : '' }}
+            · {{ current.updated_at ? formatDateTime(current.updated_at) : '' }}
           </template>
           <template v-else>{{ t('prompts.usingDefault') }}</template>
         </p>
@@ -517,7 +518,7 @@ onMounted(load)
           <div v-for="v in versions" :key="v.version" class="version">
             <div class="version-head">
               <span class="badge accent">{{ t('prompts.versionBadge', { v: v.version }) }}</span>
-              <span class="muted">{{ new Date(v.created_at).toLocaleString() }} · {{ v.created_by ?? '—' }}</span>
+              <span class="muted">{{ formatDateTime(v.created_at) }} · {{ v.created_by ?? '—' }}</span>
               <button type="button" class="btn-text" @click="loadVersion(v)">{{ t('prompts.loadVersion') }}</button>
             </div>
             <div v-if="v.note" class="version-note">{{ v.note }}</div>

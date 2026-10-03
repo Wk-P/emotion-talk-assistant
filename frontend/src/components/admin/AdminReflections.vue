@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listAdminReflections, type AdminReflection } from '@/api/client'
+import { displayDay } from '@/utils/time'
 
 // 每日省察 answers for research review (backend GET /api/admin/reflections).
 // Participants are shown by account ID.
@@ -40,7 +41,7 @@ function download(content: string, type: string, ext: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
   const a = document.createElement('a')
   a.href = url
-  a.download = `emotion-ai-reflections-${new Date().toISOString().slice(0, 10)}.${ext}`
+  a.download = `emotion-ai-reflections-${displayDay()}.${ext}`
   a.click()
   URL.revokeObjectURL(url)
 }

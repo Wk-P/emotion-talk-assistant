@@ -1,8 +1,8 @@
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
 
+from app.core.timefmt import KSTDateTime
 from app.models.enums import RecordType
 
 
@@ -16,7 +16,7 @@ class RecordResponse(BaseModel):
     id: str
     record_type: RecordType
     payload: dict[str, Any]
-    created_at: datetime
+    created_at: KSTDateTime
 
 
 class OwnRecordItem(RecordResponse):
@@ -24,4 +24,4 @@ class OwnRecordItem(RecordResponse):
     conversations — so it carries which conversation it came from."""
 
     session_id: str
-    session_created_at: datetime
+    session_created_at: KSTDateTime

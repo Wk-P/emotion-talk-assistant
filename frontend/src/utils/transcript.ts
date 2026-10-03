@@ -1,4 +1,5 @@
 import type { HistoryMessageItem } from '@/api/client'
+import { formatDateTime } from '@/utils/time'
 
 interface TranscriptLabels {
   title: string
@@ -12,7 +13,7 @@ export function buildTranscriptMarkdown(
   messages: HistoryMessageItem[],
   labels: TranscriptLabels,
 ): string {
-  const lines = [`# ${labels.title}`, '', `${labels.createdAt}: ${new Date(createdAt).toLocaleString()}`, '']
+  const lines = [`# ${labels.title}`, '', `${labels.createdAt}: ${formatDateTime(createdAt)}`, '']
   for (const m of messages) {
     if (m.role !== 'user' && m.role !== 'assistant') continue
     const speaker = m.role === 'user' ? labels.user : labels.assistant

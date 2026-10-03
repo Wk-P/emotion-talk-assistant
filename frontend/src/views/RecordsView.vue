@@ -5,6 +5,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deleteRecord, listMyRecords, type OwnRecord } from '@/api/client'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
+import { formatDate, formatDateTime } from '@/utils/time'
 
 const { t, te } = useI18n()
 const records = ref<OwnRecord[]>([])
@@ -92,8 +93,8 @@ onMounted(load)
           </template>
         </dl>
         <div class="meta">
-          <span :title="new Date(record.created_at).toLocaleString()">
-            {{ t('records.fromConversation', { date: new Date(record.session_created_at).toLocaleDateString() }) }}
+          <span :title="formatDateTime(record.created_at)">
+            {{ t('records.fromConversation', { date: formatDate(record.session_created_at) }) }}
           </span>
           <div v-if="confirmingDelete === record.id" class="confirm">
             <span>{{ t('records.deleteConfirm') }}</span>
