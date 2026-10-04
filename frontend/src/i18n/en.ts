@@ -535,6 +535,7 @@ export const en = {
     login: 'Log in',
     loginFailed: 'Login failed. Please check your account ID and password.',
     accountDisabled: 'This account has been disabled. Please contact an administrator.',
+    loginUnavailable: 'Could not reach the server. Please check your connection and try again later.',
     forgotHint: 'Forgot your password? Ask an administrator to reset it.',
     needAccount: 'No account? Register',
     registerTitle: 'Register',

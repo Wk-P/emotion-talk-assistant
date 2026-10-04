@@ -25,7 +25,11 @@ async function submit() {
     await auth.login(username.value, password.value)
     router.push(redirectTarget(route))
   } catch (e: unknown) {
-    error.value = errorStatus(e) === 403 ? t('auth.accountDisabled') : t('auth.loginFailed')
+    // Only a 401 means a wrong ID or password. Anything else (no response at
+    // all, CORS refusal, server error) must not be reported as one.
+    const status = errorStatus(e)
+    error.value =
+      status === 401 ? t('auth.loginFailed') : status === 403 ? t('auth.accountDisabled') : t('auth.loginUnavailable')
   } finally {
     submitting.value = false
   }
