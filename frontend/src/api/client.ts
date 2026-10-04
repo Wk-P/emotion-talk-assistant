@@ -564,3 +564,53 @@ export async function saveFlowOrder(order: string[]) {
 export async function deletePromptModule(key: string) {
   await api.delete(`/api/admin/prompts/modules/${key}`)
 }
+
+// ---- prompt tools (backend app/api/prompt_tools.py) ----
+
+export interface PromptConflict {
+  where: string
+  problem: string
+  suggestion: string
+}
+
+export async function checkPromptConflicts(language: Language) {
+  const { data } = await api.post<PromptConflict[]>('/api/admin/prompt-tools/check', { language })
+  return data
+}
+
+export interface TestScript {
+  id: string
+  name: string
+  language: Language
+  lines: string[]
+}
+
+export async function fetchTestScripts() {
+  const { data } = await api.get<TestScript[]>('/api/admin/prompt-tools/scripts')
+  return data
+}
+
+export async function saveTestScripts(scripts: TestScript[]) {
+  const { data } = await api.put<TestScript[]>('/api/admin/prompt-tools/scripts', scripts)
+  return data
+}
+
+export interface RunState {
+  flow_state: Record<string, unknown>
+  confirmed_context: Record<string, unknown>
+  self_criticism_level: number
+}
+
+export interface RunMessage {
+  role: 'user' | 'assistant'
+  content: string
+  meta?: Record<string, unknown>
+}
+
+export async function runTestTurn(payload: { language: Language; message: string; history: RunMessage[]; state?: RunState }) {
+  const { data } = await api.post<{ reply_text: string; candidates: CandidateCard[]; stage: string | null; state: RunState }>(
+    '/api/admin/prompt-tools/run-turn',
+    payload,
+  )
+  return data
+}

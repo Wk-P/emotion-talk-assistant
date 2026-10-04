@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, ai_model, auth, chat, consent, prompts, records, reflections, resources, session
+from app.api import admin, ai_model, auth, chat, consent, prompt_tools, prompts, records, reflections, resources, session
 from app.core.config import get_settings
 from app.db.session import init_db
 
@@ -30,6 +30,7 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(ai_model.router)
 app.include_router(prompts.router)
+app.include_router(prompt_tools.router)
 app.include_router(session.router)
 app.include_router(chat.router)
 app.include_router(consent.router)

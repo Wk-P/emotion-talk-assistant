@@ -97,7 +97,7 @@ async def load_modules(db: AsyncSession) -> list[Module]:
     def built_in(key: str, group: str) -> Module:
         row = by_key.get(key)
         return Module(
-            key, group, True, row.enabled if row else True, dict(row.names or {}) if row else {}, None, group == "flow"
+            key, group, True, row.enabled if row else default_enabled(key), dict(row.names or {}) if row else {}, None, group == "flow"
         )
 
     def added(row: PromptModule) -> Module:
@@ -124,6 +124,10 @@ async def system_texts(db: AsyncSession, language: Language) -> dict[str, str]:
     enabled = {m.key for m in await load_modules(db) if m.enabled}
     resolved = await resolve(db, system.KEYS, language)
     return {k: resolved[k].content.strip() if k in enabled else "" for k in system.KEYS}
+
+
+def default_enabled(key: str) -> bool:
+    return key not in principles.DEFAULT_OFF
 
 
 def flow_sequence(modules: list[Module]) -> list[str]:

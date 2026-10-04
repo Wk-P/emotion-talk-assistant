@@ -207,7 +207,7 @@ async def update_module(
     row = await db.get(PromptModule, key)
     if row is None:  # built-in, never changed before
         group = "rules" if key in registry.RULE_KEYS else "system" if key in registry.DEFAULTS and key.startswith("system.") else "flow"
-        row = PromptModule(key=key, group=group, names={}, enabled=True)
+        row = PromptModule(key=key, group=group, names={}, enabled=registry.default_enabled(key))
         db.add(row)
 
     if payload.name is not None:

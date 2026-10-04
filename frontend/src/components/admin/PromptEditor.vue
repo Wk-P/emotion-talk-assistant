@@ -207,6 +207,33 @@ function isDirty(item: PromptItem) {
 }
 
 const dirty = computed(() => (current.value ? isDirty(current.value) : false))
+// A step written in three boxes (backend app/prompts/stages.py SLOT_*): the
+// text is stored and sent as one piece with these headings.
+const SLOT_HEADS = ['【这一步要达成什么】', '【示例问题】', '【这一步不要做什么】']
+function parseSlots(text: string): string[] | null {
+  const at = SLOT_HEADS.map((h) => text.indexOf(h))
+  if (at.some((i) => i < 0) || at[0]! > 0 || !(at[0]! < at[1]! && at[1]! < at[2]!)) return null
+  return SLOT_HEADS.map((h, i) => {
+    let part = text.slice(at[i]! + h.length, i < 2 ? at[i + 1] : undefined)
+    if (part.startsWith('\n')) part = part.slice(1)
+    if (i < 2 && part.endsWith('\n\n')) part = part.slice(0, -2)
+    return part
+  })
+}
+const joinSlots = (parts: string[]) => SLOT_HEADS.map((h, i) => `${h}\n${parts[i] ?? ''}`).join('\n\n')
+const slots = computed(() => (currentModule.value?.is_stage ? parseSlots(draft.value) : null))
+function setSlot(i: number, value: string) {
+  const parts = [...(slots.value ?? ['', '', ''])]
+  parts[i] = value
+  draft.value = joinSlots(parts)
+}
+function toSlots() {
+  draft.value = joinSlots([draft.value.trim(), '', ''])
+}
+const SLOT_KEYS = ['goal', 'examples', 'avoid'] as const
+// The program's own add-ons stay folded away unless asked for.
+const showSystem = ref(false)
+
 const draftIsDefault = computed(() => current.value !== null && draft.value === current.value.default_content)
 
 // `silent`: refresh in place (after changing the step order or a step's
@@ -414,9 +441,12 @@ onMounted(() => load())
           <div class="group-title">
             {{ t(`prompts.groups.${g.group}.name`) }}
             <span class="group-hint">{{ t(`prompts.groups.${g.group}.hint`) }}</span>
+            <button v-if="g.group === 'system'" type="button" class="btn-text fold-btn" @click="showSystem = !showSystem">
+              {{ showSystem ? t('prompts.foldSystem') : t('prompts.unfoldSystem', { n: g.entries.length }) }}
+            </button>
           </div>
           <button
-            v-for="{ module: m, item } in g.entries"
+            v-for="{ module: m, item } in g.group === 'system' && !showSystem ? [] : g.entries"
             :key="m.key"
             type="button"
             class="block"
@@ -511,7 +541,24 @@ onMounted(() => load())
           </ul>
         </details>
 
-        <textarea v-model="draft" class="content" spellcheck="false" />
+        <div v-if="slots" class="slots">
+          <label v-for="(k, i) in SLOT_KEYS" :key="k" class="slot">
+            <span class="slot-title">{{ t(`prompts.slots.${k}.title`) }}</span>
+            <span class="slot-hint">{{ t(`prompts.slots.${k}.hint`) }}</span>
+            <textarea
+              :value="slots[i]"
+              class="content slot-text"
+              spellcheck="false"
+              @input="setSlot(i, ($event.target as HTMLTextAreaElement).value)"
+            />
+          </label>
+        </div>
+        <template v-else>
+          <textarea v-model="draft" class="content" spellcheck="false" />
+          <button v-if="currentModule?.is_stage" type="button" class="btn-text to-slots" @click="toSlots">
+            {{ t('prompts.slots.convert') }}
+          </button>
+        </template>
 
         <div class="save-row">
           <input v-model="note" class="note-input" maxlength="200" :placeholder="t('prompts.notePlaceholder')" />
@@ -935,6 +982,41 @@ onMounted(() => load())
   font-size: 12px;
   color: var(--text-muted);
   margin: 10px 0 14px;
+}
+.slots {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.slot-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+.slot-hint {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.content.slot-text {
+  min-height: 140px;
+  height: auto;
+  field-sizing: content;
+  max-height: 520px;
+}
+.to-slots {
+  align-self: flex-start;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.fold-btn {
+  display: block;
+  margin-top: 4px;
+  padding: 0;
+  font-size: 12.5px;
 }
 .content {
   width: 100%;

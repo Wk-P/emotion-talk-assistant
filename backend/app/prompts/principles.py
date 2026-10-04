@@ -312,6 +312,11 @@ LEAD_SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
 ]
 
 KEY_PREFIX = "rules."
+# Compiled by AI from 指导意见2, not the lead's own text, and partly at odds
+# with it: off until an admin turns one on. Role/scope and safety stay on.
+DEFAULT_OFF: set[str] = {
+    KEY_PREFIX + suffix for suffix, _, _ in SECTIONS if suffix not in ("role_scope", "safety_privacy")
+}
 _ALL = [*LEAD_SECTIONS, *SECTIONS]
 KEYS: list[str] = [KEY_PREFIX + suffix for suffix, _, _ in _ALL]
 TITLES: dict[str, dict[Language, str]] = {KEY_PREFIX + suffix: titles for suffix, titles, _ in _ALL}
