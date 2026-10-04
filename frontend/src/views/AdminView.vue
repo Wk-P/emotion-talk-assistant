@@ -32,6 +32,8 @@ import {
 import AdminReflections from '@/components/admin/AdminReflections.vue'
 import ModelPicker from '@/components/admin/ModelPicker.vue'
 import PromptEditor from '@/components/admin/PromptEditor.vue'
+import PromptTools from '@/components/admin/PromptTools.vue'
+import AdminGuide from '@/components/admin/AdminGuide.vue'
 import { useAuthStore } from '@/stores/auth'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
 import { displayDay, displayDayStart, formatDate, formatDateTime } from '@/utils/time'
@@ -39,7 +41,7 @@ import { displayDay, displayDayStart, formatDate, formatDateTime } from '@/utils
 const { t, te, locale } = useI18n()
 const auth = useAuthStore()
 
-const tab = ref<'conversations' | 'users' | 'reflections' | 'prompts'>('conversations')
+const tab = ref<'conversations' | 'users' | 'reflections' | 'prompts' | 'guide'>('conversations')
 
 const items = ref<AdminSessionItem[]>([])
 // Doubles as "selected session" for the >=1024px master-detail layout and
@@ -350,7 +352,7 @@ async function doDeleteUser(userId: string) {
   await loadUsers()
 }
 
-function switchTab(next: 'conversations' | 'users' | 'reflections' | 'prompts') {
+function switchTab(next: 'conversations' | 'users' | 'reflections' | 'prompts' | 'guide') {
   tab.value = next
   if (next === 'users' && users.value.length === 0 && !usersLoading.value && !usersFiltered.value) loadUsers()
 }
@@ -378,6 +380,9 @@ onMounted(load)
       </button>
       <button type="button" class="btn-outline" :class="{ active: tab === 'prompts' }" @click="switchTab('prompts')">
         {{ t('admin.tabPrompts') }}
+      </button>
+      <button type="button" class="btn-outline" :class="{ active: tab === 'guide' }" @click="switchTab('guide')">
+        {{ t('admin.tabGuide') }}
       </button>
     </div>
 
@@ -561,7 +566,10 @@ onMounted(load)
     <template v-else-if="tab === 'prompts'">
       <ModelPicker />
       <PromptEditor />
+      <PromptTools />
     </template>
+
+    <AdminGuide v-else-if="tab === 'guide'" />
 
     <AdminReflections v-else-if="tab === 'reflections'" />
 
@@ -801,9 +809,13 @@ onMounted(load)
   display: flex;
   gap: 8px;
   margin-bottom: 18px;
+  /* Narrow screens: one row that scrolls sideways instead of wrapping. */
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .tabs button {
-  flex: 1;
+  flex: 1 0 auto;
+  white-space: nowrap;
 }
 .tabs button.active {
   background: var(--accent);
