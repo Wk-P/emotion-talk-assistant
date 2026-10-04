@@ -1,15 +1,12 @@
 """The prompt blocks admins can edit from the admin UI, and how the text in
 effect for each is resolved (see app/models/prompt.py).
 
-Only tone/behavior text is editable. Deliberately NOT in here, and so never
-editable from the UI:
-  - the JSON output-format suffix (app/services/llm.py) — the frontend
-    parses the reply, so a bad edit would break every turn
-  - candidate field/type names and progress signals (FORMAT_RULES in
-    base.py and stages.py) — same reason, and they read as jargon to non-technical admins
-  - risk screening, crisis copy and the disclaimer (app/services/safety.py,
-    app/services/dialogue_state.py) — safety-critical, enforced in code
-  - which stage is current (app/services/flow.py)
+Every piece of prompt text is editable, including what the program adds
+around the admins' blocks (output format, card and signal fields, progress
+notes — app/prompts/system.py, group "system"). Not prompt text, and so
+not in here: risk screening and the crisis reply (app/services/safety.py,
+app/services/dialogue_state.py), and which stage is current
+(app/services/flow.py).
 
 Admins can also rename or disable any block and add their own (see
 app/models/prompt.PromptModule); load_modules() gives the full, ordered set.
@@ -24,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.app_setting import AppSetting
 from app.models.enums import Language
 from app.models.prompt import PromptModule, PromptVersion
-from app.prompts import principles, stages
+from app.prompts import principles, stages, system
 
 # The common principles, one key per section (e.g. "rules.listening").
 RULE_KEYS = principles.KEYS
@@ -34,18 +31,15 @@ FLOW_KEYS = stages.KEYS
 
 # Default names, as the admin UI shows them; also used as the 【title】 of an
 # admin-added block in the prompt when it has no name in that language.
-DEFAULT_TITLES: dict[str, dict[Language, str]] = {**principles.TITLES, **stages.TITLES}
+DEFAULT_TITLES: dict[str, dict[Language, str]] = {**principles.TITLES, **stages.TITLES, **system.TITLES}
 
-GROUPS = ("rules", "flow", "other")
+GROUPS = ("rules", "flow", "other", "system")
 CUSTOM_PREFIX = "custom."
 MAX_MODULE_NAME_LENGTH = 40
 
 # Ordered as the admin UI lists them.
-DEFAULTS: dict[str, dict[Language, str]] = {**principles.DEFAULTS, **stages.FLOW_INSTRUCTIONS}
+DEFAULTS: dict[str, dict[Language, str]] = {**principles.DEFAULTS, **stages.FLOW_INSTRUCTIONS, **system.DEFAULTS}
 
-# Fixed, code-only rules appended after each stage's (editable) text — see
-# base.build_system_prompt. Not exposed to the admin UI.
-FLOW_FORMAT_RULES: dict[str, dict[Language, str]] = stages.FORMAT_RULES
 
 MAX_CONTENT_LENGTH = 20000
 
@@ -120,7 +114,16 @@ async def load_modules(db: AsyncSession) -> list[Module]:
         out.append(built_in(stage_key, "flow") if stage_key in FLOW_KEYS else added(by_key[stage_key]))
         out += [added(r) for r in custom if r.group == "flow" and r.flow_key == stage_key]
     out += [added(r) for r in custom if r.group == "other"]
+    out += [built_in(k, "system") for k in system.KEYS]
     return out
+
+
+async def system_texts(db: AsyncSession, language: Language) -> dict[str, str]:
+    """The "程序附加说明" blocks in effect, by key; a turned-off one is ""."""
+
+    enabled = {m.key for m in await load_modules(db) if m.enabled}
+    resolved = await resolve(db, system.KEYS, language)
+    return {k: resolved[k].content.strip() if k in enabled else "" for k in system.KEYS}
 
 
 def flow_sequence(modules: list[Module]) -> list[str]:

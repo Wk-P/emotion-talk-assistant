@@ -33,7 +33,7 @@ from app.schemas.prompt import (
     PromptVersionItem,
 )
 from app.services import flow_config
-from app.services.llm import RESPONSE_INSTRUCTIONS, LLMUnavailable, generate_turn
+from app.services.llm import LLMUnavailable, generate_turn
 from app.services.model_settings import current_effort, current_model
 
 router = APIRouter(prefix="/api/admin/prompts", tags=["admin-prompts"])
@@ -91,7 +91,7 @@ async def list_prompts(
     return PromptOverview(
         items=[_item(key, lang, latest[lang].get(key), usernames) for key in keys for lang in Language],
         modules=[_module_item(m) for m in modules],
-        output_format=RESPONSE_INSTRUCTIONS.strip(),
+        output_format=registry.default_content("system.output_json", Language.ZH),
     )
 
 
@@ -206,7 +206,7 @@ async def update_module(
     await _check_key(db, key)
     row = await db.get(PromptModule, key)
     if row is None:  # built-in, never changed before
-        group = "rules" if key in registry.RULE_KEYS else "flow"
+        group = "rules" if key in registry.RULE_KEYS else "system" if key in registry.DEFAULTS and key.startswith("system.") else "flow"
         row = PromptModule(key=key, group=group, names={}, enabled=True)
         db.add(row)
 
@@ -357,6 +357,6 @@ async def preview_prompt(
     return PromptPreviewResponse(
         reply_text=response.reply_text,
         candidates=response.candidates,
-        system_prompt=system_prompt + RESPONSE_INSTRUCTIONS,
+        system_prompt=system_prompt,
         prompt_versions=versions,
     )

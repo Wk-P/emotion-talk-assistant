@@ -5,8 +5,7 @@ and "三、对话长度与结束规则").
 
 Which stage a conversation is in is decided in code (app/services/flow.py),
 never by the model or by admin text; the text here only says how to talk
-while in it. Machine-facing rules (card type and field names) live in
-FORMAT_RULES, appended in code and never editable.
+while in it. Card and progress-signal fields are in app/prompts/system.py.
 """
 
 from app.models.enums import Language
@@ -371,73 +370,3 @@ _GOALS: dict[str, dict[Language, str]] = {
 for _key, _goal in _GOALS.items():
     if _key not in (STABILIZATION, ENDING):  # their defaults already open with their purpose
         FLOW_INSTRUCTIONS[_key] = {lang: f"{_goal[lang]}\n{text}" for lang, text in FLOW_INSTRUCTIONS[_key].items()}
-
-NO_CARDS: dict[Language, str] = {
-    Language.ZH: "- 本阶段 candidates 一律给空数组。",
-    Language.KO: "- 이 단계에서는 candidates를 항상 빈 배열로 두세요.",
-}
-
-# Code-only: card type and field names the frontend renders.
-FORMAT_RULES: dict[str, dict[Language, str]] = {
-    **{key: NO_CARDS for key in KEYS},
-    LISTEN: {
-        Language.ZH: (
-            "- 只有在要给出上面说的那份总结时，才在 candidates 里放一条 type 为 'seb_summary' 的记录，"
-            "fields 固定用三个键：situation（发生了什么）、emotion（当时的感受）、behavior（当时怎么应对，没有就留空字符串）；"
-            "只写用户实际说过的内容。每次对话只生成一次。其余时候 candidates 一律给空数组。"
-        ),
-        Language.KO: (
-            "- 위에서 말한 정리를 보여 줄 때에만 candidates에 type 'seb_summary' 항목 하나를 넣으세요. "
-            "fields는 세 키로 고정: situation(무슨 일이 있었는지), emotion(그때의 감정), behavior(그때 어떻게 대처했는지, 없으면 빈 문자열). "
-            "사용자가 실제로 말한 내용만 쓰고, 대화당 한 번만 생성하세요. 그 외에는 candidates를 항상 빈 배열로 두세요."
-        ),
-    },
-    ACT: {
-        Language.ZH: (
-            "- 只有在把整理好的小计划交给用户确认时，才在 candidates 里放一条 type 为 'plan_form' 的记录，"
-            "fields 固定用四个键：action（先做的行动）、when（实施时间）、support（需要的帮助）、backup（做不到时的备选方案）；"
-            "每次对话只生成一次。其余时候 candidates 一律给空数组。"
-        ),
-        Language.KO: (
-            "- 정리한 작은 계획을 사용자에게 확인받을 때에만 candidates에 type 'plan_form' 항목 하나를 넣으세요. "
-            "fields는 네 키로 고정: action(먼저 할 행동), when(실행 시점), support(필요한 도움), backup(어려울 경우의 대안). "
-            "대화당 한 번만 생성하세요. 그 외에는 candidates를 항상 빈 배열로 두세요."
-        ),
-    },
-}
-
-
-# Code-only: progress signals the model adds to its JSON, read by
-# app/services/flow.py. They only report what happened in the conversation;
-# the stage order and every move between stages stay in code.
-_SIGNALS: dict[Language, str] = {
-    Language.ZH: (
-        "- JSON 里另外加两个字段（用户看不到，只供程序判断进度）："
-        "stage_done —— 当前阶段的目标已经基本达到、可以进入下一阶段时给 true，否则给 false；"
-        "user_request —— 用户这一句明确表示想直接要办法（如「告诉我怎么办」）时给 \"to_action\"，"
-        "明确表示今天想结束（如「今天先到这里」）时给 \"end_today\"，否则给 null。"
-    ),
-    Language.KO: (
-        "- JSON에 필드 두 개를 더 넣으세요(사용자에게 보이지 않고 진행 판단에만 쓰여요): "
-        "stage_done — 현재 단계의 목표가 거의 이루어져 다음 단계로 넘어가도 되면 true, 아니면 false; "
-        "user_request — 사용자가 이번 말에서 바로 방법을 원한다고 분명히 말하면(예: \"어떻게 해야 할지 알려 주세요\") \"to_action\", "
-        "오늘은 끝내고 싶다고 분명히 말하면(예: \"오늘은 여기까지 할게요\") \"end_today\", 아니면 null."
-    ),
-}
-_SELF_CHECK_SIGNAL: dict[Language, str] = {
-    Language.ZH: (
-        "- 再加一个字段 self_criticism：用户已经回答了关于自我批评的确认问题时，按他的回答给 \"strong\"（较强）、"
-        "\"weak\"（较弱）或 \"none\"（没有）；还没回答时给 null。"
-    ),
-    Language.KO: (
-        "- 필드 self_criticism도 넣으세요: 사용자가 자기비판에 대한 확인 질문에 답했으면 그 답에 따라 \"strong\"(강함), "
-        "\"weak\"(약함), \"none\"(없음) 중 하나를, 아직 답하지 않았으면 null을 주세요."
-    ),
-}
-
-
-def signal_rules(flow_key: str, language: Language) -> str:
-    if flow_key in (STABILIZATION, ENDING):
-        return ""
-    extra = f"\n{_SELF_CHECK_SIGNAL[language]}" if flow_key == SELF_CHECK else ""
-    return _SIGNALS[language] + extra

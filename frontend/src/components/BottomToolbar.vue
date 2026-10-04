@@ -49,15 +49,19 @@ async function endConversation() {
 </template>
 
 <style scoped>
+/* Small chips above the composer, not full-width buttons. */
 .toolbar {
   display: flex;
-  gap: 8px;
-  padding: 10px 12px 0;
+  gap: 6px;
+  padding: 4px 0 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .toolbar button {
-  flex: 1;
-  padding: 8px 6px;
-  font-size: 12.5px;
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  font-size: 13px;
+  border-radius: 999px;
 }
 .end-btn {
   color: var(--danger);
@@ -78,7 +82,6 @@ async function endConversation() {
   color: var(--text);
 }
 .toolbar.confirm button {
-  flex: 0 0 auto;
   min-width: 96px;
 }
 </style>

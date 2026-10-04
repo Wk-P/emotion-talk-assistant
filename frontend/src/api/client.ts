@@ -447,7 +447,7 @@ export interface PromptItem {
   updated_by: string | null
 }
 
-export type PromptGroup = 'rules' | 'flow' | 'other'
+export type PromptGroup = 'rules' | 'flow' | 'other' | 'system'
 
 // One block on the admin page: built-in (rename / disable only) or added by
 // an admin (also deletable). See backend app/prompts/registry.load_modules.

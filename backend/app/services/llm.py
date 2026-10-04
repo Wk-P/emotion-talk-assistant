@@ -6,14 +6,6 @@ from openai import APIError, AsyncOpenAI, BadRequestError
 
 from app.core.config import get_settings
 
-RESPONSE_INSTRUCTIONS = (
-    "\n\n---\n"
-    "输出格式 / Output format: 只返回一个 JSON 对象 / return exactly one JSON object, "
-    '{"reply_text": string, "candidates": [{"type": string, "items": [{"id": string, "label": string}]?, '
-    '"fields": object?}]}. reply_text 是给用户看的回复；candidates 是可选的结构化建议，'
-    "没有则给空数组。不要在 JSON 之外输出任何文字。"
-)
-
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +20,8 @@ class LLMUnavailable(Exception):
         self.reason = reason
 
 
-# Progress signals the model reports alongside the reply (app/prompts/stages.
-# signal_rules), consumed by app/services/flow.after_reply.
+# Progress signals the model reports alongside the reply (app/prompts/system.py
+# "signals"), consumed by app/services/flow.after_reply.
 SIGNAL_FIELDS = ("stage_done", "user_request", "self_criticism")
 
 
@@ -48,7 +40,7 @@ def _client() -> AsyncOpenAI:
 
 
 def _messages(system_prompt: str, history: list[dict[str, str]], user_message: str) -> list[dict[str, str]]:
-    messages = [{"role": "system", "content": system_prompt + RESPONSE_INSTRUCTIONS}]
+    messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
     return messages

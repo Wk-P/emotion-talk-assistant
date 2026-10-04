@@ -16,6 +16,25 @@ const { t } = useI18n()
 const session = useSessionStore()
 const draft = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
+const inputEl = ref<HTMLTextAreaElement | null>(null)
+
+// Grows with the text up to a few lines, like ChatGPT's composer.
+function autosize() {
+  const el = inputEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+}
+watch(draft, () => nextTick(autosize))
+
+// Enter sends on a keyboard; on phones Enter is a new line and the button
+// sends. Never while an IME (Chinese/Korean input) is still composing.
+const touchOnly = typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches
+function onKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229 || touchOnly) return
+  e.preventDefault()
+  submit()
+}
 
 function exportConversation() {
   const content = buildTranscriptMarkdown(
@@ -171,16 +190,29 @@ async function saveRecordFor(idx: number) {
         <BottomToolbar v-if="session.turns.length > 0" />
 
         <form class="composer" @submit.prevent="submit">
-          <input
-            v-model="draft"
-            :placeholder="t('chat.placeholder')"
-            :disabled="session.sending || needsAck"
-            autocomplete="off"
-          />
-          <button type="submit" class="btn-primary send-btn" :disabled="session.sending || needsAck || !draft.trim()">
-            <span v-if="!session.sending">{{ t('chat.send') }}</span>
-            <span v-else class="spinner" aria-hidden="true" />
-          </button>
+          <div class="composer-box">
+            <textarea
+              ref="inputEl"
+              v-model="draft"
+              rows="1"
+              :placeholder="t('chat.placeholder')"
+              :disabled="session.sending || needsAck"
+              autocomplete="off"
+              enterkeyhint="send"
+              @keydown="onKeydown"
+            />
+            <button
+              type="submit"
+              class="send-btn"
+              :aria-label="t('chat.send')"
+              :disabled="session.sending || needsAck || !draft.trim()"
+            >
+              <span v-if="session.sending" class="spinner" aria-hidden="true" />
+              <svg v-else viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -222,8 +254,8 @@ async function saveRecordFor(idx: number) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 8px 8px 8px 16px;
+  min-height: 52px;
 }
 .chat-header .title {
   font-weight: 700;
@@ -242,7 +274,7 @@ async function saveRecordFor(idx: number) {
 .turns {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 8px 16px 24px;
 }
 /* Plain instructional text, not a chat bubble — there is no canned AI
    reply any more for it to be confused with. */
@@ -285,7 +317,16 @@ async function saveRecordFor(idx: number) {
 .turns-inner {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 22px;
+}
+/* One centered reading column, as in ChatGPT. */
+.turns-inner,
+.error-banner,
+.footer > * {
+  width: 100%;
+  max-width: 768px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .turn-enter-active {
   transition:
@@ -318,30 +359,28 @@ async function saveRecordFor(idx: number) {
   align-items: flex-start;
 }
 .bubble {
-  max-width: 85%;
-  padding: 11px 15px;
-  border-radius: 16px;
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 16px;
+  line-height: 1.7;
   white-space: pre-wrap;
-  box-shadow: var(--shadow-sm);
+  overflow-wrap: anywhere;
+  color: var(--text);
 }
+/* The user's words in a soft grey bubble; the AI's reply as plain text
+   across the column — ChatGPT's reading layout. */
 .turn.user .bubble {
-  background: var(--accent);
-  color: #fff;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 6px 16px rgba(108, 92, 231, 0.25);
+  max-width: 85%;
+  padding: 9px 16px;
+  border-radius: 20px;
+  background: var(--bg);
 }
 .turn.assistant .bubble {
-  background: var(--bg);
-  color: var(--text);
-  border-bottom-left-radius: 4px;
+  max-width: 100%;
 }
 .bubble.typing {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 13px 16px;
+  min-height: 27px;
 }
 .dot {
   width: 6px;
@@ -385,23 +424,41 @@ async function saveRecordFor(idx: number) {
   background: var(--surface);
 }
 .footer {
-  border-top: 1px solid var(--border);
   background: var(--surface);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding: 0 12px env(safe-area-inset-bottom, 0px);
 }
 .composer {
+  padding: 6px 0 10px;
+}
+.composer-box {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
-  padding: 10px 12px 12px;
-}
-.composer input {
-  flex: 1;
-  padding: 11px 16px;
-  border-radius: 999px;
+  padding: 6px 6px 6px 16px;
+  border-radius: 26px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
 }
-.composer input:disabled {
+.composer-box:focus-within {
+  border-color: var(--accent);
+}
+.composer textarea {
+  flex: 1;
+  min-width: 0;
+  /* 16px: below that iOS zooms the page when the field is focused. */
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  padding: 7px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  resize: none;
+  max-height: 160px;
+}
+.composer textarea:disabled {
   opacity: 0.6;
 }
 .ended-panel {
@@ -432,19 +489,31 @@ async function saveRecordFor(idx: number) {
   text-decoration: none;
   text-align: center;
 }
-.composer button.send-btn {
-  min-width: 64px;
-  border-radius: 999px;
+.send-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--surface);
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+}
+.send-btn:disabled {
+  background: var(--border);
+  color: var(--text-muted);
+  cursor: default;
 }
 .spinner {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  border-top-color: #fff;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-muted);
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin {
@@ -457,15 +526,18 @@ async function saveRecordFor(idx: number) {
    above (same specificity). */
 @media (min-width: 960px) {
   .chat-header {
-    padding: 16px clamp(20px, 3vw, 48px);
+    padding: 10px 16px 10px 24px;
   }
   .turns {
-    padding: 24px clamp(20px, 3vw, 48px);
+    padding: 16px 24px 32px;
+  }
+  .footer {
+    padding: 0 24px;
   }
   .composer {
-    padding: 12px clamp(20px, 3vw, 48px) 16px;
+    padding-bottom: 16px;
   }
-  .bubble {
+  .turn.user .bubble {
     max-width: 70%;
   }
 }

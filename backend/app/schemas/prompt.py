@@ -19,7 +19,7 @@ class PromptItem(BaseModel):
 
 class PromptModuleItem(BaseModel):
     key: str
-    group: Literal["rules", "flow", "other"]
+    group: Literal["rules", "flow", "other", "system"]
     built_in: bool
     enabled: bool
     # Admin-set names by language; a missing language shows the default

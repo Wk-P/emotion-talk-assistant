@@ -20,7 +20,7 @@ from app.models.enums import Language, MessageRole, RiskLevel
 from app.models.message import Message
 from app.models.resource import CrisisResource
 from app.models.session import ConversationSession
-from app.prompts import stages
+from app.prompts import registry, stages
 from app.prompts.router import build_prompt
 from app.services import flow, flow_config, safety
 from app.services.llm import generate_turn
@@ -72,6 +72,8 @@ class TurnResult:
     prompt_versions: dict[str, int] | None = None
     # Which OpenAI model wrote this reply (None when no LLM call was made).
     model: str | None = None
+    # The listen summary was shown before this turn (flow.after_reply).
+    summary_shown: bool = False
 
 
 async def _crisis_turn(db: AsyncSession, language: Language) -> TurnResult:
@@ -148,29 +150,30 @@ def _filter_candidates(
 
 # Tells the model which one-time checkpoints are already done, so it neither
 # re-offers them (they'd be filtered anyway) nor refers to a card the user
-# will never see ("下面是整理的小结…" with nothing below it).
-_SHOWN_CARD_NOTES = {
-    "seb_summary": {
-        Language.ZH: "本次对话已经给用户看过「发生了什么—感受—应对」小结了，不要再整理小结，也不要在回复里提到小结。",
-        Language.KO: "이번 대화에서 '상황-감정-대처' 요약은 이미 보여 주었어요. 다시 요약하지 말고, 답변에서 요약을 언급하지도 마세요.",
-    },
-    "plan_form": {
-        Language.ZH: "本次对话已经给用户看过整理好的小计划了，不要再生成计划，也不要在回复里说「下面是计划」。",
-        Language.KO: "이번 대화에서 정리한 작은 계획은 이미 보여 주었어요. 다시 만들지 말고, 답변에서 '아래 계획'이라고 말하지 마세요.",
-    },
-}
+# will never see. Wording: admin page "程序附加说明" (app/prompts/system.py).
+_SHOWN_CARD_NOTES = {"seb_summary": "system.note_summary_shown", "plan_form": "system.note_plan_shown"}
 
 
 def _progress_note(
-    messages: list[Message], state: dict[str, Any], cfg: flow_config.FlowConfig, language: Language
+    messages: list[Message],
+    state: dict[str, Any],
+    cfg: flow_config.FlowConfig,
+    language: Language,
+    flow_key: str,
+    sys: dict[str, str],
 ) -> str:
     shown = _cards_already_shown(messages)
-    lines = [notes[language] for card_type, notes in _SHOWN_CARD_NOTES.items() if card_type in shown]
-    lines += [note for note in (flow.purpose_note(state, language, cfg), flow.branch_note(state, language)) if note]
+    lines = [sys[key] for card_type, key in _SHOWN_CARD_NOTES.items() if card_type in shown]
+    if flow_key == stages.LISTEN and "seb_summary" in shown:
+        # The user may confirm the summary by typing instead of using the
+        # card; the model reports it as stage_done and flow.after_reply moves on.
+        to_purpose = flow._after(stages.LISTEN, cfg.order)[:1] == [stages.PURPOSE]
+        lines.append(sys["system.note_listen_confirm" if to_purpose else "system.note_listen_confirm_other"])
+    lines += [flow.purpose_note(state, language, cfg, sys), flow.branch_note(state, sys)]
+    lines = [line for line in lines if line]
     if not lines:
         return ""
-    header = "【当前进度】" if language == Language.ZH else "[현재 진행 상황]"
-    return "\n\n---\n" + header + "\n" + "\n".join(f"- {line}" for line in lines)
+    return "\n\n---\n" + "\n".join(p for p in (sys["system.note_header"], *(f"- {line}" for line in lines)) if p)
 
 
 def merge_confirmation(session: ConversationSession, confirmation: dict[str, Any]) -> None:
@@ -279,7 +282,11 @@ async def handle_turn(
         db, session, synthetic_text=synthetic_text, flow_key=flow_key, state=state, cfg=cfg, risk=risk, ending=ending
     )
     if not ending and risk != RiskLevel.WATCH:
-        flow.after_reply(session, result.signals, cfg)
+        flow.after_reply(session, result.signals, cfg, summary_shown=result.summary_shown)
+        # Summary confirmed in words: this reply already asks the purpose
+        # question (system.note_listen_confirm), so it carries the buttons.
+        if result.stage == stages.LISTEN and session.flow_state["stage"] == stages.PURPOSE:
+            result.candidates = [flow.purpose_card(language, cfg)]
     if not user_text:
         result.user_text_used = synthetic_text
     return result
@@ -297,7 +304,8 @@ async def _continue_flow(
 ) -> TurnResult:
     system_prompt, prompt_versions = await build_prompt(db, flow_key, session.language)
     messages = await _load_messages(db, session.id)
-    system_prompt += _progress_note(messages, state, cfg, session.language)
+    sys = await registry.system_texts(db, session.language)
+    system_prompt += _progress_note(messages, state, cfg, session.language, flow_key, sys)
     history = _history_for_llm(messages, synthetic_text, cfg.history_turns)
 
     model = await current_model(db)
@@ -314,4 +322,5 @@ async def _continue_flow(
         signals=llm_response.signals,
         prompt_versions=prompt_versions,
         model=model,
+        summary_shown="seb_summary" in _cards_already_shown(messages),
     )

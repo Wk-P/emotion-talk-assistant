@@ -7,12 +7,13 @@ documents/01_研究资料/애플리케이션 플로우차트.png and the project
   listen → purpose → explore → self_check → self_kindness → regulate → act → closing
 
 Some built-in stages carry behaviour of their own, wherever they are placed:
-  - listen ends when the user confirms the summary card;
+  - listen ends when the user confirms the summary, on the card or in their
+    own words (the model's stage_done, once the summary has been shown);
   - purpose ends on the user's answer (purpose buttons or typed); "先让自己平静"
     jumps ahead to regulate, "一起想想接下来怎么办" to act, if those come later;
-  - self_check ends on the user's answer and sets a branch for the stages
-    after it: strong → all; weak → self_kindness kept brief, regulate skipped;
-    none → self_kindness and regulate skipped;
+  - self_check ends on the user's answer and sets a branch: strong → full
+    self_kindness; weak / none → self_kindness kept brief. Regulate follows
+    either way (the lead's STEP 4 A/B);
   - act ends when the user confirms the plan card;
   - closing is always last.
 Every other stage (including stages admins add) ends when the model reports
@@ -33,12 +34,10 @@ from app.services.flow_config import FlowConfig
 
 # Stages that end on something the user does, not on the model's stage_done.
 _USER_ENDED = {stages.LISTEN, stages.PURPOSE, stages.SELF_CHECK, stages.CLOSING}
-# Weak self-criticism: brief acceptance only ("自我批评不强时，不要反复进行自我友善活动").
+# Weak or no self-criticism: brief acceptance only ("自我批评不强时，不要反复进行自我友善活动").
 _WEAK_SELF_KINDNESS_MIN, _WEAK_SELF_KINDNESS_MAX = 1, 2
 
 PURPOSE_CARD = "purpose_options"
-# Stages a self_check answer leaves out of what follows.
-_BRANCH_SKIPS = {"weak": {stages.REGULATE}, "none": {stages.SELF_KINDNESS, stages.REGULATE}}
 
 
 def state(session: ConversationSession, cfg: FlowConfig) -> dict[str, Any]:
@@ -84,14 +83,12 @@ def _advance(s: dict[str, Any], cfg: FlowConfig) -> None:
         if jump in rest:
             _enter(s, jump)
             return
-    skips = _BRANCH_SKIPS.get(s.get("branch") or "", set())
-    nxt = next((k for k in rest if k not in skips), stages.CLOSING)
-    _enter(s, nxt)
+    _enter(s, rest[0] if rest else stages.CLOSING)
 
 
 def _limits(s: dict[str, Any], cfg: FlowConfig) -> tuple[int, int | None]:
     stage = s["stage"]
-    if stage == stages.SELF_KINDNESS and s.get("branch") == "weak":
+    if stage == stages.SELF_KINDNESS and s.get("branch") in ("weak", "none"):
         return _WEAK_SELF_KINDNESS_MIN, _WEAK_SELF_KINDNESS_MAX
     if stage in (stages.PURPOSE, stages.CLOSING):
         return 1, None
@@ -150,8 +147,12 @@ def before_reply(
     return s
 
 
-def after_reply(session: ConversationSession, signals: dict[str, Any], cfg: FlowConfig) -> None:
-    """Applies the model's progress signals for the next turn."""
+def after_reply(
+    session: ConversationSession, signals: dict[str, Any], cfg: FlowConfig, summary_shown: bool = False
+) -> None:
+    """Applies the model's progress signals for the next turn.
+    `summary_shown`: the listen summary was shown before this turn, so a
+    stage_done here means the user confirmed it in their own words."""
 
     s = state(session, cfg)
     stage, turns = s["stage"], s.get("turns", 0)
@@ -165,6 +166,8 @@ def after_reply(session: ConversationSession, signals: dict[str, Any], cfg: Flow
         if turns >= 1 and level in ("strong", "weak", "none"):
             s["branch"] = level
             _advance(s, cfg)
+    elif stage == stages.LISTEN and summary_shown and signals.get("stage_done") is True:
+        _advance(s, cfg)
     elif stage not in _USER_ENDED and signals.get("stage_done") is True and turns >= _limits(s, cfg)[0]:
         _advance(s, cfg)
     session.flow_state = s
@@ -177,31 +180,19 @@ def purpose_card(language: Language, cfg: FlowConfig) -> dict[str, Any]:
     }
 
 
-def purpose_note(s: dict[str, Any], language: Language, cfg: FlowConfig) -> str:
+def purpose_note(s: dict[str, Any], language: Language, cfg: FlowConfig, sys: dict[str, str]) -> str:
     """For the prompt: what the user said they want from this conversation."""
 
     pid = s.get("purpose")
-    if not pid:
+    if not pid or not sys["system.note_purpose"]:
         return ""
     what = cfg.purpose_label(pid, language) or (
         "见用户上一句话" if language == Language.ZH else "사용자의 앞선 말 참고"
     )
-    if language == Language.ZH:
-        return f"用户这次对话的目的：{what}。根据这个目的调整后续问题的深度与顺序。"
-    return f"이번 대화에서 사용자의 목적: {what}. 이 목적에 맞게 이후 질문의 깊이와 순서를 조정하세요."
+    return sys["system.note_purpose"].replace("{purpose}", what)
 
 
-def branch_note(s: dict[str, Any], language: Language) -> str:
+def branch_note(s: dict[str, Any], sys: dict[str, str]) -> str:
     if s["stage"] != stages.SELF_KINDNESS:
         return ""
-    if s.get("branch") == "strong":
-        return (
-            "用户确认自我批评较强：进行自我接纳、人类共同性、正念与情绪距离化，以及自我友善活动。"
-            if language == Language.ZH
-            else "사용자가 자기비판이 강하다고 확인했어요: 자기수용, 보편적 인간성, 마음챙김과 감정 거리두기, 자기친절 활동을 진행하세요."
-        )
-    return (
-        "用户的自我批评较弱：只简短进行自我接纳和人类共同性，不要反复进行自我友善活动。"
-        if language == Language.ZH
-        else "사용자의 자기비판이 약해요: 자기수용과 보편적 인간성만 짧게 다루고, 자기친절 활동을 반복하지 마세요."
-    )
+    return sys["system.note_branch_strong" if s.get("branch") == "strong" else "system.note_branch_weak"]

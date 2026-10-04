@@ -49,7 +49,7 @@ const langItems = computed(() => items.value.filter((i) => i.language === lang.v
 // principles (one per prompt-composition area), then the flows (each followed
 // by the blocks admins added to it), then admins' own "其他" blocks. The
 // backend sends `modules` already in this order.
-const GROUPS: PromptGroup[] = ['rules', 'flow', 'other']
+const GROUPS: PromptGroup[] = ['rules', 'flow', 'other', 'system']
 // Every step (built-in or admin-added), in the admins' order.
 const FLOW_KEYS = computed(() => modules.value.filter((m) => m.is_stage).map((m) => m.key))
 // Steps with no text in the language being edited (flagged by the order editor).
@@ -449,7 +449,7 @@ onMounted(() => load())
               <button type="submit" class="btn-primary" :disabled="!newName.trim() || moduleBusy">{{ t('prompts.create') }}</button>
             </div>
           </form>
-          <button v-else type="button" class="add-btn" @click="startAdd(g.group)">{{ t('prompts.add') }}</button>
+          <button v-else-if="g.group !== 'system'" type="button" class="add-btn" @click="startAdd(g.group)">{{ t('prompts.add') }}</button>
         </template>
       </nav>
 
