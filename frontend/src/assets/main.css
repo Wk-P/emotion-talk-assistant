@@ -24,6 +24,17 @@
   --shadow-md: 0 8px 24px rgba(31, 35, 51, 0.08);
   --shadow-lg: 0 20px 56px rgba(76, 60, 140, 0.16);
 
+  /* Font stacks per language. Every platform's own CJK font is named —
+     Windows has no PingFang, and without Microsoft YaHei / Malgun Gothic
+     Chinese fell back to whatever the system picked (on Korean Windows a
+     mix of Korean and other fonts). Latin text uses the system UI font. */
+  --font-zh:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Microsoft YaHei UI', 'Noto Sans SC', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
+  --font-ko:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR',
+    'Noto Sans CJK KR', 'Source Han Sans KR', sans-serif;
+
   /* Height of the sticky SiteHeader — sticky panels below it offset by this. */
   --site-header-h: 60px;
 }
@@ -32,17 +43,21 @@
   box-sizing: border-box;
 }
 
+/* The page follows the interface language (<html lang>); parts marked with
+   their own language (the chat follows the conversation's) switch too. */
+html:lang(ko) body,
+[lang|='ko'] {
+  font-family: var(--font-ko);
+}
+[lang|='zh'] {
+  font-family: var(--font-zh);
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    'PingFang SC',
-    'Noto Sans KR',
-    sans-serif;
+  font-family: var(--font-zh);
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;

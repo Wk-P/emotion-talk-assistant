@@ -1141,7 +1141,8 @@ onMounted(() => load())
   background: var(--bg);
   font-size: 13px;
   line-height: 1.7;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Prose, mostly Chinese: a code font made Windows fall back to SimSun. */
+  font-family: inherit;
 }
 @media (min-width: 1360px) {
   .content {

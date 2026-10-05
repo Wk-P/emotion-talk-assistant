@@ -123,7 +123,7 @@ async function saveRecordFor(idx: number) {
         </div>
       </header>
 
-      <div ref="scrollEl" class="turns">
+      <div ref="scrollEl" class="turns" :lang="session.language === 'ko' ? 'ko' : 'zh-CN'">
         <div v-if="showEmptyHint" class="chat-empty">
           <!-- documents/02_内容与需求/首选提示题建议.md, verbatim and not edited: the welcome
                sentence plus the starter list, as plain text (no clickable options). -->
@@ -193,6 +193,7 @@ async function saveRecordFor(idx: number) {
           <div class="composer-box">
             <textarea
               ref="inputEl"
+              :lang="session.language === 'ko' ? 'ko' : 'zh-CN'"
               v-model="draft"
               rows="1"
               :placeholder="t('chat.placeholder')"
