@@ -632,6 +632,7 @@ onMounted(load)
             <option value="">{{ t('admin.filter.all') }}</option>
             <option value="user">{{ t('admin.role.user') }}</option>
             <option value="admin">{{ t('admin.role.admin') }}</option>
+            <option v-if="isSuperadmin" value="superadmin">{{ t('admin.role.superadmin') }}</option>
           </select>
         </label>
         <label class="filter-field">
@@ -668,7 +669,7 @@ onMounted(load)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="user in users" :key="user.id">
+          <tr v-for="user in users" :key="user.id" :class="{ protected: user.role === 'superadmin' }">
             <td class="cell-email">{{ user.username }}</td>
             <td><span class="badge" :class="user.role">{{ t(`admin.role.${user.role}`) }}</span></td>
             <td>
@@ -701,7 +702,7 @@ onMounted(load)
               </template>
               <template v-else>
                 <button
-                  v-if="user.session_count > 0"
+                  v-if="user.session_count > 0 && (user.role !== 'superadmin' || user.id === auth.user?.id)"
                   type="button"
                   class="btn-outline"
                   :disabled="exportingKey !== null"
@@ -709,6 +710,13 @@ onMounted(load)
                 >
                   {{ exportingKey === user.id ? t('admin.exporting') : t('admin.exportUser') }}
                 </button>
+                <template v-if="user.role === 'superadmin'">
+                  <button v-if="user.id === auth.user?.id" type="button" class="btn-outline" @click="startReset(user)">
+                    {{ t('admin.account.resetPassword') }}
+                  </button>
+                  <span class="protected-note">{{ user.id === auth.user?.id ? t('admin.protectedSelfNote') : t('admin.protectedNote') }}</span>
+                </template>
+                <template v-else>
                 <button v-if="isSuperadmin && user.role === 'user'" type="button" class="btn-outline" @click="promote(user)">
                   {{ t('admin.promote') }}
                 </button>
@@ -724,6 +732,7 @@ onMounted(load)
                 <button type="button" class="btn-danger" @click="confirmingDeleteUser = user.id">
                   {{ t('admin.deleteUser') }}
                 </button>
+                </template>
               </template>
             </td>
           </tr>
@@ -731,7 +740,7 @@ onMounted(load)
       </table>
 
       <div class="user-cards">
-        <div v-for="user in users" :key="user.id" class="user-row">
+        <div v-for="user in users" :key="user.id" class="user-row" :class="{ protected: user.role === 'superadmin' }">
           <div class="user-main">
             <div class="user-email">{{ user.username }}</div>
             <div class="user-meta">
@@ -743,7 +752,7 @@ onMounted(load)
           </div>
           <div class="user-actions">
             <button
-              v-if="user.session_count > 0"
+              v-if="user.session_count > 0 && (user.role !== 'superadmin' || user.id === auth.user?.id)"
               type="button"
               class="btn-outline"
               :disabled="exportingKey !== null"
@@ -751,6 +760,13 @@ onMounted(load)
             >
               {{ exportingKey === user.id ? t('admin.exporting') : t('admin.exportUser') }}
             </button>
+            <template v-if="user.role === 'superadmin'">
+              <button v-if="user.id === auth.user?.id" type="button" class="btn-outline" @click="startReset(user)">
+                {{ t('admin.account.resetPassword') }}
+              </button>
+              <span class="protected-note">{{ user.id === auth.user?.id ? t('admin.protectedSelfNote') : t('admin.protectedNote') }}</span>
+            </template>
+            <template v-else>
             <button v-if="isSuperadmin && user.role === 'user'" type="button" class="btn-outline" @click="promote(user)">
               {{ t('admin.promote') }}
             </button>
@@ -771,6 +787,7 @@ onMounted(load)
             >
               {{ t('admin.deleteUser') }}
             </button>
+            </template>
           </div>
           <form v-if="resettingUser === user.id" class="confirm-row reset-inline" @submit.prevent="doResetPassword(user)">
             <input
@@ -1330,6 +1347,14 @@ onMounted(load)
   font-weight: 600;
   background: var(--bg);
   color: var(--text-muted);
+}
+.protected-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+tr.protected,
+.user-row.protected {
+  background: var(--accent-soft);
 }
 .badge.admin,
 .badge.superadmin {

@@ -335,6 +335,8 @@ export const en = {
     enable: 'Re-enable account',
     deleteUser: 'Delete user',
     deleteUserConfirm: 'All of this user’s conversations will be deleted too, and this cannot be undone. Continue?',
+    protectedNote: 'Superadmin accounts are protected: they can’t be deleted, disabled, re-roled or have their password reset here.',
+    protectedSelfNote: 'Your own superadmin account: you can reset its password, but not delete, disable or re-role it.',
     selectPrompt: 'Select a conversation on the left to see it.',
     colRole: 'Role',
     colStatus: 'Status',

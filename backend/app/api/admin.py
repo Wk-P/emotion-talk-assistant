@@ -425,12 +425,13 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_required),
 ) -> list[AdminUserItem]:
-    """A plain admin only ever sees plain-user accounts; a superadmin also
-    sees other admins (never other superadmins — see _can_manage). The
-    filters only ever narrow that visible set."""
+    """A plain admin only ever sees plain-user accounts; a superadmin sees
+    every account, superadmins listed first — shown read-only, since no one
+    can manage a superadmin here (see _can_manage). The filters only ever
+    narrow that visible set."""
 
     visible_roles = (
-        [UserRole.USER, UserRole.ADMIN] if admin.role == UserRole.SUPERADMIN else [UserRole.USER]
+        [UserRole.SUPERADMIN, UserRole.USER, UserRole.ADMIN] if admin.role == UserRole.SUPERADMIN else [UserRole.USER]
     )
     if role is not None:
         visible_roles = [r for r in visible_roles if r == role]
@@ -444,7 +445,7 @@ async def list_users(
         select(User, func.coalesce(count_subq.c.session_count, 0))
         .outerjoin(count_subq, count_subq.c.user_id == User.id)
         .where(User.role.in_(visible_roles))
-        .order_by(User.created_at.desc())
+        .order_by((User.role == UserRole.SUPERADMIN).desc(), User.created_at.desc())
     )
     if q and q.strip():
         stmt = stmt.where(User.username.ilike(f"%{_like_escape(q.strip())}%", escape="\\"))
@@ -550,10 +551,13 @@ async def reset_user_password(
     admin: User = Depends(get_current_admin_required),
 ) -> AdminUserItem:
     """There's no email to send a reset link to: a user who forgot their
-    password asks an admin, who sets a new one and passes it on."""
+    password asks an admin, who sets a new one and passes it on. Admins may
+    also set their own (a superadmin can't be managed by anyone else, so this
+    is how theirs changes); deleting or re-roling yourself stays refused."""
 
     target = await _get_user_or_404(user_id, db)
-    _can_manage(admin, target)
+    if target.id != admin.id:
+        _can_manage(admin, target)
     target.password_hash = hash_password(payload.password)
     db.add(target)
     await db.commit()
