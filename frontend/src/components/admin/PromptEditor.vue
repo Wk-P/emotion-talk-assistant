@@ -2,6 +2,8 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import FlowOrderEditor from './FlowOrderEditor.vue'
+import ModelPicker from './ModelPicker.vue'
+import PromptTools from './PromptTools.vue'
 import {
   createPromptModule,
   deletePromptModule,
@@ -19,6 +21,7 @@ import {
   type PromptVersionItem,
 } from '@/api/client'
 import { formatDateTime } from '@/utils/time'
+import { usePhone } from '@/utils/phone'
 
 const { t } = useI18n()
 
@@ -59,7 +62,22 @@ const emptyStageKeys = computed(() =>
 
 // "编辑问法" on a step card: select it and bring the editor into view.
 const editorEl = ref<HTMLElement | null>(null)
+// One part of the settings at a time, instead of everything stacked.
+type Section = 'model' | 'flow' | 'prompts' | 'tools'
+const SECTIONS: Section[] = ['model', 'flow', 'prompts', 'tools']
+const section = ref<Section>('prompts')
+// Narrow screens: the block list and the editor are two screens; this is
+// whether the editor one is showing. Wide screens show both side by side.
+const narrowDetail = ref(false)
+function openBlock(key: string) {
+  selectedKey.value = key
+  narrowDetail.value = true
+  if (window.matchMedia('(max-width: 1023px)').matches) nextTick(() => window.scrollTo({ top: 0 }))
+}
+
 async function editStep(key: string) {
+  section.value = 'prompts'
+  narrowDetail.value = true
   selectedKey.value = key
   await nextTick()
   editorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -233,6 +251,7 @@ function toSlots() {
 const SLOT_KEYS = ['goal', 'examples', 'avoid'] as const
 // The program's own add-ons stay folded away unless asked for.
 const showSystem = ref(false)
+const phone = usePhone()
 
 const draftIsDefault = computed(() => current.value !== null && draft.value === current.value.default_content)
 
@@ -400,16 +419,35 @@ onMounted(() => load())
 </script>
 
 <template>
-  <div class="prompt-editor">
-    <div class="toolbar">
-      <div class="steps">
-        <div class="steps-title">{{ t('prompts.stepsTitle') }}</div>
+  <div class="prompt-editor" :class="{ phone }">
+    <nav class="subtabs" role="tablist">
+      <button
+        v-for="s in SECTIONS"
+        :key="s"
+        type="button"
+        role="tab"
+        :aria-selected="section === s"
+        :class="{ on: section === s }"
+        @click="section = s"
+      >
+        {{ t(`prompts.sections.${s}`) }}
+      </button>
+    </nav>
+
+    <p v-if="phone && section !== 'tools'" class="phone-note">{{ t('prompts.phoneNote') }}</p>
+
+    <ModelPicker v-if="section === 'model'" />
+    <PromptTools v-else-if="section === 'tools'" />
+
+    <div v-if="section === 'prompts'" class="toolbar">
+      <details v-if="!phone" class="steps">
+        <summary class="steps-title">{{ t('prompts.stepsTitle') }}</summary>
         <ol>
           <li>{{ t('prompts.step1') }}</li>
           <li>{{ t('prompts.step2') }}</li>
           <li>{{ t('prompts.step3') }}</li>
         </ol>
-      </div>
+      </details>
       <div class="lang-pick">
         <span class="lang-label">{{ t('prompts.langLabel') }}</span>
         <div class="segmented" role="radiogroup" :aria-label="t('prompts.langLabel')">
@@ -424,7 +462,7 @@ onMounted(() => load())
     </div>
 
     <FlowOrderEditor
-      v-if="!loading"
+      v-if="!loading && section === 'flow'"
       :modules="modules"
       :name-of="nameOf"
       :empty-keys="emptyStageKeys"
@@ -435,7 +473,7 @@ onMounted(() => load())
     <!-- Narrow: stacked. >=1024px: list | editor, test panel below.
          >=1360px: full-width three-column workspace — list | editor | a
          sticky, full-height test chat on the right. -->
-    <div v-if="!loading" class="workspace">
+    <div v-if="!loading && section === 'prompts'" class="workspace" :class="{ detail: narrowDetail }">
       <nav class="block-list">
         <template v-for="g in groupedItems" :key="g.group">
           <div class="group-title">
@@ -451,7 +489,7 @@ onMounted(() => load())
             type="button"
             class="block"
             :class="{ selected: m.key === selectedKey, child: !m.is_stage && m.group === 'flow', off: !m.enabled }"
-            @click="selectedKey = m.key"
+            @click="openBlock(m.key)"
           >
             <span class="block-name">{{ nameOf(m.key) }}</span>
             <span class="block-tags">
@@ -484,6 +522,7 @@ onMounted(() => load())
       </nav>
 
       <section v-if="current" ref="editorEl" class="editor panel">
+        <button type="button" class="btn-text back-btn" @click="narrowDetail = false">← {{ t('prompts.backToList') }}</button>
         <h2 class="panel-title">{{ nameOf(current.key) }}</h2>
         <p v-if="currentModule" class="panel-desc">{{ descOf(currentModule) }}</p>
 
@@ -504,7 +543,7 @@ onMounted(() => load())
             </button>
           </template>
           <template v-else>
-            <button type="button" class="btn-outline small" @click="startRename">{{ t('prompts.rename') }}</button>
+            <button v-if="!phone" type="button" class="btn-outline small" @click="startRename">{{ t('prompts.rename') }}</button>
             <button type="button" class="btn-outline small" :disabled="moduleBusy" @click="toggleEnabled">
               {{ currentModule.enabled ? t('prompts.disable') : t('prompts.enable') }}
             </button>
@@ -532,7 +571,7 @@ onMounted(() => load())
           <template v-else>{{ t('prompts.usingDefault') }}</template>
         </p>
 
-        <details class="tips" open>
+        <details v-if="!phone" class="tips">
           <summary>{{ t('prompts.tipsTitle') }}</summary>
           <ul>
             <li>{{ t('prompts.tip1') }}</li>
@@ -541,7 +580,8 @@ onMounted(() => load())
           </ul>
         </details>
 
-        <div v-if="slots" class="slots">
+        <div v-if="phone" class="ro-text">{{ draft }}</div>
+        <div v-else-if="slots" class="slots">
           <label v-for="(k, i) in SLOT_KEYS" :key="k" class="slot">
             <span class="slot-title">{{ t(`prompts.slots.${k}.title`) }}</span>
             <span class="slot-hint">{{ t(`prompts.slots.${k}.hint`) }}</span>
@@ -982,6 +1022,79 @@ onMounted(() => load())
   font-size: 12px;
   color: var(--text-muted);
   margin: 10px 0 14px;
+}
+/* Phone: view only — everything that types or saves text is hidden. */
+.phone-note {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.ro-text {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  overflow-wrap: anywhere;
+}
+.phone .save-row,
+.phone .secondary-row,
+.phone .secondary-row + .hint,
+.phone .versions,
+.phone .add-btn,
+.phone .add-form {
+  display: none;
+}
+.subtabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subtabs button {
+  flex: 1 0 auto;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.subtabs button.on {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+.back-btn {
+  display: none;
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+/* Narrow: list, or editor + test chat — never both stacked. */
+@media (max-width: 1023px) {
+  .back-btn {
+    display: inline-block;
+  }
+  .workspace:not(.detail) .editor,
+  .workspace:not(.detail) .test,
+  .workspace.detail .block-list {
+    display: none;
+  }
 }
 .slots {
   display: flex;

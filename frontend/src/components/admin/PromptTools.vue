@@ -16,8 +16,10 @@ import {
   type RunState,
   type TestScript,
 } from '@/api/client'
+import { usePhone } from '@/utils/phone'
 
 const { t, te } = useI18n()
+const phone = usePhone()
 
 // ---- contradiction check ----
 const checkLang = ref<Language>('zh')
@@ -195,11 +197,11 @@ async function runScript() {
         >
           {{ s.name }}
         </button>
-        <button type="button" class="chip add" @click="addScript">{{ t('tools.addScript') }}</button>
+        <button v-if="!phone" type="button" class="chip add" @click="addScript">{{ t('tools.addScript') }}</button>
       </div>
 
       <template v-if="selected">
-        <div v-if="editing" class="edit">
+        <div v-if="editing && !phone" class="edit">
           <input v-model="editName" maxlength="60" :placeholder="t('tools.namePlaceholder')" />
           <select v-model="selected.language">
             <option value="zh">中文</option>
@@ -214,7 +216,7 @@ async function runScript() {
         </div>
         <div v-else class="row">
           <span class="hint">{{ t('tools.lineCount', { n: selected.lines.length }) }}</span>
-          <button type="button" class="btn-outline" :disabled="running" @click="startEdit">{{ t('tools.edit') }}</button>
+          <button v-if="!phone" type="button" class="btn-outline" :disabled="running" @click="startEdit">{{ t('tools.edit') }}</button>
           <button type="button" class="btn-primary" :disabled="running || !selected.lines.length" @click="runScript">
             {{ running ? t('tools.running', { done: current.length, all: selected.lines.length }) : t('tools.run') }}
           </button>

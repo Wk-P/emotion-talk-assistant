@@ -30,9 +30,7 @@ import {
   USERNAME_PATTERN,
 } from '@/api/client'
 import AdminReflections from '@/components/admin/AdminReflections.vue'
-import ModelPicker from '@/components/admin/ModelPicker.vue'
 import PromptEditor from '@/components/admin/PromptEditor.vue'
-import PromptTools from '@/components/admin/PromptTools.vue'
 import AdminGuide from '@/components/admin/AdminGuide.vue'
 import { useAuthStore } from '@/stores/auth'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
@@ -564,9 +562,7 @@ onMounted(load)
     </template>
 
     <template v-else-if="tab === 'prompts'">
-      <ModelPicker />
       <PromptEditor />
-      <PromptTools />
     </template>
 
     <AdminGuide v-else-if="tab === 'guide'" />

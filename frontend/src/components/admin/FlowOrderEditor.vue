@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePhone } from '@/utils/phone'
 import {
   createPromptModule,
   getFlowConfig,
@@ -27,6 +28,7 @@ const props = defineProps<{
 const emit = defineEmits<{ edit: [key: string]; reload: [] }>()
 
 const { t, te } = useI18n()
+const phone = usePhone()
 
 const CLOSING = 'flow.closing'
 const STABILIZATION = 'flow.stabilization'
@@ -244,12 +246,14 @@ async function addStep() {
       </div>
     </header>
 
-    <ol class="howto">
+    <ol v-if="!phone" class="howto">
       <li>{{ t('flowOrder.how1') }}</li>
       <li>{{ t('flowOrder.how2') }}</li>
       <li>{{ t('flowOrder.how3') }}</li>
       <li>{{ t('flowOrder.how4') }}</li>
     </ol>
+    <!-- Said once here instead of under every step's turn boxes. -->
+    <p v-if="!phone" class="turns-note">{{ t('flowOrder.turnsNote') }}</p>
 
     <TransitionGroup name="card" tag="ol" class="cards">
       <li
@@ -282,7 +286,9 @@ async function addStep() {
           <div v-if="config && key !== PURPOSE" class="limits">
             <label v-if="!MAX_ONLY.has(key)">
               {{ t('flowOrder.minTurns') }}
+              <b v-if="phone" class="ro">{{ limitsOf(key)[0] }}</b>
               <input
+                v-else
                 type="number"
                 min="1"
                 max="50"
@@ -292,7 +298,9 @@ async function addStep() {
             </label>
             <label>
               {{ t('flowOrder.maxTurns') }}
+              <b v-if="phone" class="ro">{{ limitsOf(key)[1] }}</b>
               <input
+                v-else
                 type="number"
                 min="1"
                 max="50"
@@ -300,12 +308,17 @@ async function addStep() {
                 @change="setLimit(key, 1, Number(($event.target as HTMLInputElement).value))"
               />
             </label>
-            <span class="limits-hint">{{ t('flowOrder.turnsHint') }}</span>
           </div>
           <div v-if="config && key === PURPOSE" class="purposes">
             <div class="purposes-title">{{ t('flowOrder.purposes.title') }}</div>
             <p class="limits-hint">{{ t('flowOrder.purposes.hint') }}</p>
-            <div v-for="(p, pi) in config.purposes" :key="p.id" class="purpose-row">
+            <template v-if="phone">
+              <div v-for="p in config.purposes" :key="p.id" class="purpose-ro">
+                {{ p.labels.zh }} / {{ p.labels.ko }}
+                <span class="ro-jump">{{ p.jump ? t('flowOrder.purposes.jumpTo', { name: nameOf(p.jump) }) : t('flowOrder.purposes.noJump') }}</span>
+              </div>
+            </template>
+            <div v-for="(p, pi) in phone ? [] : config.purposes" :key="p.id" class="purpose-row">
               <input v-model="p.labels.zh" maxlength="40" :placeholder="t('flowOrder.purposes.zh')" />
               <input v-model="p.labels.ko" maxlength="40" :placeholder="t('flowOrder.purposes.ko')" />
               <select v-model="p.jump">
@@ -322,7 +335,7 @@ async function addStep() {
                 ✕
               </button>
             </div>
-            <button v-if="config.purposes.length < 8" type="button" class="btn-text small" @click="addPurpose">
+            <button v-if="config.purposes.length < 8 && !phone" type="button" class="btn-text small" @click="addPurpose">
               {{ t('flowOrder.purposes.add') }}
             </button>
           </div>
@@ -377,7 +390,9 @@ async function addStep() {
     <div v-if="config" class="history">
       <label>
         {{ t('flowOrder.history.label') }}
+        <b v-if="phone" class="ro">{{ config.history_turns }}</b>
         <input
+          v-else
           type="number"
           min="2"
           max="60"
@@ -393,7 +408,7 @@ async function addStep() {
       <li v-for="w in warnings" :key="w">⚠️ {{ w }}</li>
     </ul>
 
-    <form v-if="adding" class="add" @submit.prevent="addStep">
+    <form v-if="adding && !phone" class="add" @submit.prevent="addStep">
       <label>
         <span>{{ t('flowOrder.addLabel') }}</span>
         <input v-model="newName" maxlength="40" :placeholder="t('flowOrder.addPlaceholder')" />
@@ -406,7 +421,7 @@ async function addStep() {
     </form>
 
     <div class="foot">
-      <button v-if="!adding" type="button" class="btn-outline" @click="adding = true">{{ t('flowOrder.add') }}</button>
+      <button v-if="!adding && !phone" type="button" class="btn-outline" @click="adding = true">{{ t('flowOrder.add') }}</button>
       <button type="button" class="btn-text" @click="resetDefault">{{ t('flowOrder.resetDefault') }}</button>
       <span v-if="flash" class="flash">{{ flash }}</span>
     </div>
@@ -701,12 +716,37 @@ h2 {
 .card-move {
   transition: transform 0.2s ease;
 }
+.ro {
+  margin: 0 4px;
+}
+.purpose-ro {
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ro-jump {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.turns-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
 @media (max-width: 640px) {
   .card {
     flex-wrap: wrap;
   }
+  /* Chinese and Korean wording each on a full line, then where it jumps. */
   .purpose-row {
     grid-template-columns: 1fr auto;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .purpose-row input {
+    grid-column: 1 / -1;
   }
   .actions {
     width: 100%;
