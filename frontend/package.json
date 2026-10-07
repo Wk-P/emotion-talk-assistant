@@ -15,6 +15,7 @@
     "deploy": "npm run build-only && wrangler deploy"
   },
   "dependencies": {
+    "@fontsource-variable/noto-sans-sc": "^5.3.0",
     "axios": "^1.20.0",
     "pinia": "^4.0.3",
     "vue": "^3.5.42",

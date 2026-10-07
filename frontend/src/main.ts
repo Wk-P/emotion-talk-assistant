@@ -1,3 +1,5 @@
+// Chinese web font for non-Apple devices (see --font-zh in assets/main.css).
+import '@fontsource-variable/noto-sans-sc'
 import './assets/main.css'
 
 import { createApp, watch } from 'vue'
