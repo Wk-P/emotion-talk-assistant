@@ -67,12 +67,13 @@ class Module:
         return next((n for n in self.names.values() if n.strip()), "")
 
 
-# The stage order admins set on the admin page (a JSON list of stage keys,
-# without closing — always last — and stabilization / ending — not in the
-# sequence).
+# The stage order admins set on the admin page: a JSON list of every stage
+# key. Nothing is fixed: closing, stabilization and ending are ordinary steps
+# too; which step answers an overwhelmed user, the end button or "enough for
+# today" is an admin setting (app/services/flow_config.py). Steps missing from
+# an order saved before that are appended in the default order.
 FLOW_ORDER_SETTING = "flow_order"
-_FIXED_STAGES = (stages.CLOSING, stages.STABILIZATION, stages.ENDING)
-DEFAULT_SEQUENCE = [k for k in stages.ORDER if k != stages.CLOSING]
+DEFAULT_SEQUENCE = list(stages.KEYS)
 
 
 async def _saved_order(db: AsyncSession) -> list[str]:
@@ -110,7 +111,7 @@ async def load_modules(db: AsyncSession) -> list[Module]:
 
     out = [built_in(k, "rules") for k in RULE_KEYS]
     out += [added(r) for r in custom if r.group == "rules"]
-    for stage_key in [*sequence, *_FIXED_STAGES]:
+    for stage_key in sequence:
         out.append(built_in(stage_key, "flow") if stage_key in FLOW_KEYS else added(by_key[stage_key]))
         out += [added(r) for r in custom if r.group == "flow" and r.flow_key == stage_key]
     out += [added(r) for r in custom if r.group == "other"]
@@ -131,22 +132,20 @@ def default_enabled(key: str) -> bool:
 
 
 def flow_sequence(modules: list[Module]) -> list[str]:
-    """The stages admins can order, in their order (turned-off ones too)."""
+    """Every stage, in the admins' order (turned-off ones too)."""
 
-    return [m.key for m in modules if m.is_stage and m.key not in _FIXED_STAGES]
+    return [m.key for m in modules if m.is_stage]
 
 
-async def active_flow_order(db: AsyncSession) -> list[str]:
+async def active_flow_order(db: AsyncSession, skip: set[str] = frozenset()) -> list[str]:
     """What conversations go through: the admins' order without turned-off
-    stages, then closing (always last) unless admins turned it off. Never
-    empty: with everything off, closing alone."""
+    stages and without `skip` (steps used only on a trigger, such as the end
+    button). Never empty: with nothing left, the first stage."""
 
     modules = await load_modules(db)
     enabled = {m.key for m in modules if m.enabled}
-    order = [k for k in flow_sequence(modules) if k in enabled]
-    if stages.CLOSING in enabled or not order:
-        order.append(stages.CLOSING)
-    return order
+    sequence = flow_sequence(modules)
+    return [k for k in sequence if k in enabled and k not in skip] or sequence[:1]
 
 
 async def disabled_keys(db: AsyncSession) -> set[str]:

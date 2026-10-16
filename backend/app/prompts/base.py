@@ -26,8 +26,9 @@ def _flow_format(flow_key: str, sys: dict[str, str]) -> str:
     return sys["system.no_cards"]
 
 
-def _signals(flow_key: str, sys: dict[str, str]) -> str:
-    if flow_key in (stages.STABILIZATION, stages.ENDING):
+def _signals(flow_key: str, sys: dict[str, str], triggered: bool) -> str:
+    # A one-off reply (overwhelmed user, end button) moves nothing on.
+    if triggered:
         return ""
     extra = sys["system.self_check_signal"] if flow_key == stages.SELF_CHECK else ""
     return "\n".join(p for p in (sys["system.signals"], extra) if p)
@@ -39,12 +40,13 @@ def build_system_prompt(
     flow_key: str,
     sys: dict[str, str],
     other_text: str = "",
+    triggered: bool = False,
 ) -> str:
     # The program's own part (sys, app/prompts/system.py) first, then the
     # admins' blocks under the priority header, then the output format. All
     # of it is admin-editable; a turned-off piece is simply left out.
     technical = "\n".join(
-        p for p in (sys["system.format"], _flow_format(flow_key, sys), _signals(flow_key, sys), sys["system.reply_language"]) if p
+        p for p in (sys["system.format"], _flow_format(flow_key, sys), _signals(flow_key, sys, triggered), sys["system.reply_language"]) if p
     )
     sections = [s for s in (rules_text, flow_instructions, other_text) if s.strip()]
     admin = "\n\n".join(p for p in (sys["system.priority_header"], "\n\n---\n".join(sections)) if p)

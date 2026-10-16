@@ -265,10 +265,11 @@ async def handle_turn(
         session, user_text, confirmation, session.self_criticism_level, cfg
     )
     # Admins may turn ending / stabilization off: the current step answers.
-    if ending and stages.ENDING not in cfg.disabled:
-        flow_key = stages.ENDING
-    elif risk == RiskLevel.WATCH and stages.STABILIZATION not in cfg.disabled:
-        flow_key = stages.STABILIZATION
+    # Which step (if any) answers these is admin-set.
+    if ending and cfg.usable(cfg.ending_step):
+        flow_key = cfg.ending_step
+    elif risk == RiskLevel.WATCH and cfg.usable(cfg.stabilize_step):
+        flow_key = cfg.stabilize_step
     else:
         flow_key = state["stage"]
 
@@ -292,7 +293,7 @@ async def _continue_flow(
     risk: RiskLevel = RiskLevel.NONE,
     ending: bool = False,
 ) -> TurnResult:
-    system_prompt, prompt_versions = await build_prompt(db, flow_key, session.language)
+    system_prompt, prompt_versions = await build_prompt(db, flow_key, session.language, triggered=flow_key != state["stage"])
     messages = await _load_messages(db, session.id)
     sys = await registry.system_texts(db, session.language)
     system_prompt += _progress_note(messages, state, cfg, session.language, flow_key, sys)

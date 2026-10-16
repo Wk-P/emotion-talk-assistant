@@ -18,6 +18,7 @@ async def build_prompt(
     flow_key: str,
     language: Language,
     overrides: dict[str, str] | None = None,
+    triggered: bool = False,
 ) -> tuple[str, dict[str, int]]:
     """Returns the system prompt plus {key: version} of the blocks it was
     built from, for recording on the resulting message. `overrides` (admin
@@ -55,6 +56,6 @@ async def build_prompt(
         if part
     )
 
-    prompt = build_system_prompt(text("rules"), flow_text, flow_key, sys, text("other"))
+    prompt = build_system_prompt(text("rules"), flow_text, flow_key, sys, text("other"), triggered)
     used = {key: resolved[key].version for key in keys if resolved[key].content.strip()}
     return prompt, used

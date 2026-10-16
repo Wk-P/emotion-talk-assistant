@@ -37,12 +37,12 @@ from app.services.flow_config import FlowConfig
 
 # Stages that end on something the user does, not on the model's stage_done
 # (plus whichever step shows the summary card, see _user_ended).
-_USER_ENDED = {stages.PURPOSE, stages.SELF_CHECK, stages.CLOSING}
+_USER_ENDED = {stages.PURPOSE, stages.SELF_CHECK}
 
 
 def _user_ended(cfg: FlowConfig) -> set[str]:
-    summary = cfg.card_steps.get("seb_summary")
-    return _USER_ENDED | ({summary} if summary else set())
+    # The admin-chosen closing step waits for the user to leave.
+    return _USER_ENDED | {k for k in (cfg.card_steps.get("seb_summary"), cfg.closing_step) if k}
 
 
 
@@ -85,9 +85,7 @@ def _advance(s: dict[str, Any], cfg: FlowConfig) -> None:
     rest = _after(stage, cfg.order)
     if rest:
         _enter(s, rest[0])
-    elif stages.CLOSING in cfg.order:
-        _enter(s, stages.CLOSING)
-    # Closing turned off and nothing left: stay in the last step.
+    # Nothing left: stay in the last step.
 
 
 def _limits(s: dict[str, Any], cfg: FlowConfig) -> tuple[int, int | None]:
@@ -96,7 +94,7 @@ def _limits(s: dict[str, Any], cfg: FlowConfig) -> tuple[int, int | None]:
         # Weak or no self-criticism: brief acceptance only, admin-set
         # ("自我批评不强时，不要反复进行自我友善活动").
         return cfg.weak_kindness
-    if stage in (stages.PURPOSE, stages.CLOSING):
+    if stage == stages.PURPOSE or stage == cfg.closing_step:
         return 1, None
     return cfg.limits_for(stage)
 
@@ -123,7 +121,7 @@ def before_reply(
     if card == "skip" or dismissed:
         if stage == stages.SELF_CHECK:
             s["branch"] = "none"
-        if stage != stages.CLOSING:
+        if stage != cfg.closing_step:
             _advance(s, cfg)
     elif card is not None and card == own_card and (confirmation or {}).get("fields"):
         _advance(s, cfg)
@@ -155,8 +153,9 @@ def after_reply(
     s = state(session, cfg)
     stage, turns = s["stage"], s.get("turns", 0)
     request = signals.get("user_request")
-    if request == "end_today" and cfg.end_today_enabled and stage != stages.CLOSING and stages.CLOSING in cfg.order:
-        _enter(s, stages.CLOSING)
+    closing = cfg.closing_step
+    if request == "end_today" and cfg.end_today_enabled and closing and stage != closing and closing in cfg.order:
+        _enter(s, closing)
     elif request == "to_action" and cfg.to_action_step and cfg.to_action_step in _after(stage, cfg.order):
         _enter(s, cfg.to_action_step)
     elif stage == stages.SELF_CHECK:

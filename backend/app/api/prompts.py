@@ -346,7 +346,11 @@ async def preview_prompt(
 
     if payload.stage not in {m.key for m in await registry.load_modules(db) if m.is_stage}:
         raise HTTPException(status_code=422, detail="stage must be one of the built-in stages")
-    system_prompt, versions = await build_prompt(db, payload.stage, payload.language, overrides=payload.overrides)
+    cfg = await flow_config.load(db)
+    triggered = payload.stage in (cfg.stabilize_step, cfg.ending_step)
+    system_prompt, versions = await build_prompt(
+        db, payload.stage, payload.language, overrides=payload.overrides, triggered=triggered
+    )
     try:
         response = await generate_turn(
             system_prompt,

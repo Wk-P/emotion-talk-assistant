@@ -552,6 +552,13 @@ export interface FlowConfig {
   end_today_enabled: boolean
   /** Crisis resources of this country are shown ('' = all). */
   crisis_country: string
+  /** Which step "enough for today" leads to / answers an overwhelmed user /
+   * answers the end button (null = none). The last two aren't walked through. */
+  closing_step: string | null
+  stabilize_step: string | null
+  ending_step: string | null
+  /** Steps marked safety-related (a warning on the admin pages). */
+  safety_steps: string[]
 }
 
 export type KeywordList = 'crisis' | 'watch' | 'self_criticism'

@@ -32,23 +32,25 @@ const { t, te } = useI18n()
 const phone = usePhone()
 const { config, defaults, dirty, load, save, discard, resetToDefaults, forgetStep } = useFlowSettings()
 
-const CLOSING = 'flow.closing'
-const STABILIZATION = 'flow.stabilization'
-const ENDING = 'flow.ending'
 const PURPOSE = 'flow.purpose'
+// Steps that answer only when something happens (admin-chosen), not in order.
+const TRIGGER_ROLES = ['stabilize_step', 'ending_step'] as const
 
-// Every orderable step, in use or not (the order the backend stores).
-const saved = computed(() =>
-  props.modules.filter((m) => m.is_stage && ![CLOSING, STABILIZATION, ENDING].includes(m.key)).map((m) => m.key),
-)
+// Every step, in use or not (the order the backend stores). Nothing is fixed.
+const saved = computed(() => props.modules.filter((m) => m.is_stage).map((m) => m.key))
 const order = ref<string[]>([])
 watch(saved, (v) => (order.value = [...v]), { immediate: true })
 
 const byKey = (key: string) => props.modules.find((m) => m.key === key)
 const enabled = (key: string) => byKey(key)?.enabled ?? true
 const custom = (key: string) => !byKey(key)?.built_in
-const live = computed(() => order.value.filter(enabled))
-const unused = computed(() => order.value.filter((k) => !enabled(k)))
+const triggered = (key: string) => TRIGGER_ROLES.some((r) => config.value?.[r] === key)
+const isSafety = (key: string) => !!config.value?.safety_steps.includes(key)
+// The line: steps walked through in order (trigger-only steps are below).
+const inLine = (key: string) => enabled(key) && !triggered(key)
+const lineKeys = computed(() => order.value.filter((k) => !triggered(k)))
+const live = computed(() => order.value.filter(inLine))
+const unused = computed(() => lineKeys.value.filter((k) => !enabled(k)))
 // Position among the steps in use.
 const liveIndex = computed(() => Object.fromEntries(live.value.map((k, i) => [k, i])) as Record<string, number>)
 
@@ -88,6 +90,7 @@ function addons(key: string): string[] {
   const out: string[] = []
   if (c.card_steps.seb_summary === key) out.push(t('flowUi.addon.summary'))
   if (c.card_steps.plan_form === key) out.push(t('flowUi.addon.plan'))
+  if (c.closing_step === key) out.push(t('comp.role.closing_step'))
   return out
 }
 
@@ -96,7 +99,7 @@ function addons(key: string): string[] {
 // their place in the stored order.
 function placed(base: string[], key: string, pos: number): string[] {
   const rest = base.filter((k) => k !== key)
-  const liveRest = rest.filter((k) => k === key || enabled(k))
+  const liveRest = rest.filter((k) => k === key || inLine(k))
   const at = pos < liveRest.length ? rest.indexOf(liveRest[pos]!) : liveRest.length ? rest.indexOf(liveRest.at(-1)!) + 1 : rest.length
   rest.splice(at, 0, key)
   return rest
@@ -212,7 +215,7 @@ function resetRules() {
       </li>
 
       <!-- Every step in its stored place; ones taken out stay visible, greyed. -->
-      <template v-for="key in order" :key="key">
+      <template v-for="key in lineKeys" :key="key">
         <li v-if="enabled(key)" class="gap">
           <button type="button" class="gap-btn" :class="{ open: slot === liveIndex[key]! }" :aria-label="t('flowUi.insertHere')" @click="openSlot(liveIndex[key]!)">
             ＋<span class="gap-label">{{ t('flowUi.insertHere') }}</span>
@@ -237,10 +240,12 @@ function resetRules() {
             <div class="step-head">
               <h3>{{ nameOf(key) }}</h3>
               <span v-if="!enabled(key)" class="tag">{{ t('flowUi.outBadge') }}</span>
+              <span v-if="isSafety(key)" class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
               <span v-if="custom(key)" class="tag accent">{{ t('flowOrder.customBadge') }}</span>
               <span v-for="a in addons(key)" :key="a" class="tag addon">{{ a }}</span>
             </div>
             <p class="what">{{ enabled(key) ? endsText(key) : t('flowUi.outHint') }}</p>
+            <p v-if="isSafety(key)" class="warn">⚠️ {{ t('comp.safetyGeneric') }}</p>
             <p v-if="enabled(key) && emptyKeys.includes(key)" class="warn">⚠️ {{ t('comp.noPrompt') }}</p>
 
             <div v-if="confirmingDelete === key" class="confirm">
@@ -288,25 +293,6 @@ function resetRules() {
         </div>
       </li>
 
-      <li class="step" :class="{ off: !enabled(CLOSING) }">
-        <span class="num">{{ enabled(CLOSING) ? live.length + 1 : '–' }}</span>
-        <div class="step-card">
-          <div class="step-head">
-            <h3>{{ nameOf(CLOSING) }}</h3>
-            <span class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
-            <span v-if="!enabled(CLOSING)" class="tag">{{ t('flowUi.outBadge') }}</span>
-          </div>
-          <p class="what">{{ t('flowUi.closingWhat') }}</p>
-          <p class="warn">⚠️ {{ t('flowUi.closingWarn') }}</p>
-          <div class="step-actions">
-            <span class="spacer" />
-            <button type="button" class="btn-text small" @click="emit('edit', CLOSING)">{{ t('comp.editPrompt') }}</button>
-            <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(CLOSING, !enabled(CLOSING))">
-              {{ enabled(CLOSING) ? t('flowUi.takeOut') : t('flowUi.putBackHere') }}
-            </button>
-          </div>
-        </div>
-      </li>
     </ol>
 
     <p v-if="flash" class="flash" role="status">{{ flash }}</p>
@@ -315,26 +301,43 @@ function resetRules() {
       <li v-for="w in warnings" :key="w">⚠️ {{ w }}</li>
     </ul>
 
-    <!-- Steps outside the order, used when something happens. -->
-    <section class="special">
+    <!-- Steps used when something happens, chosen by the admins. -->
+    <section v-if="config" class="special">
       <h3>{{ t('flowUi.specialTitle') }}</h3>
-      <p class="what">{{ t('flowUi.specialDesc') }}</p>
-      <div v-for="k in [STABILIZATION, ENDING]" :key="k" class="special-item" :class="{ off: !enabled(k) }">
-        <div class="step-head">
-          <h3>{{ nameOf(k) }}</h3>
-          <span class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
-          <span v-if="!enabled(k)" class="tag">{{ t('flowUi.offBadge') }}</span>
-        </div>
-        <p class="what">{{ k === STABILIZATION ? t('flowOrder.stabilizationNote', { name: nameOf(k) }) : t('flowOrder.endingNote', { name: nameOf(k) }) }}</p>
-        <p class="warn">⚠️ {{ k === STABILIZATION ? t('flowUi.stabilizationWarn') : t('flowUi.endingWarn') }}</p>
-        <div class="step-actions">
-          <span class="spacer" />
-          <button type="button" class="btn-text small" @click="emit('edit', k)">{{ t('comp.editPrompt') }}</button>
-          <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(k, !enabled(k))">
-            {{ enabled(k) ? t('comp.turnOff') : t('comp.turnOn') }}
-          </button>
-        </div>
+      <p class="what">{{ t('flowUi.roleDesc') }}</p>
+      <div v-for="r in TRIGGER_ROLES" :key="r" class="special-item" :class="{ off: !config[r] || !enabled(config[r]!) }">
+        <label class="rule">
+          <strong>{{ t(`flowUi.roleWhen.${r}`) }}</strong>
+          <select v-model="config[r]" :disabled="phone">
+            <option :value="null">{{ t(`flowUi.roleNone.${r}`) }}</option>
+            <option
+              v-for="k in order"
+              :key="k"
+              :value="k"
+              :disabled="[...TRIGGER_ROLES, 'closing_step' as const].some((o) => o !== r && config![o] === k)"
+            >
+              {{ nameOf(k) }}
+            </option>
+          </select>
+        </label>
+        <template v-if="config[r]">
+          <div class="step-head">
+            <h3>{{ nameOf(config[r]!) }}</h3>
+            <span v-if="isSafety(config[r]!)" class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
+            <span v-if="!enabled(config[r]!)" class="tag">{{ t('flowUi.offBadge') }}</span>
+          </div>
+          <p v-if="isSafety(config[r]!)" class="warn">⚠️ {{ t('comp.safetyGeneric') }}</p>
+          <div class="step-actions">
+            <span class="spacer" />
+            <button type="button" class="btn-text small" @click="emit('edit', config[r]!)">{{ t('comp.editPrompt') }}</button>
+            <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(config[r]!, !enabled(config[r]!))">
+              {{ enabled(config[r]!) ? t('comp.turnOff') : t('comp.turnOn') }}
+            </button>
+          </div>
+        </template>
+        <p v-else class="warn">⚠️ {{ t(`flowUi.roleOffWarn.${r}`) }}</p>
       </div>
+      <p v-if="dirty" class="what">{{ t('flowUi.roleUnsaved') }}</p>
     </section>
 
     <!-- Program rules, folded -->
@@ -374,8 +377,21 @@ function resetRules() {
             </select>
           </label>
           <label class="rule">
+            {{ t('flowUi.closingStep') }}
+            <select v-model="config.closing_step" :disabled="phone">
+              <option :value="null">{{ t('flowUi.closingNone') }}</option>
+              <option
+                v-for="k in lineKeys"
+                :key="k"
+                :value="k"
+              >
+                {{ nameOf(k) }}
+              </option>
+            </select>
+          </label>
+          <label v-if="config.closing_step" class="rule">
             <input v-model="config.end_today_enabled" type="checkbox" class="check" :disabled="phone" />
-            {{ t('flowOrder.rules.requests.endToday', { name: nameOf(CLOSING) }) }}
+            {{ t('flowOrder.rules.requests.endToday', { name: nameOf(config.closing_step) }) }}
           </label>
         </div>
         <div class="group">

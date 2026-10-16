@@ -28,11 +28,14 @@ from app.prompts import registry, stages
 
 SETTING_KEY = "flow_config"
 
-# Steps that end on something the user does: no minimum (listen, self_check
-# still have a maximum), or no limits at all (purpose, closing, and the
-# one-turn stabilization / ending replies).
-NO_MIN = {stages.LISTEN, stages.SELF_CHECK, stages.PURPOSE, stages.CLOSING}
-NO_LIMITS = {stages.PURPOSE, stages.CLOSING, stages.STABILIZATION, stages.ENDING}
+# Purpose ends on the user's answer: no turn limits. (The closing step and
+# the trigger-only steps ignore theirs too, see app/services/flow.py.)
+NO_LIMITS = {stages.PURPOSE}
+
+# Special roles, admin-set (None = no step has the role).
+ROLE_KEYS = ("closing_step", "stabilize_step", "ending_step")
+DEFAULT_ROLES = {"closing_step": stages.CLOSING, "stabilize_step": stages.STABILIZATION, "ending_step": stages.ENDING}
+DEFAULT_SAFETY = [stages.CLOSING, stages.STABILIZATION, stages.ENDING]
 
 DEFAULT_LIMITS: dict[str, tuple[int, int]] = {
     stages.LISTEN: (1, 10),
@@ -89,7 +92,7 @@ DEFAULT_CRISIS_COUNTRY = "KR"
 
 @dataclass
 class FlowConfig:
-    # Active steps in order, ending with closing (registry.active_flow_order).
+    # Active steps in order (registry.active_flow_order).
     order: list[str]
     limits: dict[str, tuple[int, int]] = field(default_factory=dict)
     history_turns: int = DEFAULT_HISTORY
@@ -101,9 +104,17 @@ class FlowConfig:
     card_steps: dict[str, str | None] = field(default_factory=lambda: dict(DEFAULT_CARD_STEPS))
     to_action_step: str | None = DEFAULT_TO_ACTION
     end_today_enabled: bool = True
-    # Steps admins turned off (closing, stabilization and ending included).
+    # Steps admins turned off.
     disabled: set[str] = field(default_factory=set)
     crisis_country: str = DEFAULT_CRISIS_COUNTRY
+    closing_step: str | None = stages.CLOSING
+    stabilize_step: str | None = stages.STABILIZATION
+    ending_step: str | None = stages.ENDING
+    safety_steps: list[str] = field(default_factory=lambda: list(DEFAULT_SAFETY))
+
+    def usable(self, key: str | None) -> str | None:
+        """`key` if it names a step that is on, else None."""
+        return key if key and key not in self.disabled else None
 
     def card_for(self, stage: str) -> str | None:
         return next((c for c, k in self.card_steps.items() if k == stage), None)
@@ -152,17 +163,22 @@ def _rules_from(saved: dict[str, Any]) -> dict[str, Any]:
         "weak_kindness": tuple(weak) if isinstance(weak, list) and len(weak) == 2 else DEFAULT_WEAK_KINDNESS,
         "keywords": {k: list(keywords[k]) if k in keywords else list(DEFAULT_KEYWORDS[k]) for k in KEYWORD_LISTS},
         "crisis_reply": {**DEFAULT_CRISIS_REPLY, **(saved.get("crisis_reply") or {})},
+        **{k: saved[k] if k in saved else DEFAULT_ROLES[k] for k in ROLE_KEYS},
+        "safety_steps": list(saved["safety_steps"]) if isinstance(saved.get("safety_steps"), list) else list(DEFAULT_SAFETY),
     }
 
 
 async def load(db: AsyncSession) -> FlowConfig:
     saved = await _saved(db)
+    rules = _rules_from(saved)
+    # Steps that answer only on a trigger are not walked through.
+    triggered = {rules["stabilize_step"], rules["ending_step"]} - {None}
     return FlowConfig(
-        order=await registry.active_flow_order(db),
+        order=await registry.active_flow_order(db, triggered),
         disabled=await registry.disabled_keys(db),
         limits=_limits_from(saved),
         history_turns=saved.get("history_turns") or DEFAULT_HISTORY,
-        **_rules_from(saved),
+        **rules,
     )
 
 
@@ -188,6 +204,8 @@ async def for_admin(db: AsyncSession) -> dict[str, Any]:
             "to_action_step": DEFAULT_TO_ACTION,
             "end_today_enabled": True,
             "crisis_country": DEFAULT_CRISIS_COUNTRY,
+            **DEFAULT_ROLES,
+            "safety_steps": DEFAULT_SAFETY,
         },
     }
 
@@ -223,6 +241,11 @@ def validate(payload: dict[str, Any], stage_keys: set[str]) -> str | None:
         return "bad card_steps"
     if payload["to_action_step"] and payload["to_action_step"] not in stage_keys:
         return "unknown to_action step"
+    roles = [payload[k] for k in ROLE_KEYS if payload[k]]
+    if any(k not in stage_keys for k in roles) or len(roles) != len(set(roles)):
+        return "bad step roles"
+    if any(k not in stage_keys for k in payload["safety_steps"]):
+        return "unknown safety step"
     if len(payload["crisis_country"]) > 8:
         return "bad crisis_country"
     return None
@@ -245,6 +268,8 @@ async def save(db: AsyncSession, payload: dict[str, Any], admin_id: str | None) 
             "to_action_step": payload["to_action_step"],
             "end_today_enabled": payload["end_today_enabled"],
             "crisis_country": payload["crisis_country"],
+            **{k: payload[k] for k in ROLE_KEYS},
+            "safety_steps": list(dict.fromkeys(payload["safety_steps"])),
         },
         ensure_ascii=False,
     )

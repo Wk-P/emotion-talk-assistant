@@ -53,8 +53,7 @@ class PromptSaveRequest(BaseModel):
 
 
 class FlowOrder(BaseModel):
-    # The steps admins can order, in order (turned-off ones too); closing
-    # (always last) and stabilization (not in the sequence) are left out.
+    # Every step, in order (turned-off ones too).
     order: list[str] = Field(max_length=100)
 
 
@@ -79,6 +78,15 @@ class FlowConfigPayload(BaseModel):
     to_action_step: str | None = "flow.act"
     end_today_enabled: bool = True
     crisis_country: str = "KR"
+    # Which step answers "enough for today" / an overwhelmed user / the end
+    # button (None = none); the last two are left out of the order.
+    closing_step: str | None = "flow.closing"
+    stabilize_step: str | None = "flow.stabilization"
+    ending_step: str | None = "flow.ending"
+    # Steps the admin page marks as safety-related (a warning only).
+    safety_steps: list[str] = Field(
+        default_factory=lambda: ["flow.closing", "flow.stabilization", "flow.ending"], max_length=100
+    )
 
 
 class FlowConfigOverview(FlowConfigPayload):

@@ -27,19 +27,35 @@ const { t, te } = useI18n()
 const phone = usePhone()
 const { config, defaults, dirty, load, save, discard, forgetStep } = useFlowSettings()
 
-const CLOSING = 'flow.closing'
-const FIXED = [CLOSING, 'flow.stabilization', 'flow.ending']
 // Steps that end on something the user does: only a maximum applies.
 const MAX_ONLY = new Set(['flow.listen', 'flow.self_check'])
-const NO_TURNS = new Set(['flow.purpose', ...FIXED])
+const ROLES = ['closing_step', 'stabilize_step', 'ending_step'] as const
+type Role = (typeof ROLES)[number]
 
-const steps = computed(() => props.modules.filter((m) => m.is_stage && !FIXED.includes(m.key)))
-const fixed = computed(() => FIXED.map((k) => props.modules.find((m) => m.key === k)).filter((m): m is PromptModuleItem => !!m))
-// Position in the conversation, counting only the steps in use.
+// Every step, all alike: nothing is fixed. Special roles (closing, the
+// overwhelmed-user reply, the end-button reply) and the safety mark are
+// admin settings.
+const steps = computed(() => props.modules.filter((m) => m.is_stage))
+function roleOf(key: string): Role | null {
+  const c = config.value
+  return c ? (ROLES.find((r) => c[r] === key) ?? null) : null
+}
+// Only answer on a trigger, never walked through in order.
+const triggered = (key: string) => ['stabilize_step', 'ending_step'].includes(roleOf(key) ?? '')
+const noTurns = (key: string) => key === 'flow.purpose' || roleOf(key) !== null
+// Position in the conversation, counting only the steps walked through.
 const positions = computed(() => {
   let n = 0
-  return Object.fromEntries(steps.value.map((m) => [m.key, m.enabled ? ++n : 0]))
+  return Object.fromEntries(steps.value.map((m) => [m.key, m.enabled && !triggered(m.key) ? ++n : 0]))
 })
+
+// ---- Safety mark (saved with the save bar) ----
+const isSafety = (key: string) => !!config.value?.safety_steps.includes(key)
+function setSafety(key: string, on: boolean) {
+  const c = config.value
+  if (!c) return
+  c.safety_steps = on ? [...new Set([...c.safety_steps, key])] : c.safety_steps.filter((k) => k !== key)
+}
 
 const error = ref('')
 const flash = ref('')
@@ -238,17 +254,25 @@ async function saveSettings() {
 
     <!-- Steps -->
     <div class="grid">
-      <article v-for="m in steps" :key="m.key" class="card" :class="{ off: !m.enabled }">
+      <article v-for="m in steps" :key="m.key" class="card" :class="{ off: !m.enabled, fixed: isSafety(m.key) }">
         <div class="card-head">
           <h3>{{ nameOf(m.key) }}</h3>
-          <span v-if="m.enabled" class="tag on">{{ t('comp.inFlow', { n: positions[m.key] }) }}</span>
-          <span v-else class="tag">{{ t('comp.notUsed') }}</span>
+          <span v-if="!m.enabled" class="tag">{{ t('comp.notUsed') }}</span>
+          <span v-else-if="positions[m.key]" class="tag on">{{ t('comp.inFlow', { n: positions[m.key] }) }}</span>
+          <span v-if="roleOf(m.key)" class="tag role">{{ t(`comp.role.${roleOf(m.key)}`) }}</span>
+          <span v-if="isSafety(m.key)" class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
           <span v-if="!m.built_in" class="tag accent">{{ t('flowOrder.customBadge') }}</span>
         </div>
         <p class="what">{{ summary(m) }}</p>
         <p v-if="emptyKeys.includes(m.key)" class="warn">⚠️ {{ t('comp.noPrompt') }}</p>
+        <p v-if="isSafety(m.key)" class="warn">⚠️ {{ t('comp.safetyGeneric') }}</p>
 
-        <div v-if="config && !NO_TURNS.has(m.key)" class="turns">
+        <label v-if="config" class="safety-check">
+          <input type="checkbox" :checked="isSafety(m.key)" :disabled="phone" @change="setSafety(m.key, ($event.target as HTMLInputElement).checked)" />
+          {{ t('comp.safetyToggle') }}
+        </label>
+
+        <div v-if="config && !noTurns(m.key)" class="turns">
           <span class="turns-label">{{ t('comp.turns') }}</span>
           <label v-if="!MAX_ONLY.has(m.key)">
             {{ t('flowOrder.minTurns') }}
@@ -362,36 +386,6 @@ async function saveSettings() {
             <button type="submit" class="btn-primary" :disabled="busy || !blockForm.name.trim()">{{ t('flowOrder.addConfirm') }}</button>
           </div>
         </form>
-      </article>
-    </div>
-
-    <!-- Fixed components -->
-    <h3 class="sub">{{ t('comp.fixedTitle') }}</h3>
-    <p class="sub-desc">{{ t('comp.fixedDesc') }}</p>
-    <div class="grid">
-      <article v-for="m in fixed" :key="m.key" class="card fixed" :class="{ off: !m.enabled }">
-        <div class="card-head">
-          <h3>{{ nameOf(m.key) }}</h3>
-          <span class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
-          <span v-if="!m.enabled" class="tag">{{ t('comp.notUsed') }}</span>
-        </div>
-        <p class="what">{{ summary(m) }}</p>
-        <p class="warn">⚠️ {{ t(`comp.safetyWarn.${m.key.replace('flow.', '')}`) }}</p>
-        <form v-if="renaming === m.key" class="rename" @submit.prevent="saveRename(m)">
-          <label>中文<input v-model="names.zh" maxlength="40" :placeholder="nameOf(m.key)" /></label>
-          <label>한국어<input v-model="names.ko" maxlength="40" /></label>
-          <div class="row">
-            <button type="button" class="btn-text" @click="renaming = null">{{ t('prompts.cancel') }}</button>
-            <button type="submit" class="btn-primary" :disabled="busy">{{ t('prompts.renameSave') }}</button>
-          </div>
-        </form>
-        <div v-else class="actions">
-          <button type="button" class="btn-outline small" :disabled="busy" @click="toggle(m)">
-            {{ m.enabled ? t('comp.turnOff') : t('comp.turnOn') }}
-          </button>
-          <button v-if="!phone" type="button" class="btn-text small" @click="startRename(m)">{{ t('prompts.rename') }}</button>
-          <button type="button" class="btn-text small push" @click="emit('edit', m.key)">{{ t('comp.editPrompt') }}</button>
-        </div>
       </article>
     </div>
 
@@ -511,6 +505,17 @@ async function saveSettings() {
 }
 .card.fixed {
   border-color: #f0c98a;
+}
+.tag.role {
+  background: #eef2ff;
+  border-color: #c9d3f5;
+  color: #3b4fa0;
+}
+.safety-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 .tag.safety {
   border-color: #f0c98a;
