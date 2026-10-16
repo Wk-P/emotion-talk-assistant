@@ -150,6 +150,33 @@ async function create() {
   }
 }
 
+// ---- Prompt blocks: shared rules, blocks attached to a step, others ----
+const blocks = computed(() => props.modules.filter((m) => !m.is_stage && m.group !== 'system'))
+function blockWhere(m: PromptModuleItem): string {
+  if (m.group === 'flow') return t('comp.blockOf', { name: props.nameOf(m.flow_key ?? '') })
+  return t(`prompts.groups.${m.group}.name`)
+}
+const blockForm = ref<{ name: string; kind: 'rules' | 'flow' | 'other'; step: string } | null>(null)
+function startBlock() {
+  blockForm.value = { name: '', kind: 'rules', step: steps.value[0]?.key ?? 'flow.listen' }
+}
+async function createBlock() {
+  const f = blockForm.value
+  if (!f || !f.name.trim() || busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await createPromptModule(f.kind, f.name.trim(), f.kind === 'flow' ? f.step : undefined)
+    blockForm.value = null
+    emit('reload')
+    done(t('comp.created', { name: f.name.trim() }))
+  } catch {
+    error.value = t('flowOrder.failed')
+  } finally {
+    busy.value = false
+  }
+}
+
 // ---- Purpose buttons (an add-on attached to one step) ----
 const buttonHosts = computed(() =>
   steps.value.filter((m) => !Object.values(config.value?.card_steps ?? {}).includes(m.key)).map((m) => m.key),
@@ -194,6 +221,49 @@ async function saveSettings() {
       <h2>{{ t('comp.title') }}</h2>
       <p>{{ t('comp.desc') }}</p>
     </header>
+
+    <!-- What's what on this page, in plain words. -->
+    <details class="explain" open>
+      <summary>{{ t('comp.explain.title') }}</summary>
+      <div class="explain-body">
+        <div class="kinds">
+          <div class="kind">
+            <div class="kind-name">🧩 {{ t('comp.explain.compName') }}</div>
+            <p>{{ t('comp.explain.compWhat') }}</p>
+          </div>
+          <div class="kind">
+            <div class="kind-name">📝 {{ t('comp.explain.blockName') }}</div>
+            <p>{{ t('comp.explain.blockWhat') }}</p>
+          </div>
+          <div class="kind">
+            <div class="kind-name">🔘 {{ t('flowOrder.purposes.title') }}</div>
+            <p>{{ t('comp.explain.buttonsWhat') }}</p>
+          </div>
+        </div>
+        <div class="assemble">
+          <div class="assemble-title">{{ t('comp.explain.assembleTitle') }}</div>
+          <div class="stack">
+            <span class="layer">{{ t('comp.explain.layerRules') }}</span>
+            <span class="plus-sign">＋</span>
+            <span class="layer main">{{ t('comp.explain.layerStep') }}</span>
+            <span class="plus-sign">＋</span>
+            <span class="layer">{{ t('comp.explain.layerAttached') }}</span>
+            <span class="plus-sign">＋</span>
+            <span class="layer muted">{{ t('comp.explain.layerProgram') }}</span>
+          </div>
+        </div>
+        <div class="which">
+          <div class="assemble-title">{{ t('comp.explain.whichTitle') }}</div>
+          <ul>
+            <li>{{ t('comp.explain.which1') }}</li>
+            <li>{{ t('comp.explain.which2') }}</li>
+            <li>{{ t('comp.explain.which3') }}</li>
+            <li>{{ t('comp.explain.which4') }}</li>
+          </ul>
+        </div>
+        <p class="hint">{{ t('comp.explain.pages') }}</p>
+      </div>
+    </details>
 
     <!-- Steps -->
     <div class="grid">
@@ -306,6 +376,68 @@ async function saveSettings() {
       </template>
     </section>
 
+    <!-- Prompt blocks -->
+    <h3 class="sub">{{ t('comp.blocksTitle') }}</h3>
+    <p class="sub-desc">{{ t('comp.blocksDesc') }}</p>
+    <div class="grid">
+      <article v-for="m in blocks" :key="m.key" class="card" :class="{ off: !m.enabled }">
+        <div class="card-head">
+          <h3>{{ nameOf(m.key) }}</h3>
+          <span class="tag">{{ blockWhere(m) }}</span>
+          <span v-if="!m.enabled" class="tag">{{ t('comp.notUsed') }}</span>
+          <span v-if="!m.built_in" class="tag accent">{{ t('flowOrder.customBadge') }}</span>
+        </div>
+        <form v-if="renaming === m.key" class="rename" @submit.prevent="saveRename(m)">
+          <label>中文<input v-model="names.zh" maxlength="40" :placeholder="nameOf(m.key)" /></label>
+          <label>한국어<input v-model="names.ko" maxlength="40" /></label>
+          <div class="row">
+            <button type="button" class="btn-text" @click="renaming = null">{{ t('prompts.cancel') }}</button>
+            <button type="submit" class="btn-primary" :disabled="busy">{{ t('prompts.renameSave') }}</button>
+          </div>
+        </form>
+        <div v-else-if="confirmingDelete === m.key" class="confirm">
+          <span>{{ t('comp.deleteConfirm', { name: nameOf(m.key) }) }}</span>
+          <button type="button" class="btn-text" @click="confirmingDelete = null">{{ t('prompts.cancel') }}</button>
+          <button type="button" class="btn-danger" :disabled="busy" @click="remove(m)">{{ t('prompts.removeYes') }}</button>
+        </div>
+        <div v-else class="actions">
+          <button type="button" class="btn-outline small" :disabled="busy" @click="toggle(m)">
+            {{ m.enabled ? t('comp.turnOff') : t('comp.turnOn') }}
+          </button>
+          <button v-if="!phone" type="button" class="btn-text small" @click="startRename(m)">{{ t('prompts.rename') }}</button>
+          <button v-if="!m.built_in && !phone" type="button" class="btn-text small danger" @click="remove(m)">{{ t('comp.delete') }}</button>
+          <button type="button" class="btn-text small push" @click="emit('edit', m.key)">{{ t('comp.editPrompt') }}</button>
+        </div>
+      </article>
+      <article v-if="!phone" class="card new" :class="{ open: blockForm }">
+        <button v-if="!blockForm" type="button" class="new-btn" @click="startBlock">
+          <span class="plus">＋</span>{{ t('comp.newBlock') }}
+        </button>
+        <form v-else class="rename" @submit.prevent="createBlock">
+          <h3>{{ t('comp.newBlock') }}</h3>
+          <label>{{ t('comp.nameZh') }}<input v-model="blockForm.name" maxlength="40" :placeholder="t('prompts.namePlaceholder')" /></label>
+          <label>
+            {{ t('comp.blockKind') }}
+            <select v-model="blockForm.kind">
+              <option value="rules">{{ t('prompts.groups.rules.name') }}</option>
+              <option value="flow">{{ t('comp.kindFlow') }}</option>
+              <option value="other">{{ t('prompts.groups.other.name') }}</option>
+            </select>
+          </label>
+          <label v-if="blockForm.kind === 'flow'">
+            {{ t('prompts.belongsTo') }}
+            <select v-model="blockForm.step">
+              <option v-for="s in steps" :key="s.key" :value="s.key">{{ nameOf(s.key) }}</option>
+            </select>
+          </label>
+          <div class="row">
+            <button type="button" class="btn-text" @click="blockForm = null">{{ t('prompts.cancel') }}</button>
+            <button type="submit" class="btn-primary" :disabled="busy || !blockForm.name.trim()">{{ t('flowOrder.addConfirm') }}</button>
+          </div>
+        </form>
+      </article>
+    </div>
+
     <!-- Fixed components -->
     <h3 class="sub">{{ t('comp.fixedTitle') }}</h3>
     <p class="sub-desc">{{ t('comp.fixedDesc') }}</p>
@@ -358,6 +490,72 @@ async function saveSettings() {
   font-size: 13.5px;
   line-height: 1.6;
   color: var(--text-muted);
+}
+.explain {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+}
+.explain summary {
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.explain-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+}
+.kind {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.kind-name,
+.assemble-title {
+  font-weight: 700;
+}
+.kind p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+}
+.stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.layer {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.layer.main {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.layer.muted {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.plus-sign {
+  color: var(--text-muted);
+}
+.which ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
 }
 .grid {
   display: grid;
@@ -490,6 +688,7 @@ h3 {
   gap: 3px;
 }
 .rename input,
+.rename select,
 .purpose-row input,
 .purpose-row select,
 .host select {

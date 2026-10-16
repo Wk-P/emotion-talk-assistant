@@ -5,7 +5,6 @@ import { usePhone } from '@/utils/phone'
 import { useFlowSettings } from '@/utils/flowSettings'
 import CrisisResourcesEditor from './CrisisResourcesEditor.vue'
 import {
-  createPromptModule,
   deletePromptModule,
   errorStatus,
   saveFlowOrder,
@@ -16,7 +15,8 @@ import {
 
 // "对话流程": the order a conversation goes through its steps (backend
 // app/services/flow.py). The steps in use are a line of cards; between any
-// two, admins put a step in (one not in use, or a new one). Taking a step
+// two, admins put in a step that isn't in use (new components are made on
+// the "对话组件" page). Taking a step
 // out, moving it and putting it back save at once. The program rules a
 // conversation follows (app/services/flow_config.py) are folded below and
 // saved with the save bar. No drag and drop: it flickered in Safari.
@@ -26,7 +26,7 @@ const props = defineProps<{
   // Steps with no text in the language being edited.
   emptyKeys: string[]
 }>()
-const emit = defineEmits<{ edit: [key: string]; reload: [] }>()
+const emit = defineEmits<{ edit: [key: string]; reload: []; components: [] }>()
 
 const { t, te } = useI18n()
 const phone = usePhone()
@@ -133,10 +133,8 @@ function takeOut(key: string) {
 
 // The gap a step is being put into: before live[slot] (live.length = at the end).
 const slot = ref<number | null>(null)
-const newName = ref('')
 function openSlot(i: number) {
   slot.value = slot.value === i ? null : i
-  newName.value = ''
 }
 function putIn(key: string, pos: number) {
   run(async () => {
@@ -147,18 +145,6 @@ function putIn(key: string, pos: number) {
     emit('reload')
   }, t('flowUi.putIn', { name: props.nameOf(key) }))
 }
-function createAt(pos: number) {
-  const name = newName.value.trim()
-  if (!name) return
-  run(async () => {
-    const created = await createPromptModule('flow', name)
-    await saveFlowOrder((order.value = placed([...order.value, created.key], created.key, pos)))
-    slot.value = null
-    newName.value = ''
-    emit('reload')
-  }, t('flowUi.created', { name }))
-}
-
 const confirmingDelete = ref<string | null>(null)
 function remove(key: string) {
   if (confirmingDelete.value !== key) {
@@ -258,11 +244,8 @@ function resetAll() {
                 </button>
               </div>
             </template>
-            <form class="picker-new" @submit.prevent="createAt(i)">
-              <div class="picker-title">{{ t('flowUi.pickNew') }}</div>
-              <input v-model="newName" maxlength="40" :placeholder="t('flowOrder.addPlaceholder')" />
-              <button type="submit" class="btn-primary small" :disabled="busy || !newName.trim()">{{ t('flowUi.createHere') }}</button>
-            </form>
+            <p v-else class="what">{{ t('flowUi.noneToInsert') }}</p>
+            <button type="button" class="btn-text small to-lib" @click="emit('components')">{{ t('flowUi.makeNew') }}</button>
           </div>
         </li>
 
@@ -311,11 +294,8 @@ function resetAll() {
               </button>
             </div>
           </template>
-          <form class="picker-new" @submit.prevent="createAt(live.length)">
-            <div class="picker-title">{{ t('flowUi.pickNew') }}</div>
-            <input v-model="newName" maxlength="40" :placeholder="t('flowOrder.addPlaceholder')" />
-            <button type="submit" class="btn-primary small" :disabled="busy || !newName.trim()">{{ t('flowUi.createHere') }}</button>
-          </form>
+          <p v-else class="what">{{ t('flowUi.noneToInsert') }}</p>
+          <button type="button" class="btn-text small to-lib" @click="emit('components')">{{ t('flowUi.makeNew') }}</button>
         </div>
       </li>
 
@@ -725,23 +705,9 @@ h3 {
   font-size: 12.5px;
   font-weight: 700;
 }
-.picker-new {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.picker-new .picker-title {
-  flex-basis: 100%;
-}
-.picker-new input {
-  flex: 1;
-  min-width: 160px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: 13px;
+.to-lib {
+  align-self: flex-start;
+  padding: 0;
 }
 .chips {
   display: flex;

@@ -6,14 +6,10 @@ import FlowOrderEditor from './FlowOrderEditor.vue'
 import ModelPicker from './ModelPicker.vue'
 import PromptTools from './PromptTools.vue'
 import {
-  createPromptModule,
-  deletePromptModule,
-  errorStatus,
   listPromptVersions,
   listPrompts,
   previewPrompt,
   savePrompt,
-  updatePromptModule,
   type CandidateCard,
   type Language,
   type PromptGroup,
@@ -67,18 +63,8 @@ const editorEl = ref<HTMLElement | null>(null)
 type Section = 'model' | 'components' | 'flow' | 'prompts' | 'tools'
 const SECTIONS: Section[] = ['components', 'flow', 'prompts', 'model', 'tools']
 const section = ref<Section>('components')
-// Narrow screens: the block list and the editor are two screens; this is
-// whether the editor one is showing. Wide screens show both side by side.
-const narrowDetail = ref(false)
-function openBlock(key: string) {
-  selectedKey.value = key
-  narrowDetail.value = true
-  if (window.matchMedia('(max-width: 1023px)').matches) nextTick(() => window.scrollTo({ top: 0 }))
-}
-
 async function editStep(key: string) {
   section.value = 'prompts'
-  narrowDetail.value = true
   selectedKey.value = key
   await nextTick()
   editorEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -92,6 +78,17 @@ const groupedItems = computed(() =>
       .filter((e): e is { module: PromptModuleItem; item: PromptItem } => e.item !== undefined),
   })),
 )
+// One line per block for the dropdown: how it stands, so the admin sees
+// what's changed without opening each one.
+function optionLabel(m: PromptModuleItem, item: PromptItem): string {
+  const tags: string[] = []
+  if (isDirty(item)) tags.push(t('prompts.unsaved'))
+  if (!m.enabled) tags.push(t('prompts.disabledBadge'))
+  if (!m.built_in && !item.content.trim()) tags.push(t('prompts.emptyBadge'))
+  else if (m.built_in && item.version > 0) tags.push(t('prompts.modified'))
+  const indent = !m.is_stage && m.group === 'flow' ? '　└ ' : ''
+  return `${indent}${nameOf(m.key)}${tags.length ? `（${tags.join('·')}）` : ''}`
+}
 const current = computed(() => langItems.value.find((i) => i.key === selectedKey.value) ?? null)
 const currentModule = computed(() => modules.value.find((m) => m.key === selectedKey.value) ?? null)
 
@@ -114,102 +111,6 @@ function descOf(m: PromptModuleItem): string {
   if (m.is_stage) return t('prompts.customDesc.stage')
   if (m.group === 'flow') return t('prompts.customDesc.flow', { flow: nameOf(m.flow_key ?? '') })
   return t(`prompts.customDesc.${m.group}`)
-}
-
-// ---- Adding / renaming / turning off / deleting blocks ----
-const addingGroup = ref<PromptGroup | null>(null)
-const newName = ref('')
-const newFlowKey = ref('flow.listen')
-const moduleBusy = ref(false)
-const moduleError = ref('')
-
-function startAdd(group: PromptGroup) {
-  addingGroup.value = group
-  newName.value = ''
-  newFlowKey.value = FLOW_KEYS.value[0] ?? 'flow.listen'
-  moduleError.value = ''
-}
-
-async function addModule() {
-  const name = newName.value.trim()
-  if (!addingGroup.value || !name || moduleBusy.value) return
-  moduleBusy.value = true
-  moduleError.value = ''
-  try {
-    const created = await createPromptModule(
-      addingGroup.value,
-      name,
-      addingGroup.value === 'flow' ? newFlowKey.value : undefined,
-    )
-    addingGroup.value = null
-    await load()
-    selectedKey.value = created.key
-  } catch {
-    moduleError.value = t('prompts.actionFailed')
-  } finally {
-    moduleBusy.value = false
-  }
-}
-
-function replaceModule(updated: PromptModuleItem) {
-  modules.value = modules.value.map((m) => (m.key === updated.key ? updated : m))
-}
-
-const renaming = ref(false)
-const renameValue = ref('')
-function startRename() {
-  if (!currentModule.value) return
-  renameValue.value = currentModule.value.names[lang.value] ?? nameOf(currentModule.value.key)
-  renaming.value = true
-  moduleError.value = ''
-}
-
-async function saveRename() {
-  if (!currentModule.value || moduleBusy.value) return
-  moduleBusy.value = true
-  moduleError.value = ''
-  try {
-    replaceModule(await updatePromptModule(currentModule.value.key, { language: lang.value, name: renameValue.value }))
-    renaming.value = false
-  } catch {
-    moduleError.value = t('prompts.actionFailed')
-  } finally {
-    moduleBusy.value = false
-  }
-}
-
-async function toggleEnabled() {
-  if (!currentModule.value || moduleBusy.value) return
-  moduleBusy.value = true
-  moduleError.value = ''
-  try {
-    replaceModule(await updatePromptModule(currentModule.value.key, { enabled: !currentModule.value.enabled }))
-  } catch {
-    moduleError.value = t('prompts.actionFailed')
-  } finally {
-    moduleBusy.value = false
-  }
-}
-
-const confirmingRemove = ref(false)
-async function removeModule() {
-  const m = currentModule.value
-  if (!m || m.built_in || moduleBusy.value) return
-  moduleBusy.value = true
-  moduleError.value = ''
-  try {
-    await deletePromptModule(m.key)
-    confirmingRemove.value = false
-    const next = { ...drafts.value }
-    for (const l of ['zh', 'ko'] as Language[]) delete next[draftId(m.key, l)]
-    drafts.value = next
-    selectedKey.value = m.group === 'flow' && m.flow_key ? m.flow_key : 'rules.role_scope'
-    await load()
-  } catch (e) {
-    moduleError.value = errorStatus(e) === 409 ? t('prompts.stageHasBlocks') : t('prompts.actionFailed')
-  } finally {
-    moduleBusy.value = false
-  }
 }
 
 const draft = computed({
@@ -250,8 +151,6 @@ function toSlots() {
   draft.value = joinSlots([draft.value.trim(), '', ''])
 }
 const SLOT_KEYS = ['goal', 'examples', 'avoid'] as const
-// The program's own add-ons stay folded away unless asked for.
-const showSystem = ref(false)
 const phone = usePhone()
 
 const draftIsDefault = computed(() => current.value !== null && draft.value === current.value.default_content)
@@ -277,9 +176,6 @@ async function loadVersions() {
 watch([selectedKey, lang], () => {
   error.value = ''
   note.value = ''
-  renaming.value = false
-  confirmingRemove.value = false
-  moduleError.value = ''
   if (showVersions.value) loadVersions()
 })
 
@@ -449,6 +345,14 @@ onMounted(() => load())
           <li>{{ t('prompts.step3') }}</li>
         </ol>
       </details>
+      <label class="block-pick">
+        <span class="lang-label">{{ t('prompts.pickLabel') }}</span>
+        <select v-model="selectedKey">
+          <optgroup v-for="g in groupedItems" :key="g.group" :label="t(`prompts.groups.${g.group}.name`)">
+            <option v-for="{ module: m, item } in g.entries" :key="m.key" :value="m.key">{{ optionLabel(m, item) }}</option>
+          </optgroup>
+        </select>
+      </label>
       <div class="lang-pick">
         <span class="lang-label">{{ t('prompts.langLabel') }}</span>
         <div class="segmented" role="radiogroup" :aria-label="t('prompts.langLabel')">
@@ -469,6 +373,7 @@ onMounted(() => load())
       :empty-keys="emptyStageKeys"
       @edit="editStep"
       @reload="load(true)"
+      @components="section = 'components'"
     />
     <ComponentLibrary
       v-if="!loading && section === 'components'"
@@ -482,95 +387,16 @@ onMounted(() => load())
     <!-- Narrow: stacked. >=1024px: list | editor, test panel below.
          >=1360px: full-width three-column workspace — list | editor | a
          sticky, full-height test chat on the right. -->
-    <div v-if="!loading && section === 'prompts'" class="workspace" :class="{ detail: narrowDetail }">
-      <nav class="block-list">
-        <template v-for="g in groupedItems" :key="g.group">
-          <div class="group-title">
-            {{ t(`prompts.groups.${g.group}.name`) }}
-            <span class="group-hint">{{ t(`prompts.groups.${g.group}.hint`) }}</span>
-            <button v-if="g.group === 'system'" type="button" class="btn-text fold-btn" @click="showSystem = !showSystem">
-              {{ showSystem ? t('prompts.foldSystem') : t('prompts.unfoldSystem', { n: g.entries.length }) }}
-            </button>
-          </div>
-          <button
-            v-for="{ module: m, item } in g.group === 'system' && !showSystem ? [] : g.entries"
-            :key="m.key"
-            type="button"
-            class="block"
-            :class="{ selected: m.key === selectedKey, child: !m.is_stage && m.group === 'flow', off: !m.enabled }"
-            @click="openBlock(m.key)"
-          >
-            <span class="block-name">{{ nameOf(m.key) }}</span>
-            <span class="block-tags">
-              <span v-if="!m.enabled" class="badge">{{ t('prompts.disabledBadge') }}</span>
-              <span v-if="isDirty(item)" class="badge warn">{{ t('prompts.unsaved') }}</span>
-              <span v-if="!m.built_in && !item.content.trim()" class="badge">{{ t('prompts.emptyBadge') }}</span>
-              <span v-else-if="!m.built_in" class="badge accent">{{ t('prompts.customBadge') }}</span>
-              <span v-else class="badge" :class="{ accent: item.version > 0 }">
-                {{ item.version > 0 ? t('prompts.modified') : t('prompts.default') }}
-              </span>
-            </span>
-          </button>
-
-          <form v-if="addingGroup === g.group" class="add-form" @submit.prevent="addModule">
-            <div class="add-title">{{ t('prompts.addTitle') }}</div>
-            <input v-model="newName" maxlength="40" :placeholder="t('prompts.namePlaceholder')" />
-            <label v-if="g.group === 'flow'" class="add-flow">
-              <span>{{ t('prompts.belongsTo') }}</span>
-              <select v-model="newFlowKey">
-                <option v-for="fk in FLOW_KEYS" :key="fk" :value="fk">{{ nameOf(fk) }}</option>
-              </select>
-            </label>
-            <div class="add-actions">
-              <button type="button" class="btn-text" @click="addingGroup = null">{{ t('prompts.cancel') }}</button>
-              <button type="submit" class="btn-primary" :disabled="!newName.trim() || moduleBusy">{{ t('prompts.create') }}</button>
-            </div>
-          </form>
-          <button v-else-if="g.group !== 'system'" type="button" class="add-btn" @click="startAdd(g.group)">{{ t('prompts.add') }}</button>
-        </template>
-      </nav>
+    <div v-if="!loading && section === 'prompts'" class="workspace">
 
       <section v-if="current" ref="editorEl" class="editor panel">
-        <button type="button" class="btn-text back-btn" @click="narrowDetail = false">← {{ t('prompts.backToList') }}</button>
         <h2 class="panel-title">{{ nameOf(current.key) }}</h2>
         <p v-if="currentModule" class="panel-desc">{{ descOf(currentModule) }}</p>
 
-        <p v-if="currentModule?.is_stage" class="manage-note">
-          {{ t('flowUi.manageElsewhere') }}
+        <p v-if="currentModule && currentModule.group !== 'system'" class="manage-note">
+          {{ t('prompts.manageElsewhere') }}
           <button type="button" class="btn-text" @click="section = 'components'">{{ t('flowUi.goComponents') }}</button>
         </p>
-        <div v-else-if="currentModule" class="module-actions">
-          <template v-if="renaming">
-            <form class="rename-form" @submit.prevent="saveRename">
-              <input v-model="renameValue" maxlength="40" />
-              <button type="submit" class="btn-primary" :disabled="moduleBusy">{{ t('prompts.renameSave') }}</button>
-              <button type="button" class="btn-text" @click="renaming = false">{{ t('prompts.cancel') }}</button>
-            </form>
-            <p class="hint">{{ t('prompts.renameHint', { lang: lang === 'zh' ? '中文' : '한국어' }) }}</p>
-          </template>
-          <template v-else-if="confirmingRemove">
-            <span class="remove-text">{{ t('prompts.removeConfirm', { name: nameOf(currentModule.key) }) }}</span>
-            <button type="button" class="btn-text" @click="confirmingRemove = false">{{ t('prompts.cancel') }}</button>
-            <button type="button" class="btn-danger" :disabled="moduleBusy" @click="removeModule">
-              {{ t('prompts.removeYes') }}
-            </button>
-          </template>
-          <template v-else>
-            <button v-if="!phone" type="button" class="btn-outline small" @click="startRename">{{ t('prompts.rename') }}</button>
-            <button type="button" class="btn-outline small" :disabled="moduleBusy" @click="toggleEnabled">
-              {{ currentModule.enabled ? t('prompts.disable') : t('prompts.enable') }}
-            </button>
-            <button
-              v-if="!currentModule.built_in"
-              type="button"
-              class="btn-outline small danger"
-              @click="confirmingRemove = true"
-            >
-              {{ t('prompts.remove') }}
-            </button>
-          </template>
-          <span v-if="moduleError" class="error">{{ moduleError }}</span>
-        </div>
         <p v-if="currentModule && !currentModule.enabled" class="off-note">{{ t('prompts.disabledNote') }}</p>
         <p v-else-if="currentModule && !currentModule.built_in && !current.content.trim()" class="off-note">
           {{ t('prompts.emptyNote') }}
@@ -829,21 +655,17 @@ onMounted(() => load())
 }
 @media (min-width: 1024px) {
   .workspace {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 24px;
   }
   .test {
     grid-column: 1 / -1;
     height: 640px;
   }
-  .block-list {
-    position: sticky;
-    top: calc(var(--site-header-h) + 24px);
-  }
 }
 @media (min-width: 1360px) {
   .workspace {
-    grid-template-columns: 260px minmax(0, 1fr) minmax(380px, 440px);
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
     gap: 28px;
   }
   .test {
@@ -879,147 +701,28 @@ onMounted(() => load())
 }
 
 /* ---- Block list ---- */
-.block-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.group-title {
-  margin: 14px 2px 2px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
-}
-.group-title:first-child {
-  margin-top: 0;
-}
-.group-hint {
-  display: block;
-  font-weight: 400;
-  color: var(--text-muted);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-.block {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  font-size: 13px;
-  text-align: left;
-  color: var(--text);
-}
-.block.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.block-name {
-  font-weight: 600;
-}
-.block-tags {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
 
-.block.child {
-  margin-left: 16px;
-}
-.block.off .block-name {
-  color: var(--text-muted);
-  text-decoration: line-through;
-}
-.add-btn {
-  align-self: flex-start;
-  border: 1px dashed var(--border);
-  background: transparent;
-  color: var(--accent);
-  border-radius: var(--radius-md);
-  padding: 8px 14px;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.add-btn:not(:disabled):hover {
-  border-color: var(--accent);
-  transform: none;
-}
-.add-form {
+.block-pick {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-md);
-  background: var(--accent-soft);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
-.add-title {
-  font-size: 12.5px;
-  font-weight: 700;
-}
-.add-form input,
-.add-form select,
-.rename-form input {
-  padding: 8px 10px;
+.block-pick select {
+  flex: 1;
+  min-width: 0;
+  max-width: 460px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 600;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 13px;
   background: var(--surface);
-}
-.add-flow {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.add-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-.add-actions .btn-primary {
-  padding: 7px 16px;
-  font-size: 13px;
 }
 
 /* ---- Editor ---- */
-.module-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-.module-actions .small {
-  padding: 6px 12px;
-  font-size: 12.5px;
-}
-.module-actions .danger {
-  color: var(--danger);
-  border-color: var(--danger-border);
-}
-.rename-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  width: 100%;
-}
-.rename-form input {
-  flex: 1;
-  min-width: 160px;
-}
-.rename-form .btn-primary {
-  padding: 7px 14px;
-  font-size: 13px;
-}
-.remove-text {
-  font-size: 13px;
-  color: var(--danger);
-}
 .off-note {
   margin: 10px 0 0;
   padding: 8px 12px;
@@ -1071,9 +774,7 @@ onMounted(() => load())
 .phone .save-row,
 .phone .secondary-row,
 .phone .secondary-row + .hint,
-.phone .versions,
-.phone .add-btn,
-.phone .add-form {
+.phone .versions {
   display: none;
 }
 .subtabs {
@@ -1105,23 +806,6 @@ onMounted(() => load())
   font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
-.back-btn {
-  display: none;
-  padding: 0;
-  margin-bottom: 10px;
-  font-size: 14px;
-}
-/* Narrow: list, or editor + test chat — never both stacked. */
-@media (max-width: 1023px) {
-  .back-btn {
-    display: inline-block;
-  }
-  .workspace:not(.detail) .editor,
-  .workspace:not(.detail) .test,
-  .workspace.detail .block-list {
-    display: none;
-  }
-}
 .slots {
   display: flex;
   flex-direction: column;
@@ -1150,12 +834,6 @@ onMounted(() => load())
   align-self: flex-start;
   margin-top: 6px;
   font-size: 13px;
-}
-.fold-btn {
-  display: block;
-  margin-top: 4px;
-  padding: 0;
-  font-size: 12.5px;
 }
 .content {
   width: 100%;
