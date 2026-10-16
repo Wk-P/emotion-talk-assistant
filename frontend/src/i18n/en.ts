@@ -242,6 +242,8 @@ export const en = {
     roleNone: { stabilize_step: "None (carry on with the current step)", ending_step: "None (the current step replies)" },
     roleOffWarn: { stabilize_step: "Right now a very upset user won't be calmed first.", ending_step: "Right now \"End conversation\" gets no dedicated closing message." },
     roleUnsaved: "Unsaved changes: press \"Save\" below to apply them.",
+    triggeredHint: "Special use: not part of the order; replies only {when}.",
+    toLine: "Put in the order",
     closingStep: "Wrap-up step (\"enough for today\" jumps here; it waits here until the user leaves):",
     closingNone: "No wrap-up step",
     title: "Conversation flow",
