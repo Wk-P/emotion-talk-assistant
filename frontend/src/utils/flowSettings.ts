@@ -49,11 +49,9 @@ async function forgetStep(key: string) {
   for (const c of [config.value, savedConfig.value]) {
     if (!c) continue
     delete c.limits[key]
-    if (c.button_step === key) c.button_step = null
     if (c.to_action_step === key) c.to_action_step = null
     for (const card of Object.keys(c.card_steps) as (keyof FlowConfig['card_steps'])[])
       if (c.card_steps[card] === key) c.card_steps[card] = null
-    for (const p of c.purposes) if (p.jump === key) p.jump = null
   }
   // Store the saved settings without it; unsaved edits stay unsaved.
   if (!savedConfig.value) return

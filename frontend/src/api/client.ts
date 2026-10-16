@@ -529,18 +529,10 @@ export async function updatePromptModule(
   return data
 }
 
-export interface PurposeOption {
-  id: string
-  labels: Partial<Record<Language, string>>
-  /** A later step this button jumps to; null = just the next step. */
-  jump: string | null
-}
-
 /** Admin-set flow settings (backend app/services/flow_config.py). */
 export interface FlowConfig {
   /** Per step: [minimum, maximum] user turns. */
   limits: Record<string, [number, number]>
-  purposes: PurposeOption[]
   /** How many recent messages the AI sees each turn. */
   history_turns: number
   /** The user must have said at least this many things before the summary card shows. */
@@ -558,8 +550,6 @@ export interface FlowConfig {
   /** "Tell me what to do" jumps here (null = ignored). */
   to_action_step: string | null
   end_today_enabled: boolean
-  // The step the purpose buttons are attached to; null = none.
-  button_step: string | null
   /** Crisis resources of this country are shown ('' = all). */
   crisis_country: string
 }

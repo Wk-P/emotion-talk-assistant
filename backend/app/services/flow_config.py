@@ -3,8 +3,6 @@ the step order and wording:
 
   - per step, the minimum user turns before the model's "this step is done"
     is accepted, and the maximum after which the step moves on regardless;
-  - the purpose buttons shown in the purpose step: their wording (zh/ko)
-    and which later step each one jumps to (or none: the next step);
   - how many recent messages the model sees each turn;
   - the rules that used to be fixed in code: how many things the user must
     have said before the summary card may show, the shorter turn limits of
@@ -44,19 +42,6 @@ DEFAULT_LIMITS: dict[str, tuple[int, int]] = {
 }
 DEFAULT_MIN, DEFAULT_MAX = 1, 8
 MAX_TURNS_CAP = 50
-
-DEFAULT_PURPOSES: list[dict[str, Any]] = [
-    {"id": "vent", "labels": {"zh": "我只是想说一说", "ko": "그냥 이야기하고 싶어요"}, "jump": None},
-    {"id": "emotions", "labels": {"zh": "我想整理自己的情绪", "ko": "내 감정을 정리하고 싶어요"}, "jump": None},
-    {
-        "id": "why",
-        "labels": {"zh": "我想理解为什么这件事让我这么难受", "ko": "이 일이 왜 이렇게 힘든지 이해하고 싶어요"},
-        "jump": None,
-    },
-    {"id": "calm", "labels": {"zh": "我想先让自己平静一点", "ko": "우선 마음을 좀 가라앉히고 싶어요"}, "jump": stages.REGULATE},
-    {"id": "plan", "labels": {"zh": "我想一起想想接下来怎么办", "ko": "앞으로 어떻게 할지 함께 생각해 보고 싶어요"}, "jump": stages.ACT},
-]
-MAX_PURPOSES = 8
 
 DEFAULT_HISTORY = 12
 HISTORY_RANGE = (2, 60)
@@ -107,7 +92,6 @@ class FlowConfig:
     # Active steps in order, ending with closing (registry.active_flow_order).
     order: list[str]
     limits: dict[str, tuple[int, int]] = field(default_factory=dict)
-    purposes: list[dict[str, Any]] = field(default_factory=lambda: [dict(p) for p in DEFAULT_PURPOSES])
     history_turns: int = DEFAULT_HISTORY
     summary_min_turns: int = DEFAULT_SUMMARY_MIN_TURNS
     weak_kindness: tuple[int, int] = DEFAULT_WEAK_KINDNESS
@@ -117,8 +101,8 @@ class FlowConfig:
     card_steps: dict[str, str | None] = field(default_factory=lambda: dict(DEFAULT_CARD_STEPS))
     to_action_step: str | None = DEFAULT_TO_ACTION
     end_today_enabled: bool = True
-    # The step the purpose buttons are attached to (None = removed).
-    button_step: str | None = stages.PURPOSE
+    # Steps admins turned off (closing, stabilization and ending included).
+    disabled: set[str] = field(default_factory=set)
     crisis_country: str = DEFAULT_CRISIS_COUNTRY
 
     def card_for(self, stage: str) -> str | None:
@@ -129,10 +113,6 @@ class FlowConfig:
 
     def limits_for(self, stage: str) -> tuple[int, int]:
         return self.limits.get(stage) or DEFAULT_LIMITS.get(stage, (DEFAULT_MIN, DEFAULT_MAX))
-
-    def purpose_label(self, pid: str, language: Language) -> str | None:
-        p = next((p for p in self.purposes if p["id"] == pid), None)
-        return (p["labels"].get(language.value) or next(iter(p["labels"].values()), "")) if p else None
 
 
 async def _saved(db: AsyncSession) -> dict[str, Any]:
@@ -167,7 +147,6 @@ def _rules_from(saved: dict[str, Any]) -> dict[str, Any]:
         "card_steps": {c: card_steps[c] if c in card_steps else DEFAULT_CARD_STEPS[c] for c in CARD_TYPES},
         "to_action_step": saved["to_action_step"] if "to_action_step" in saved else DEFAULT_TO_ACTION,
         "end_today_enabled": saved.get("end_today_enabled", True),
-        "button_step": saved["button_step"] if "button_step" in saved else stages.PURPOSE,
         "crisis_country": saved["crisis_country"] if "crisis_country" in saved else DEFAULT_CRISIS_COUNTRY,
         "summary_min_turns": saved.get("summary_min_turns") or DEFAULT_SUMMARY_MIN_TURNS,
         "weak_kindness": tuple(weak) if isinstance(weak, list) and len(weak) == 2 else DEFAULT_WEAK_KINDNESS,
@@ -180,8 +159,8 @@ async def load(db: AsyncSession) -> FlowConfig:
     saved = await _saved(db)
     return FlowConfig(
         order=await registry.active_flow_order(db),
+        disabled=await registry.disabled_keys(db),
         limits=_limits_from(saved),
-        purposes=saved.get("purposes") or [dict(p) for p in DEFAULT_PURPOSES],
         history_turns=saved.get("history_turns") or DEFAULT_HISTORY,
         **_rules_from(saved),
     )
@@ -195,12 +174,10 @@ async def for_admin(db: AsyncSession) -> dict[str, Any]:
     steps = [m.key for m in await registry.load_modules(db) if m.is_stage and m.key not in NO_LIMITS]
     return {
         "limits": {k: list(limits.get(k) or DEFAULT_LIMITS.get(k, (DEFAULT_MIN, DEFAULT_MAX))) for k in steps},
-        "purposes": saved.get("purposes") or DEFAULT_PURPOSES,
         "history_turns": saved.get("history_turns") or DEFAULT_HISTORY,
         **_rules_from(saved),
         "defaults": {
             "limits": {k: list(DEFAULT_LIMITS.get(k, (DEFAULT_MIN, DEFAULT_MAX))) for k in steps},
-            "purposes": DEFAULT_PURPOSES,
             "history_turns": DEFAULT_HISTORY,
             "summary_min_turns": DEFAULT_SUMMARY_MIN_TURNS,
             "weak_kindness": DEFAULT_WEAK_KINDNESS,
@@ -210,7 +187,6 @@ async def for_admin(db: AsyncSession) -> dict[str, Any]:
             "card_steps": DEFAULT_CARD_STEPS,
             "to_action_step": DEFAULT_TO_ACTION,
             "end_today_enabled": True,
-            "button_step": stages.PURPOSE,
             "crisis_country": DEFAULT_CRISIS_COUNTRY,
         },
     }
@@ -224,18 +200,6 @@ def validate(payload: dict[str, Any], stage_keys: set[str]) -> str | None:
             return f"unknown step {key}"
         if not (1 <= low <= high <= MAX_TURNS_CAP):
             return f"bad limits for {key}"
-    purposes = payload["purposes"]
-    if not 1 <= len(purposes) <= MAX_PURPOSES:
-        return "purposes count"
-    ids = set()
-    for p in purposes:
-        if p["id"] in ids:
-            return "duplicate purpose id"
-        ids.add(p["id"])
-        if not any((p["labels"].get(lang.value) or "").strip() for lang in Language):
-            return "purpose label required"
-        if p.get("jump") and p["jump"] not in stage_keys:
-            return "unknown jump step"
     if not HISTORY_RANGE[0] <= payload["history_turns"] <= HISTORY_RANGE[1]:
         return "history_turns out of range"
     if not SUMMARY_MIN_RANGE[0] <= payload["summary_min_turns"] <= SUMMARY_MIN_RANGE[1]:
@@ -257,9 +221,6 @@ def validate(payload: dict[str, Any], stage_keys: set[str]) -> str | None:
     steps = [k for k in payload["card_steps"].values() if k]
     if len(steps) != len(set(steps)) or any(k not in stage_keys or k in NO_LIMITS for k in steps):
         return "bad card_steps"
-    b = payload["button_step"]
-    if b and (b not in stage_keys or b in (stages.CLOSING, stages.STABILIZATION, stages.ENDING) or b in steps):
-        return "bad button_step"
     if payload["to_action_step"] and payload["to_action_step"] not in stage_keys:
         return "unknown to_action step"
     if len(payload["crisis_country"]) > 8:
@@ -274,7 +235,6 @@ async def save(db: AsyncSession, payload: dict[str, Any], admin_id: str | None) 
     row.value = json.dumps(
         {
             "limits": {k: list(v) for k, v in payload["limits"].items()},
-            "purposes": payload["purposes"],
             "history_turns": payload["history_turns"],
             "summary_min_turns": payload["summary_min_turns"],
             "weak_kindness": list(payload["weak_kindness"]),
@@ -284,7 +244,6 @@ async def save(db: AsyncSession, payload: dict[str, Any], admin_id: str | None) 
             "card_steps": payload["card_steps"],
             "to_action_step": payload["to_action_step"],
             "end_today_enabled": payload["end_today_enabled"],
-            "button_step": payload["button_step"],
             "crisis_country": payload["crisis_country"],
         },
         ensure_ascii=False,

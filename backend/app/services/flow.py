@@ -9,17 +9,13 @@ documents/01_研究资料/애플리케이션 플로우차트.png and the project
 Some built-in stages carry behaviour of their own, wherever they are placed:
   - listen ends when the user confirms the summary, on the card or in their
     own words (the model's stage_done, once the summary has been shown);
-  - purpose ends on the user's answer (typed, or a purpose button);
-  - the purpose buttons are a component admins attach to any one step (or
-    to none, flow_config button_step). Pressing one ends that step and goes
-    to the step the button names, if it comes later ("先让自己平静" →
-    regulate, "一起想想接下来怎么办" → act by default); typing there counts
-    as an ordinary turn, except in purpose;
+  - purpose ends on the user's answer;
   - self_check ends on the user's answer and sets a branch: strong → full
     self_kindness; weak / none → self_kindness kept brief. Regulate follows
     either way (the lead's STEP 4 A/B);
   - act ends when the user confirms the plan card;
-  - closing is always last.
+  - closing is always last; admins may turn it off (the conversation then
+    stays in the last step).
 Every other stage (including stages admins add) ends when the model reports
 its goal reached (stage_done) after a minimum number of user turns, or at a
 maximum — both admin-set per step (app/services/flow_config.py). The toolbar "跳过" skips the current stage; "告诉我怎么办" / "今天先到这里"
@@ -48,7 +44,6 @@ def _user_ended(cfg: FlowConfig) -> set[str]:
     summary = cfg.card_steps.get("seb_summary")
     return _USER_ENDED | ({summary} if summary else set())
 
-PURPOSE_CARD = "purpose_options"
 
 
 def state(session: ConversationSession, cfg: FlowConfig) -> dict[str, Any]:
@@ -88,13 +83,11 @@ def _after(stage: str, order: list[str]) -> list[str]:
 def _advance(s: dict[str, Any], cfg: FlowConfig) -> None:
     stage = s["stage"]
     rest = _after(stage, cfg.order)
-    if stage == cfg.button_step:
-        chosen = next((p for p in cfg.purposes if p["id"] == s.get("purpose")), None)
-        jump = chosen.get("jump") if chosen else None
-        if jump in rest:
-            _enter(s, jump)
-            return
-    _enter(s, rest[0] if rest else stages.CLOSING)
+    if rest:
+        _enter(s, rest[0])
+    elif stages.CLOSING in cfg.order:
+        _enter(s, stages.CLOSING)
+    # Closing turned off and nothing left: stay in the last step.
 
 
 def _limits(s: dict[str, Any], cfg: FlowConfig) -> tuple[int, int | None]:
@@ -106,14 +99,6 @@ def _limits(s: dict[str, Any], cfg: FlowConfig) -> tuple[int, int | None]:
     if stage in (stages.PURPOSE, stages.CLOSING):
         return 1, None
     return cfg.limits_for(stage)
-
-
-def _purpose_from(confirmation: dict[str, Any] | None, cfg: FlowConfig) -> str:
-    labels = (confirmation or {}).get("selected_labels") or []
-    for p in cfg.purposes:
-        if any(label in p["labels"].values() for label in labels):
-            return p["id"]
-    return "other"  # typed in their own words
 
 
 def before_reply(
@@ -141,9 +126,6 @@ def before_reply(
         if stage != stages.CLOSING:
             _advance(s, cfg)
     elif card is not None and card == own_card and (confirmation or {}).get("fields"):
-        _advance(s, cfg)
-    elif card == PURPOSE_CARD and stage == cfg.button_step:
-        s["purpose"] = _purpose_from(confirmation, cfg)
         _advance(s, cfg)
     elif stage == stages.PURPOSE and user_text:
         s["purpose"] = "other"
@@ -173,7 +155,7 @@ def after_reply(
     s = state(session, cfg)
     stage, turns = s["stage"], s.get("turns", 0)
     request = signals.get("user_request")
-    if request == "end_today" and cfg.end_today_enabled and stage != stages.CLOSING:
+    if request == "end_today" and cfg.end_today_enabled and stage != stages.CLOSING and stages.CLOSING in cfg.order:
         _enter(s, stages.CLOSING)
     elif request == "to_action" and cfg.to_action_step and cfg.to_action_step in _after(stage, cfg.order):
         _enter(s, cfg.to_action_step)
@@ -189,22 +171,13 @@ def after_reply(
     session.flow_state = s
 
 
-def purpose_card(language: Language, cfg: FlowConfig) -> dict[str, Any]:
-    return {
-        "type": PURPOSE_CARD,
-        "items": [{"id": p["id"], "label": cfg.purpose_label(p["id"], language)} for p in cfg.purposes],
-    }
-
-
 def purpose_note(s: dict[str, Any], language: Language, cfg: FlowConfig, sys: dict[str, str]) -> str:
     """For the prompt: what the user said they want from this conversation."""
 
     pid = s.get("purpose")
     if not pid or not sys["system.note_purpose"]:
         return ""
-    what = cfg.purpose_label(pid, language) or (
-        "见用户上一句话" if language == Language.ZH else "사용자의 앞선 말 참고"
-    )
+    what = "见用户上一句话" if language == Language.ZH else "사용자의 앞선 말 참고"
     return sys["system.note_purpose"].replace("{purpose}", what)
 
 

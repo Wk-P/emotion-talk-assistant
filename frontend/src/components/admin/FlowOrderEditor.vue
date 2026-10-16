@@ -36,15 +36,6 @@ const CLOSING = 'flow.closing'
 const STABILIZATION = 'flow.stabilization'
 const ENDING = 'flow.ending'
 const PURPOSE = 'flow.purpose'
-const DEFAULT_ORDER = [
-  'flow.listen',
-  'flow.purpose',
-  'flow.explore',
-  'flow.self_check',
-  'flow.self_kindness',
-  'flow.regulate',
-  'flow.act',
-]
 
 // Every orderable step, in use or not (the order the backend stores).
 const saved = computed(() =>
@@ -58,6 +49,8 @@ const enabled = (key: string) => byKey(key)?.enabled ?? true
 const custom = (key: string) => !byKey(key)?.built_in
 const live = computed(() => order.value.filter(enabled))
 const unused = computed(() => order.value.filter((k) => !enabled(k)))
+// Position among the steps in use.
+const liveIndex = computed(() => Object.fromEntries(live.value.map((k, i) => [k, i])) as Record<string, number>)
 
 onMounted(() => load().catch(() => (error.value = t('flowOrder.failed'))))
 
@@ -93,7 +86,6 @@ function addons(key: string): string[] {
   const c = config.value
   if (!c) return []
   const out: string[] = []
-  if (c.button_step === key) out.push(t('flowUi.addon.buttons'))
   if (c.card_steps.seb_summary === key) out.push(t('flowUi.addon.summary'))
   if (c.card_steps.plan_form === key) out.push(t('flowUi.addon.plan'))
   return out
@@ -123,12 +115,12 @@ function moveTo(key: string, pos: number) {
   run(() => commit(placed(order.value, key, pos)), t('flowUi.orderSaved'))
 }
 
-// ---- Taking out, putting in, deleting ----
-function takeOut(key: string) {
+// ---- Taking out (or back in, in place), putting in, deleting ----
+function setOn(key: string, on: boolean) {
   run(async () => {
-    await updatePromptModule(key, { enabled: false })
+    await updatePromptModule(key, { enabled: on })
     emit('reload')
-  }, t('flowUi.takenOut', { name: props.nameOf(key) }))
+  }, t(on ? 'flowUi.putIn' : 'flowUi.takenOut', { name: props.nameOf(key) }))
 }
 
 // The gap a step is being put into: before live[slot] (live.length = at the end).
@@ -198,21 +190,11 @@ function saveRules() {
   run(save, t('flowOrder.saved'))
 }
 
-const confirmingReset = ref(false)
-function resetAll() {
-  if (!confirmingReset.value) {
-    confirmingReset.value = true
-    return
-  }
-  confirmingReset.value = false
-  const next = [...DEFAULT_ORDER.filter((k) => order.value.includes(k)), ...order.value.filter((k) => !DEFAULT_ORDER.includes(k))]
-  run(async () => {
-    await commit(next)
-    for (const k of DEFAULT_ORDER) if (order.value.includes(k) && !enabled(k)) await updatePromptModule(k, { enabled: true })
-    resetToDefaults()
-    await save()
-    emit('reload')
-  }, t('flowUi.resetDone'))
+// Puts the rules back to defaults as an unsaved change: nothing is lost
+// until the admin presses save (and "undo" still brings it back).
+function resetRules() {
+  resetToDefaults()
+  done(t('flowUi.resetDraft'))
 }
 </script>
 
@@ -229,17 +211,17 @@ function resetAll() {
         <span class="node-text">{{ t('flowUi.start') }}</span>
       </li>
 
-      <template v-for="(key, i) in live" :key="key">
-        <!-- Gap before this step: put a step in here -->
-        <li class="gap">
-          <button type="button" class="gap-btn" :class="{ open: slot === i }" :aria-label="t('flowUi.insertHere')" @click="openSlot(i)">
+      <!-- Every step in its stored place; ones taken out stay visible, greyed. -->
+      <template v-for="key in order" :key="key">
+        <li v-if="enabled(key)" class="gap">
+          <button type="button" class="gap-btn" :class="{ open: slot === liveIndex[key]! }" :aria-label="t('flowUi.insertHere')" @click="openSlot(liveIndex[key]!)">
             ＋<span class="gap-label">{{ t('flowUi.insertHere') }}</span>
           </button>
-          <div v-if="slot === i" class="picker">
+          <div v-if="slot === liveIndex[key]!" class="picker">
             <template v-if="unused.length">
               <div class="picker-title">{{ t('flowUi.pickUnused') }}</div>
               <div class="chips">
-                <button v-for="k in unused" :key="k" type="button" class="chip-btn" :disabled="busy" @click="putIn(k, i)">
+                <button v-for="k in unused" :key="k" type="button" class="chip-btn" :disabled="busy" @click="putIn(k, liveIndex[key]!)">
                   {{ nameOf(k) }}
                 </button>
               </div>
@@ -249,31 +231,38 @@ function resetAll() {
           </div>
         </li>
 
-        <li class="step">
-          <span class="num">{{ i + 1 }}</span>
+        <li class="step" :class="{ off: !enabled(key) }">
+          <span class="num">{{ enabled(key) ? liveIndex[key]! + 1 : '–' }}</span>
           <div class="step-card">
             <div class="step-head">
               <h3>{{ nameOf(key) }}</h3>
+              <span v-if="!enabled(key)" class="tag">{{ t('flowUi.outBadge') }}</span>
               <span v-if="custom(key)" class="tag accent">{{ t('flowOrder.customBadge') }}</span>
               <span v-for="a in addons(key)" :key="a" class="tag addon">{{ a }}</span>
             </div>
-            <p class="what">{{ endsText(key) }}</p>
-            <p v-if="emptyKeys.includes(key)" class="warn">⚠️ {{ t('comp.noPrompt') }}</p>
+            <p class="what">{{ enabled(key) ? endsText(key) : t('flowUi.outHint') }}</p>
+            <p v-if="enabled(key) && emptyKeys.includes(key)" class="warn">⚠️ {{ t('comp.noPrompt') }}</p>
 
             <div v-if="confirmingDelete === key" class="confirm">
               <span>{{ t('comp.deleteConfirm', { name: nameOf(key) }) }}</span>
               <button type="button" class="btn-text small" @click="confirmingDelete = null">{{ t('prompts.cancel') }}</button>
               <button type="button" class="btn-danger small" :disabled="busy" @click="remove(key)">{{ t('prompts.removeYes') }}</button>
             </div>
-            <div v-else class="step-actions">
-              <button type="button" class="icon-btn" :disabled="busy || i === 0" :aria-label="t('flowOrder.up', { name: nameOf(key) })" @click="move(key, -1)">↑</button>
-              <button type="button" class="icon-btn" :disabled="busy || i === live.length - 1" :aria-label="t('flowOrder.down', { name: nameOf(key) })" @click="move(key, 1)">↓</button>
-              <select class="pos" :value="i" :disabled="busy" :aria-label="t('flowOrder.moveTo', { name: nameOf(key) })" @change="moveTo(key, Number(($event.target as HTMLSelectElement).value))">
+            <div v-else-if="enabled(key)" class="step-actions">
+              <button type="button" class="icon-btn" :disabled="busy || liveIndex[key] === 0" :aria-label="t('flowOrder.up', { name: nameOf(key) })" @click="move(key, -1)">↑</button>
+              <button type="button" class="icon-btn" :disabled="busy || liveIndex[key] === live.length - 1" :aria-label="t('flowOrder.down', { name: nameOf(key) })" @click="move(key, 1)">↓</button>
+              <select class="pos" :value="liveIndex[key]" :disabled="busy" :aria-label="t('flowOrder.moveTo', { name: nameOf(key) })" @change="moveTo(key, Number(($event.target as HTMLSelectElement).value))">
                 <option v-for="(_, n) in live" :key="n" :value="n">{{ t('flowOrder.position', { n: n + 1 }) }}</option>
               </select>
               <span class="spacer" />
               <button type="button" class="btn-text small" @click="emit('edit', key)">{{ t('comp.editPrompt') }}</button>
-              <button type="button" class="btn-outline small" :disabled="busy" @click="takeOut(key)">{{ t('flowUi.takeOut') }}</button>
+              <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(key, false)">{{ t('flowUi.takeOut') }}</button>
+              <button v-if="custom(key)" type="button" class="btn-text small danger" @click="remove(key)">{{ t('comp.delete') }}</button>
+            </div>
+            <div v-else class="step-actions">
+              <span class="spacer" />
+              <button type="button" class="btn-text small" @click="emit('edit', key)">{{ t('comp.editPrompt') }}</button>
+              <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(key, true)">{{ t('flowUi.putBackHere') }}</button>
               <button v-if="custom(key)" type="button" class="btn-text small danger" @click="remove(key)">{{ t('comp.delete') }}</button>
             </div>
           </div>
@@ -282,7 +271,7 @@ function resetAll() {
 
       <!-- Gap at the end -->
       <li class="gap">
-        <button type="button" class="gap-btn" :class="{ open: slot === live.length }" @click="openSlot(live.length)">
+        <button type="button" class="gap-btn" :class="{ open: slot === live.length }" :aria-label="t('flowUi.insertHere')" @click="openSlot(live.length)">
           ＋<span class="gap-label">{{ t('flowUi.insertHere') }}</span>
         </button>
         <div v-if="slot === live.length" class="picker">
@@ -299,17 +288,22 @@ function resetAll() {
         </div>
       </li>
 
-      <li class="step fixed">
-        <span class="num">{{ live.length + 1 }}</span>
+      <li class="step" :class="{ off: !enabled(CLOSING) }">
+        <span class="num">{{ enabled(CLOSING) ? live.length + 1 : '–' }}</span>
         <div class="step-card">
           <div class="step-head">
             <h3>{{ nameOf(CLOSING) }}</h3>
-            <span class="tag">🔒 {{ t('comp.fixed') }}</span>
+            <span class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
+            <span v-if="!enabled(CLOSING)" class="tag">{{ t('flowUi.outBadge') }}</span>
           </div>
-          <p class="what">{{ t('flowOrder.closingNote') }}</p>
+          <p class="what">{{ t('flowUi.closingWhat') }}</p>
+          <p class="warn">⚠️ {{ t('flowUi.closingWarn') }}</p>
           <div class="step-actions">
             <span class="spacer" />
             <button type="button" class="btn-text small" @click="emit('edit', CLOSING)">{{ t('comp.editPrompt') }}</button>
+            <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(CLOSING, !enabled(CLOSING))">
+              {{ enabled(CLOSING) ? t('flowUi.takeOut') : t('flowUi.putBackHere') }}
+            </button>
           </div>
         </div>
       </li>
@@ -321,22 +315,27 @@ function resetAll() {
       <li v-for="w in warnings" :key="w">⚠️ {{ w }}</li>
     </ul>
 
-    <!-- Not in use -->
-    <section class="tray">
-      <h3>{{ t('flowUi.unusedTitle') }}</h3>
-      <p class="what">{{ unused.length ? t('flowUi.unusedHint') : t('flowUi.unusedNone') }}</p>
-      <div v-if="unused.length" class="chips">
-        <span v-for="k in unused" :key="k" class="tray-item">
-          {{ nameOf(k) }}
-          <button type="button" class="btn-text small" :disabled="busy" @click="putIn(k, live.length)">{{ t('flowUi.putBack') }}</button>
-        </span>
+    <!-- Steps outside the order, used when something happens. -->
+    <section class="special">
+      <h3>{{ t('flowUi.specialTitle') }}</h3>
+      <p class="what">{{ t('flowUi.specialDesc') }}</p>
+      <div v-for="k in [STABILIZATION, ENDING]" :key="k" class="special-item" :class="{ off: !enabled(k) }">
+        <div class="step-head">
+          <h3>{{ nameOf(k) }}</h3>
+          <span class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
+          <span v-if="!enabled(k)" class="tag">{{ t('flowUi.offBadge') }}</span>
+        </div>
+        <p class="what">{{ k === STABILIZATION ? t('flowOrder.stabilizationNote', { name: nameOf(k) }) : t('flowOrder.endingNote', { name: nameOf(k) }) }}</p>
+        <p class="warn">⚠️ {{ k === STABILIZATION ? t('flowUi.stabilizationWarn') : t('flowUi.endingWarn') }}</p>
+        <div class="step-actions">
+          <span class="spacer" />
+          <button type="button" class="btn-text small" @click="emit('edit', k)">{{ t('comp.editPrompt') }}</button>
+          <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(k, !enabled(k))">
+            {{ enabled(k) ? t('comp.turnOff') : t('comp.turnOn') }}
+          </button>
+        </div>
       </div>
     </section>
-
-    <p class="aside">
-      {{ t('flowOrder.stabilizationNote', { name: nameOf(STABILIZATION) }) }}
-      {{ t('flowOrder.endingNote', { name: nameOf(ENDING) }) }}
-    </p>
 
     <!-- Program rules, folded -->
     <details v-if="config" class="fold">
@@ -353,7 +352,7 @@ function resetAll() {
                 v-for="k in ruleSteps"
                 :key="k"
                 :value="k"
-                :disabled="config.button_step === k || CARD_TYPES.some((o) => o !== c && config!.card_steps[o] === k)"
+                :disabled="CARD_TYPES.some((o) => o !== c && config!.card_steps[o] === k)"
               >
                 {{ nameOf(k) }}
               </option>
@@ -371,7 +370,7 @@ function resetAll() {
             {{ t('flowOrder.rules.requests.toAction') }}
             <select v-model="config.to_action_step" :disabled="phone">
               <option :value="null">{{ t('flowOrder.rules.requests.ignore') }}</option>
-              <option v-for="k in ruleSteps" :key="k" :value="k">{{ t('flowOrder.purposes.jumpTo', { name: nameOf(k) }) }}</option>
+              <option v-for="k in ruleSteps" :key="k" :value="k">{{ t('flowUi.goTo', { name: nameOf(k) }) }}</option>
             </select>
           </label>
           <label class="rule">
@@ -419,8 +418,8 @@ function resetAll() {
         <div class="group">
           <div class="group-title">{{ t('flowOrder.rules.crisisReply') }}</div>
           <p class="what">{{ t('flowOrder.rules.crisisReplyHint') }}</p>
-          <textarea v-model="config.crisis_reply.zh" rows="3" maxlength="1000" :disabled="phone" :placeholder="t('flowOrder.purposes.zh')" />
-          <textarea v-model="config.crisis_reply.ko" rows="3" maxlength="1000" :disabled="phone" :placeholder="t('flowOrder.purposes.ko')" />
+          <textarea v-model="config.crisis_reply.zh" rows="3" maxlength="1000" :disabled="phone" :placeholder="t('flowUi.zhText')" />
+          <textarea v-model="config.crisis_reply.ko" rows="3" maxlength="1000" :disabled="phone" :placeholder="t('flowUi.koText')" />
           <label class="rule">
             {{ t('flowOrder.rules.crisisCountry') }}
             <input v-model="config.crisis_country" class="wide" maxlength="8" placeholder="KR" :disabled="phone" />
@@ -442,12 +441,7 @@ function resetAll() {
     </details>
 
     <div class="foot">
-      <template v-if="confirmingReset">
-        <span class="danger-text">{{ t('flowUi.resetConfirm') }}</span>
-        <button type="button" class="btn-text" @click="confirmingReset = false">{{ t('prompts.cancel') }}</button>
-        <button type="button" class="btn-danger" :disabled="busy" @click="resetAll">{{ t('prompts.removeYes') }}</button>
-      </template>
-      <button v-else type="button" class="btn-text" @click="resetAll">{{ t('flowUi.reset') }}</button>
+      <button type="button" class="btn-text" @click="resetRules">{{ t('flowUi.reset') }}</button>
     </div>
 
     <div v-if="dirty" class="unsaved" role="status">
@@ -540,8 +534,41 @@ h3 {
   color: #fff;
   box-shadow: 0 0 0 4px var(--surface);
 }
-.step.fixed .num {
-  background: var(--text-muted);
+.step.off .num {
+  background: var(--border);
+  color: var(--text-muted);
+}
+.step.off .step-card,
+.special-item.off {
+  background: var(--bg);
+  box-shadow: none;
+  border-style: dashed;
+}
+.step.off h3,
+.special-item.off h3 {
+  color: var(--text-muted);
+}
+.tag.safety {
+  border-color: #f0c98a;
+  background: #fff7e8;
+  color: #9a5b00;
+}
+.special {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #f0c98a;
+  border-radius: var(--radius-lg);
+}
+.special-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
 }
 .step-card {
   flex: 1;
@@ -554,10 +581,6 @@ h3 {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-}
-.step.fixed .step-card {
-  border-style: dashed;
-  box-shadow: none;
 }
 .step-head {
   display: flex;
@@ -726,24 +749,6 @@ h3 {
 }
 
 /* ---- Below the line ---- */
-.tray {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
-}
-.tray-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 4px 2px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg);
-  font-size: 13px;
-}
 .aside {
   margin: 0;
   font-size: 12.5px;

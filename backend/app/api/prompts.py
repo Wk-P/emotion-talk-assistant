@@ -134,14 +134,10 @@ async def set_flow_config(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_required),
 ) -> FlowConfigOverview:
-    """Saves the per-step turn limits, the purpose buttons, the history
+    """Saves the per-step turn limits, the history
     length and the program rules (keywords, crisis reply, ...). Conversations use them from their next turn on."""
 
     data = payload.model_dump()
-    data["purposes"] = [
-        {**p, "labels": {k: v.strip() for k, v in p["labels"].items() if k in {lang.value for lang in Language}}}
-        for p in data["purposes"]
-    ]
     langs = {lang.value for lang in Language}
     data["keywords"] = {
         name: list(dict.fromkeys(w.strip() for w in data["keywords"].get(name, []) if w.strip()))

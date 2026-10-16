@@ -13,8 +13,7 @@ import {
 } from '@/api/client'
 
 // "对话组件": every conversation step as a card of its own — create, rename,
-// turn off, delete, how many turns it lasts — plus the purpose buttons, an
-// add-on that can be attached to any one step. Where the steps go is the
+// turn off, delete, how many turns it lasts — and the prompt blocks. Where the steps go is the
 // "对话流程" page; what the AI says in them is the "提示词" page.
 const props = defineProps<{
   modules: PromptModuleItem[]
@@ -51,9 +50,9 @@ function done(msg: string) {
 }
 onMounted(() => load().catch(() => (error.value = t('flowOrder.failed'))))
 
-function summary(key: string): string {
-  const id = `comp.what.${key.replace('flow.', '')}`
-  return te(id) ? t(id) : t('comp.what.custom')
+function summary(m: PromptModuleItem): string {
+  const id = `prompts.keys.${m.key}.desc`
+  return m.built_in && te(id) ? t(id) : t('comp.what.custom')
 }
 
 // ---- Turns ----
@@ -177,31 +176,7 @@ async function createBlock() {
   }
 }
 
-// ---- Purpose buttons (an add-on attached to one step) ----
-const buttonHosts = computed(() =>
-  steps.value.filter((m) => !Object.values(config.value?.card_steps ?? {}).includes(m.key)).map((m) => m.key),
-)
-const jumpTargets = computed(() => {
-  const keys = steps.value.filter((m) => m.enabled).map((m) => m.key)
-  const i = config.value?.button_step ? keys.indexOf(config.value.button_step) : -1
-  return i < 0 ? [] : keys.slice(i + 1)
-})
-function addButton() {
-  config.value?.purposes.push({ id: `p${Date.now().toString(36)}`, labels: { zh: '', ko: '' }, jump: null })
-}
-const buttonProblem = computed(() => {
-  const c = config.value
-  if (!c?.button_step) return ''
-  if (!c.purposes.length) return t('flowOrder.purposes.needOne')
-  if (c.purposes.some((p) => !Object.values(p.labels).some((v) => v?.trim()))) return t('flowOrder.purposes.needLabel')
-  return ''
-})
-
 async function saveSettings() {
-  if (buttonProblem.value) {
-    error.value = buttonProblem.value
-    return
-  }
   busy.value = true
   error.value = ''
   try {
@@ -234,10 +209,6 @@ async function saveSettings() {
           <div class="kind">
             <div class="kind-name">📝 {{ t('comp.explain.blockName') }}</div>
             <p>{{ t('comp.explain.blockWhat') }}</p>
-          </div>
-          <div class="kind">
-            <div class="kind-name">🔘 {{ t('flowOrder.purposes.title') }}</div>
-            <p>{{ t('comp.explain.buttonsWhat') }}</p>
           </div>
         </div>
         <div class="assemble">
@@ -273,9 +244,8 @@ async function saveSettings() {
           <span v-if="m.enabled" class="tag on">{{ t('comp.inFlow', { n: positions[m.key] }) }}</span>
           <span v-else class="tag">{{ t('comp.notUsed') }}</span>
           <span v-if="!m.built_in" class="tag accent">{{ t('flowOrder.customBadge') }}</span>
-          <span v-if="config?.button_step === m.key" class="tag accent">{{ t('comp.hasButtons') }}</span>
         </div>
-        <p class="what">{{ summary(m.key) }}</p>
+        <p class="what">{{ summary(m) }}</p>
         <p v-if="emptyKeys.includes(m.key)" class="warn">⚠️ {{ t('comp.noPrompt') }}</p>
 
         <div v-if="config && !NO_TURNS.has(m.key)" class="turns">
@@ -332,49 +302,6 @@ async function saveSettings() {
         </form>
       </article>
     </div>
-
-    <!-- Purpose buttons add-on -->
-    <section v-if="config" class="addon">
-      <div class="addon-head">
-        <h3>{{ t('flowOrder.purposes.title') }}</h3>
-        <span class="tag accent">{{ t('comp.addon') }}</span>
-      </div>
-      <p class="what">{{ t('comp.buttonsDesc') }}</p>
-      <label class="host">
-        {{ t('comp.attachTo') }}
-        <select v-model="config.button_step" :disabled="phone">
-          <option :value="null">{{ t('comp.attachNone') }}</option>
-          <option v-for="k in buttonHosts" :key="k" :value="k">{{ nameOf(k) }}</option>
-        </select>
-      </label>
-      <template v-if="config.button_step">
-        <div class="btn-preview">
-          <span class="preview-label">{{ t('comp.preview') }}</span>
-          <span v-for="p in config.purposes" :key="p.id" class="pill">{{ p.labels.zh || p.labels.ko || '…' }}</span>
-        </div>
-        <div v-for="(p, pi) in config.purposes" :key="p.id" class="purpose-row">
-          <input v-model="p.labels.zh" maxlength="40" :disabled="phone" :placeholder="t('flowOrder.purposes.zh')" />
-          <input v-model="p.labels.ko" maxlength="40" :disabled="phone" :placeholder="t('flowOrder.purposes.ko')" />
-          <select v-model="p.jump" :disabled="phone">
-            <option :value="null">{{ t('flowOrder.purposes.noJump') }}</option>
-            <option v-for="k in jumpTargets" :key="k" :value="k">{{ t('flowOrder.purposes.jumpTo', { name: nameOf(k) }) }}</option>
-          </select>
-          <button
-            v-if="!phone"
-            type="button"
-            class="icon-btn"
-            :aria-label="t('flowOrder.purposes.remove')"
-            :disabled="config.purposes.length <= 1"
-            @click="config.purposes.splice(pi, 1)"
-          >
-            ✕
-          </button>
-        </div>
-        <button v-if="config.purposes.length < 8 && !phone" type="button" class="btn-text small" @click="addButton">
-          {{ t('flowOrder.purposes.add') }}
-        </button>
-      </template>
-    </section>
 
     <!-- Prompt blocks -->
     <h3 class="sub">{{ t('comp.blocksTitle') }}</h3>
@@ -442,12 +369,14 @@ async function saveSettings() {
     <h3 class="sub">{{ t('comp.fixedTitle') }}</h3>
     <p class="sub-desc">{{ t('comp.fixedDesc') }}</p>
     <div class="grid">
-      <article v-for="m in fixed" :key="m.key" class="card fixed">
+      <article v-for="m in fixed" :key="m.key" class="card fixed" :class="{ off: !m.enabled }">
         <div class="card-head">
           <h3>{{ nameOf(m.key) }}</h3>
-          <span class="tag">🔒 {{ t('comp.fixed') }}</span>
+          <span class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
+          <span v-if="!m.enabled" class="tag">{{ t('comp.notUsed') }}</span>
         </div>
-        <p class="what">{{ summary(m.key) }}</p>
+        <p class="what">{{ summary(m) }}</p>
+        <p class="warn">⚠️ {{ t(`comp.safetyWarn.${m.key.replace('flow.', '')}`) }}</p>
         <form v-if="renaming === m.key" class="rename" @submit.prevent="saveRename(m)">
           <label>中文<input v-model="names.zh" maxlength="40" :placeholder="nameOf(m.key)" /></label>
           <label>한국어<input v-model="names.ko" maxlength="40" /></label>
@@ -457,6 +386,9 @@ async function saveSettings() {
           </div>
         </form>
         <div v-else class="actions">
+          <button type="button" class="btn-outline small" :disabled="busy" @click="toggle(m)">
+            {{ m.enabled ? t('comp.turnOff') : t('comp.turnOn') }}
+          </button>
           <button v-if="!phone" type="button" class="btn-text small" @click="startRename(m)">{{ t('prompts.rename') }}</button>
           <button type="button" class="btn-text small push" @click="emit('edit', m.key)">{{ t('comp.editPrompt') }}</button>
         </div>
@@ -562,8 +494,7 @@ async function saveSettings() {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
-.card,
-.addon {
+.card {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -579,10 +510,14 @@ async function saveSettings() {
   color: var(--text-muted);
 }
 .card.fixed {
-  border-style: dashed;
+  border-color: #f0c98a;
 }
-.card-head,
-.addon-head {
+.tag.safety {
+  border-color: #f0c98a;
+  background: #fff7e8;
+  color: #9a5b00;
+}
+.card-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -688,10 +623,7 @@ h3 {
   gap: 3px;
 }
 .rename input,
-.rename select,
-.purpose-row input,
-.purpose-row select,
-.host select {
+.rename select {
   min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -737,54 +669,6 @@ h3 {
   font-size: 26px;
   line-height: 1;
 }
-.addon {
-  border-color: var(--accent);
-}
-.host {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 13.5px;
-  font-weight: 600;
-}
-.btn-preview {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--bg);
-}
-.preview-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.pill {
-  padding: 5px 12px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--accent);
-  font-size: 12.5px;
-}
-.purpose-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr auto;
-  gap: 6px;
-}
-.icon-btn {
-  width: 32px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  cursor: pointer;
-}
-.icon-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
 .sub {
   margin: 10px 0 0;
 }
@@ -816,13 +700,5 @@ h3 {
 }
 .unsaved span {
   flex: 1;
-}
-@media (max-width: 640px) {
-  .purpose-row {
-    grid-template-columns: 1fr auto;
-  }
-  .purpose-row input {
-    grid-column: 1 / -1;
-  }
 }
 </style>

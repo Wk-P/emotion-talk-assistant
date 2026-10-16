@@ -58,18 +58,9 @@ class FlowOrder(BaseModel):
     order: list[str] = Field(max_length=100)
 
 
-class PurposeOption(BaseModel):
-    id: str = Field(min_length=1, max_length=40)
-    # By language value ("zh"/"ko").
-    labels: dict[str, str]
-    # A later step this button jumps to; None = just the next step.
-    jump: str | None = None
-
-
 class FlowConfigPayload(BaseModel):
     # Per step: [minimum, maximum] user turns (see app/services/flow_config.py).
     limits: dict[str, tuple[int, int]]
-    purposes: list[PurposeOption] = Field(max_length=8)
     history_turns: int
     # Rules the program applies (see app/services/flow_config.py). Optional
     # so an older admin page that doesn't send them keeps the saved values.
@@ -87,8 +78,6 @@ class FlowConfigPayload(BaseModel):
     )
     to_action_step: str | None = "flow.act"
     end_today_enabled: bool = True
-    # The step the purpose buttons are attached to; None = no buttons anywhere.
-    button_step: str | None = "flow.purpose"
     crisis_country: str = "KR"
 
 

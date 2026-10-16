@@ -138,11 +138,19 @@ def flow_sequence(modules: list[Module]) -> list[str]:
 
 async def active_flow_order(db: AsyncSession) -> list[str]:
     """What conversations go through: the admins' order without turned-off
-    stages, then closing (always last, even if its text is turned off)."""
+    stages, then closing (always last) unless admins turned it off. Never
+    empty: with everything off, closing alone."""
 
     modules = await load_modules(db)
     enabled = {m.key for m in modules if m.enabled}
-    return [k for k in flow_sequence(modules) if k in enabled] + [stages.CLOSING]
+    order = [k for k in flow_sequence(modules) if k in enabled]
+    if stages.CLOSING in enabled or not order:
+        order.append(stages.CLOSING)
+    return order
+
+
+async def disabled_keys(db: AsyncSession) -> set[str]:
+    return {m.key for m in await load_modules(db) if not m.enabled}
 
 
 async def save_flow_order(db: AsyncSession, order: list[str], admin_id: str | None) -> None:

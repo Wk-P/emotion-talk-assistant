@@ -29,8 +29,7 @@ from app.services.model_settings import current_effort, current_model
 
 # The only structured cards the model may attach, and only in their stage
 # (admin-set, flow_config.card_steps): the two flowchart checkpoints the user
-# confirms/edits and can save to their records. The purpose card is added by
-# code (flow.purpose_card), not the model. Enforced here rather than left to
+# confirms/edits and can save to their records. Enforced here rather than left to
 # the prompt, because the model kept attaching option cards to nearly every
 # reply. Options the user may pick from go in the reply text instead.
 # The minimum number of things the user has said before the summary may show
@@ -156,16 +155,12 @@ def _progress_note(
     if flow_key == cfg.card_steps.get("seb_summary") and "seb_summary" in shown:
         # The user may confirm the summary by typing instead of using the
         # card; the model reports it as stage_done and flow.after_reply moves on.
-        next_step = flow._after(flow_key, cfg.order)[:1]
-        to_purpose = next_step == [stages.PURPOSE]
+        to_purpose = flow._after(flow_key, cfg.order)[:1] == [stages.PURPOSE]
         lines.append(sys["system.note_listen_confirm" if to_purpose else "system.note_listen_confirm_other"])
-        if to_purpose and cfg.button_step != stages.PURPOSE:
+        if to_purpose:
             lines.append(sys["system.note_no_purpose_buttons"])
-        elif not to_purpose and next_step == [cfg.button_step]:
-            lines.append(sys["system.note_purpose_buttons_here"])
-    elif flow_key == cfg.button_step and flow_key != stages.PURPOSE:
-        lines.append(sys["system.note_purpose_buttons_here"])
-    elif flow_key == stages.PURPOSE and cfg.button_step != stages.PURPOSE:
+    elif flow_key == stages.PURPOSE:
+        # Prompts written when there were purpose buttons may still mention them.
         lines.append(sys["system.note_no_purpose_buttons"])
     lines += [flow.purpose_note(state, language, cfg, sys), flow.branch_note(state, sys)]
     lines = [line for line in lines if line]
@@ -198,8 +193,6 @@ def merge_confirmation(session: ConversationSession, confirmation: dict[str, Any
         ctx["recovery_plan"] = confirmation.get("fields", ctx.get("recovery_plan"))
     elif card_type == "seb_summary" and confirmation.get("fields"):
         ctx.setdefault("seb_entries", []).append(confirmation["fields"])
-    elif card_type == flow.PURPOSE_CARD and values:
-        ctx["purpose"] = values[0]
 
     session.confirmed_context = ctx
 
@@ -271,9 +264,10 @@ async def handle_turn(
     state = flow.state(session, cfg) if ending else flow.before_reply(
         session, user_text, confirmation, session.self_criticism_level, cfg
     )
-    if ending:
+    # Admins may turn ending / stabilization off: the current step answers.
+    if ending and stages.ENDING not in cfg.disabled:
         flow_key = stages.ENDING
-    elif risk == RiskLevel.WATCH:
+    elif risk == RiskLevel.WATCH and stages.STABILIZATION not in cfg.disabled:
         flow_key = stages.STABILIZATION
     else:
         flow_key = state["stage"]
@@ -283,15 +277,6 @@ async def handle_turn(
     )
     if not ending and risk != RiskLevel.WATCH:
         flow.after_reply(session, result.signals, cfg, summary_shown=result.summary_shown)
-        # Summary confirmed in words: this reply already asks the purpose
-        # question (system.note_listen_confirm), so it carries the buttons.
-        summary_step = cfg.card_steps.get("seb_summary")
-        if (
-            cfg.button_step
-            and result.stage == summary_step
-            and session.flow_state["stage"] == cfg.button_step
-        ):
-            result.candidates = [flow.purpose_card(language, cfg)]
     if not user_text:
         result.user_text_used = synthetic_text
     return result
@@ -317,8 +302,6 @@ async def _continue_flow(
     effort = await current_effort(db)
     llm_response = await generate_turn(system_prompt, history, synthetic_text, model, effort=effort)
     candidates = [] if ending else _filter_candidates(llm_response.candidates, messages, flow_key, cfg)
-    if flow_key == cfg.button_step and not ending:
-        candidates = [flow.purpose_card(session.language, cfg)]
     return TurnResult(
         reply_text=llm_response.reply_text,
         candidates=candidates,
