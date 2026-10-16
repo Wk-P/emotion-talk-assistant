@@ -47,11 +47,11 @@ const custom = (key: string) => !byKey(key)?.built_in
 const triggered = (key: string) => TRIGGER_ROLES.some((r) => config.value?.[r] === key)
 const isSafety = (key: string) => !!config.value?.safety_steps.includes(key)
 // The line: steps walked through in order (trigger-only steps are below).
-const inLine = (key: string) => enabled(key) && !triggered(key)
+const inLine = (key: string) => enabled(key)
 // Every component is shown on the line, trigger-only ones too (marked).
 const lineKeys = computed(() => order.value)
 const live = computed(() => order.value.filter(inLine))
-const unused = computed(() => order.value.filter((k) => !enabled(k) && !triggered(k)))
+const unused = computed(() => order.value.filter((k) => !enabled(k)))
 const roleOfKey = (key: string) => TRIGGER_ROLES.find((r) => config.value?.[r] === key) ?? null
 function clearRole(key: string) {
   const r = roleOfKey(key)
@@ -240,30 +240,7 @@ function resetRules() {
           </div>
         </li>
 
-        <li v-if="triggered(key)" class="step" :class="{ off: !enabled(key) }">
-          <span class="num">⚡</span>
-          <div class="step-card">
-            <div class="step-head">
-              <h3>{{ nameOf(key) }}</h3>
-              <span class="tag addon">{{ t(`comp.role.${roleOfKey(key)}`) }}</span>
-              <span v-if="!enabled(key)" class="tag">{{ t('flowUi.offBadge') }}</span>
-              <span v-if="isSafety(key)" class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
-              <span v-if="custom(key)" class="tag accent">{{ t('flowOrder.customBadge') }}</span>
-            </div>
-            <p class="what">{{ t('flowUi.triggeredHint', { when: t(`flowUi.roleWhen.${roleOfKey(key)}`) }) }}</p>
-            <p v-if="isSafety(key)" class="warn">⚠️ {{ t('comp.safetyGeneric') }}</p>
-            <p v-if="enabled(key) && emptyKeys.includes(key)" class="warn">⚠️ {{ t('comp.noPrompt') }}</p>
-            <div class="step-actions">
-              <span class="spacer" />
-              <button type="button" class="btn-text small" @click="emit('edit', key)">{{ t('comp.editPrompt') }}</button>
-              <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(key, !enabled(key))">
-                {{ enabled(key) ? t('comp.turnOff') : t('comp.turnOn') }}
-              </button>
-              <button type="button" class="btn-outline small" :disabled="phone" @click="clearRole(key)">{{ t('flowUi.toLine') }}</button>
-            </div>
-          </div>
-        </li>
-        <li v-else class="step" :class="{ off: !enabled(key) }">
+        <li class="step" :class="{ off: !enabled(key) }">
           <span class="num">{{ enabled(key) ? liveIndex[key]! + 1 : '–' }}</span>
           <div class="step-card">
             <div class="step-head">
@@ -272,8 +249,10 @@ function resetRules() {
               <span v-if="isSafety(key)" class="tag safety">🛡 {{ t('flowUi.safetyStep') }}</span>
               <span v-if="custom(key)" class="tag accent">{{ t('flowOrder.customBadge') }}</span>
               <span v-for="a in addons(key)" :key="a" class="tag addon">{{ a }}</span>
+              <span v-if="triggered(key)" class="tag addon">{{ t(`comp.role.${roleOfKey(key)}`) }}</span>
             </div>
             <p class="what">{{ enabled(key) ? endsText(key) : t('flowUi.outHint') }}</p>
+            <p v-if="triggered(key)" class="what">{{ t('flowUi.triggeredHint', { when: t(`flowUi.roleWhen.${roleOfKey(key)}`) }) }}</p>
             <p v-if="isSafety(key)" class="warn">⚠️ {{ t('comp.safetyGeneric') }}</p>
             <p v-if="enabled(key) && emptyKeys.includes(key)" class="warn">⚠️ {{ t('comp.noPrompt') }}</p>
 
@@ -291,6 +270,7 @@ function resetRules() {
               <span class="spacer" />
               <button type="button" class="btn-text small" @click="emit('edit', key)">{{ t('comp.editPrompt') }}</button>
               <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(key, false)">{{ t('flowUi.takeOut') }}</button>
+              <button v-if="triggered(key)" type="button" class="btn-outline small" :disabled="phone" @click="clearRole(key)">{{ t('flowUi.toLine') }}</button>
               <button v-if="custom(key)" type="button" class="btn-text small danger" @click="remove(key)">{{ t('comp.delete') }}</button>
             </div>
             <div v-else class="step-actions">

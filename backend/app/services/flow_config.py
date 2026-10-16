@@ -171,10 +171,10 @@ def _rules_from(saved: dict[str, Any]) -> dict[str, Any]:
 async def load(db: AsyncSession) -> FlowConfig:
     saved = await _saved(db)
     rules = _rules_from(saved)
-    # Steps that answer only on a trigger are not walked through.
-    triggered = {rules["stabilize_step"], rules["ending_step"]} - {None}
+    # Every step in use is walked through in the admins' order, including
+    # the ones that also answer on a trigger.
     return FlowConfig(
-        order=await registry.active_flow_order(db, triggered),
+        order=await registry.active_flow_order(db),
         disabled=await registry.disabled_keys(db),
         limits=_limits_from(saved),
         history_turns=saved.get("history_turns") or DEFAULT_HISTORY,

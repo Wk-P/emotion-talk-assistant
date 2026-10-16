@@ -40,13 +40,11 @@ function roleOf(key: string): Role | null {
   const c = config.value
   return c ? (ROLES.find((r) => c[r] === key) ?? null) : null
 }
-// Only answer on a trigger, never walked through in order.
-const triggered = (key: string) => ['stabilize_step', 'ending_step'].includes(roleOf(key) ?? '')
 const noTurns = (key: string) => key === 'flow.purpose' || roleOf(key) !== null
 // Position in the conversation, counting only the steps walked through.
 const positions = computed(() => {
   let n = 0
-  return Object.fromEntries(steps.value.map((m) => [m.key, m.enabled && !triggered(m.key) ? ++n : 0]))
+  return Object.fromEntries(steps.value.map((m) => [m.key, m.enabled ? ++n : 0]))
 })
 
 // ---- Safety mark (saved with the save bar) ----
