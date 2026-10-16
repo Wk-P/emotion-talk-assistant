@@ -543,7 +543,26 @@ export interface FlowConfig {
   purposes: PurposeOption[]
   /** How many recent messages the AI sees each turn. */
   history_turns: number
+  /** The user must have said at least this many things before the summary card shows. */
+  summary_min_turns: number
+  /** [min, max] turns of the self-kindness step when self-criticism is weak. */
+  weak_kindness: [number, number]
+  /** Extra crisis words (built-ins always apply), "overwhelmed" words, self-criticism words. */
+  keywords: Record<KeywordList, string[]>
+  /** Reply shown with the crisis resources, by language; empty = built-in. */
+  crisis_reply: Partial<Record<Language, string>>
+  /** Self-criticism scoring, 0-100. */
+  criticism: { up: number; down: number; strong: number }
+  /** Checkpoint card -> the step it may show in (null = never). */
+  card_steps: Record<'seb_summary' | 'plan_form', string | null>
+  /** "Tell me what to do" jumps here (null = ignored). */
+  to_action_step: string | null
+  end_today_enabled: boolean
+  /** Crisis resources of this country are shown ('' = all). */
+  crisis_country: string
 }
+
+export type KeywordList = 'crisis' | 'watch' | 'self_criticism'
 
 export async function getFlowConfig() {
   const { data } = await api.get<FlowConfig & { defaults: FlowConfig }>('/api/admin/prompts/flow-config')
@@ -613,4 +632,31 @@ export async function runTestTurn(payload: { language: Language; message: string
     payload,
   )
   return data
+}
+
+/** Verified crisis/support contacts (backend app/api/resources.py). */
+export interface CrisisResourceItem {
+  id: string
+  country: string
+  category: string
+  name: Partial<Record<Language, string>>
+  description: Partial<Record<Language, string>>
+  contact: string
+  url: string | null
+  verified_at: string
+}
+export type CrisisResourceInput = Omit<CrisisResourceItem, 'id'>
+
+export async function listCrisisResources() {
+  const { data } = await api.get<CrisisResourceItem[]>('/api/admin/resources')
+  return data
+}
+
+export async function saveCrisisResource(item: CrisisResourceInput, id?: string) {
+  if (id) await api.put(`/api/admin/resources/${id}`, item)
+  else await api.post('/api/admin/resources', item)
+}
+
+export async function deleteCrisisResource(id: string) {
+  await api.delete(`/api/admin/resources/${id}`)
 }

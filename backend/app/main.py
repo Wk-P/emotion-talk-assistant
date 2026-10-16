@@ -37,6 +37,7 @@ app.include_router(consent.router)
 app.include_router(records.router)
 app.include_router(reflections.router)
 app.include_router(resources.router)
+app.include_router(resources.admin_router)
 
 
 @app.get("/api/health")

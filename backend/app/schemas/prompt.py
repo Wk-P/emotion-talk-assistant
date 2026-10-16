@@ -71,6 +71,23 @@ class FlowConfigPayload(BaseModel):
     limits: dict[str, tuple[int, int]]
     purposes: list[PurposeOption] = Field(max_length=8)
     history_turns: int
+    # Rules the program applies (see app/services/flow_config.py). Optional
+    # so an older admin page that doesn't send them keeps the saved values.
+    summary_min_turns: int = 3
+    weak_kindness: tuple[int, int] = (1, 2)
+    # "crisis" / "watch" / "self_criticism" -> words.
+    keywords: dict[str, list[str]] = Field(default_factory=dict)
+    # By language value ("zh"/"ko"); empty = the built-in text.
+    crisis_reply: dict[str, str] = Field(default_factory=dict)
+    # Self-criticism scoring, 0-100: "up", "down", "strong".
+    criticism: dict[str, int] = Field(default_factory=lambda: {"up": 25, "down": 5, "strong": 50})
+    # Checkpoint card type -> the step it may show in (None = never).
+    card_steps: dict[str, str | None] = Field(
+        default_factory=lambda: {"seb_summary": "flow.listen", "plan_form": "flow.act"}
+    )
+    to_action_step: str | None = "flow.act"
+    end_today_enabled: bool = True
+    crisis_country: str = "KR"
 
 
 class FlowConfigOverview(FlowConfigPayload):

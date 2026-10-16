@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import CrisisResourcesEditor from './CrisisResourcesEditor.vue'
 import FlowOrderEditor from './FlowOrderEditor.vue'
 import ModelPicker from './ModelPicker.vue'
 import PromptTools from './PromptTools.vue'
@@ -469,6 +470,7 @@ onMounted(() => load())
       @edit="editStep"
       @reload="load(true)"
     />
+    <CrisisResourcesEditor v-if="!loading && section === 'flow'" />
 
     <!-- Narrow: stacked. >=1024px: list | editor, test panel below.
          >=1360px: full-width three-column workspace — list | editor | a

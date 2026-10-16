@@ -27,28 +27,15 @@ from app.services.llm import generate_turn
 from app.services.model_settings import current_effort, current_model
 
 
-# The only structured cards the model may attach, and only in their stage:
-# the two flowchart checkpoints the user confirms/edits and can save to their
-# records. The purpose card is added by code (flow.purpose_card), not the
-# model. Enforced here rather than left to the prompt, because the model kept
-# attaching option cards to nearly every reply and admin-edited prompt text
-# can't override this. Options the user may pick from (emotion words,
-# regulation methods) go in the reply text instead.
-ALLOWED_CARDS_BY_STAGE = {stages.LISTEN: "seb_summary", stages.ACT: "plan_form"}
-# The summary needs something to summarize: not before the user has said at
-# least this many things.
-MIN_USER_TURNS_FOR_SUMMARY = 3
-
-_CRISIS_COPY = {
-    Language.ZH: (
-        "谢谢你愿意告诉我这些。这听起来很沉重，我想先确认一下你现在的安全状态——"
-        "这部分超出了我能提供的支持范围，下面是一些经过核实的、可以立即联系的资源。"
-    ),
-    Language.KO: (
-        "이렇게 말씀해 주셔서 고마워요. 지금 많이 힘드신 것 같아요. 먼저 지금 안전한 상태인지 확인하고 싶어요—"
-        "이 부분은 제가 도울 수 있는 범위를 넘어서서, 지금 바로 연락할 수 있는 검증된 자원을 안내해 드릴게요."
-    ),
-}
+# The only structured cards the model may attach, and only in their stage
+# (admin-set, flow_config.card_steps): the two flowchart checkpoints the user
+# confirms/edits and can save to their records. The purpose card is added by
+# code (flow.purpose_card), not the model. Enforced here rather than left to
+# the prompt, because the model kept attaching option cards to nearly every
+# reply. Options the user may pick from go in the reply text instead.
+# The minimum number of things the user has said before the summary may show
+# is admin-set (flow_config.summary_min_turns), as are the crisis reply text
+# and the screening word lists.
 
 
 @dataclass
@@ -76,9 +63,11 @@ class TurnResult:
     summary_shown: bool = False
 
 
-async def _crisis_turn(db: AsyncSession, language: Language) -> TurnResult:
-    country = "KR"  # participants are studying in Korea; primary resources are KR-based
-    result = await db.execute(select(CrisisResource).where(CrisisResource.country == country))
+async def _crisis_turn(db: AsyncSession, language: Language, cfg: flow_config.FlowConfig) -> TurnResult:
+    query = select(CrisisResource)
+    if cfg.crisis_country:  # admin-set; participants are studying in Korea, so KR by default
+        query = query.where(CrisisResource.country == cfg.crisis_country)
+    result = await db.execute(query)
     resources = result.scalars().all()
     candidates = [
         {
@@ -96,7 +85,7 @@ async def _crisis_turn(db: AsyncSession, language: Language) -> TurnResult:
             ],
         }
     ]
-    return TurnResult(reply_text=_CRISIS_COPY[language], candidates=candidates, risk_level=RiskLevel.CRISIS)
+    return TurnResult(reply_text=cfg.crisis_text(language), candidates=candidates, risk_level=RiskLevel.CRISIS)
 
 
 async def _load_messages(db: AsyncSession, session_id: str) -> list[Message]:
@@ -130,7 +119,7 @@ def _cards_already_shown(messages: list[Message]) -> set[str]:
 
 
 def _filter_candidates(
-    candidates: list[dict[str, Any]], messages: list[Message], stage: str
+    candidates: list[dict[str, Any]], messages: list[Message], stage: str, cfg: flow_config.FlowConfig
 ) -> list[dict[str, Any]]:
     """At most one card per reply, only the checkpoint of the current stage,
     and each checkpoint at most once per conversation (shown once is enough
@@ -140,9 +129,9 @@ def _filter_candidates(
     user_turns = sum(1 for m in messages if m.role == MessageRole.USER)
     for card in candidates:
         card_type = card.get("type") if isinstance(card, dict) else None
-        if card_type != ALLOWED_CARDS_BY_STAGE.get(stage) or card_type in shown:
+        if card_type != cfg.card_for(stage) or card_type in shown:
             continue
-        if card_type == "seb_summary" and user_turns < MIN_USER_TURNS_FOR_SUMMARY:
+        if card_type == "seb_summary" and user_turns < cfg.summary_min_turns:
             continue
         return [card]
     return []
@@ -164,10 +153,10 @@ def _progress_note(
 ) -> str:
     shown = _cards_already_shown(messages)
     lines = [sys[key] for card_type, key in _SHOWN_CARD_NOTES.items() if card_type in shown]
-    if flow_key == stages.LISTEN and "seb_summary" in shown:
+    if flow_key == cfg.card_steps.get("seb_summary") and "seb_summary" in shown:
         # The user may confirm the summary by typing instead of using the
         # card; the model reports it as stage_done and flow.after_reply moves on.
-        to_purpose = flow._after(stages.LISTEN, cfg.order)[:1] == [stages.PURPOSE]
+        to_purpose = flow._after(flow_key, cfg.order)[:1] == [stages.PURPOSE]
         lines.append(sys["system.note_listen_confirm" if to_purpose else "system.note_listen_confirm_other"])
     lines += [flow.purpose_note(state, language, cfg, sys), flow.branch_note(state, sys)]
     lines = [line for line in lines if line]
@@ -251,12 +240,15 @@ async def handle_turn(
     if confirmation:
         merge_confirmation(session, confirmation)
 
+    cfg = await flow_config.load(db)
     risk = RiskLevel.NONE
     if user_text:
-        risk = safety.screen_text(user_text)
-        session.self_criticism_level = safety.bump_self_criticism(user_text, session.self_criticism_level)
+        risk = safety.screen_text(user_text, cfg.keywords)
+        session.self_criticism_level = safety.bump_self_criticism(
+            user_text, session.self_criticism_level, cfg.keywords, cfg.criticism
+        )
         if risk == RiskLevel.CRISIS:
-            return await _crisis_turn(db, language)
+            return await _crisis_turn(db, language, cfg)
 
     confirmation_description = _describe_confirmation(confirmation, language) if confirmation else None
     synthetic_text = (
@@ -267,7 +259,6 @@ async def handle_turn(
     ending = bool(confirmation and confirmation.get("card_type") == "end")
     # The stage is decided in code (app/services/flow.py); an overwhelmed
     # turn is answered with the stabilization prompt without leaving it.
-    cfg = await flow_config.load(db)
     state = flow.state(session, cfg) if ending else flow.before_reply(
         session, user_text, confirmation, session.self_criticism_level, cfg
     )
@@ -285,7 +276,8 @@ async def handle_turn(
         flow.after_reply(session, result.signals, cfg, summary_shown=result.summary_shown)
         # Summary confirmed in words: this reply already asks the purpose
         # question (system.note_listen_confirm), so it carries the buttons.
-        if result.stage == stages.LISTEN and session.flow_state["stage"] == stages.PURPOSE:
+        summary_step = cfg.card_steps.get("seb_summary")
+        if result.stage == summary_step and session.flow_state["stage"] == stages.PURPOSE:
             result.candidates = [flow.purpose_card(language, cfg)]
     if not user_text:
         result.user_text_used = synthetic_text
@@ -311,7 +303,7 @@ async def _continue_flow(
     model = await current_model(db)
     effort = await current_effort(db)
     llm_response = await generate_turn(system_prompt, history, synthetic_text, model, effort=effort)
-    candidates = [] if ending else _filter_candidates(llm_response.candidates, messages, flow_key)
+    candidates = [] if ending else _filter_candidates(llm_response.candidates, messages, flow_key, cfg)
     if flow_key == stages.PURPOSE and not ending:
         candidates = [flow.purpose_card(session.language, cfg)]
     return TurnResult(

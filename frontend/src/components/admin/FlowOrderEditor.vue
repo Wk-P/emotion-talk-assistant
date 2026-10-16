@@ -9,12 +9,13 @@ import {
   saveFlowOrder,
   updatePromptModule,
   type FlowConfig,
+  type KeywordList,
   type PromptModuleItem,
 } from '@/api/client'
 
 // The order every conversation goes through its steps (backend
 // app/services/flow.py), and the flow settings (app/services/flow_config.py):
-// admins drag the cards (or use ↑ ↓ on touch screens), turn steps off, add
+// admins reorder the cards (↑ ↓ or a position menu), turn steps off, add
 // steps of their own, set each step's turn limits, edit the purpose buttons
 // and how much history the AI sees, and jump to a step's wording in the
 // editor below. Closing is always last; "calming down" and the end-button
@@ -97,6 +98,34 @@ const purposeProblem = computed(() => {
   return ''
 })
 
+// ---- Program rules: summary timing, brief self-kindness, word lists, crisis reply ----
+const KEYWORD_LISTS: KeywordList[] = ['crisis', 'watch', 'self_criticism']
+const newWord = ref<Record<KeywordList, string>>({ crisis: '', watch: '', self_criticism: '' })
+const CARD_TYPES = ['seb_summary', 'plan_form'] as const
+// Steps a checkpoint card or "tell me what to do" can point at.
+const ruleSteps = computed(() => order.value.filter((k) => k !== PURPOSE))
+const clampPct = (v: number, low = 0) => Math.max(low, Math.min(100, Math.round(v) || 0))
+function addWord(list: KeywordList) {
+  const c = config.value
+  const words = newWord.value[list].split(/[,，、\n]/).map((w) => w.trim()).filter(Boolean)
+  if (!c || !words.length) return
+  c.keywords[list] = [...new Set([...c.keywords[list], ...words.map((w) => w.slice(0, 40))])]
+  newWord.value[list] = ''
+}
+function removeWord(list: KeywordList, i: number) {
+  config.value?.keywords[list].splice(i, 1)
+}
+function resetWords(list: KeywordList) {
+  const c = config.value
+  if (c && defaults.value) c.keywords[list] = [...defaults.value.keywords[list]]
+}
+function setWeak(which: 0 | 1, value: number) {
+  const l = config.value?.weak_kindness
+  if (!l) return
+  l[which] = Math.max(1, Math.min(50, Math.round(value) || 1))
+  if (l[0] > l[1]) l[which === 0 ? 1 : 0] = l[which]
+}
+
 const configDirty = computed(
   () => !!config.value && !!savedConfig.value && JSON.stringify(config.value) !== JSON.stringify(savedConfig.value),
 )
@@ -118,20 +147,11 @@ function endsText(key: string): string {
   return custom(key) || !te(id) ? t('flowOrder.ends.custom') : t(id)
 }
 
-// ---- Reordering: drag on desktop, ↑ ↓ everywhere ----
-const dragging = ref<string | null>(null)
-// Only the ⠿ handle starts a drag, so the inputs inside a card stay usable.
-const armed = ref<string | null>(null)
-function onDragStart(key: string, e: DragEvent) {
-  dragging.value = key
-  e.dataTransfer?.setData('text/plain', key)
-  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
-}
-function onDragOver(key: string) {
-  const from = dragging.value
-  if (!from || from === key) return
-  const list = order.value.filter((k) => k !== from)
-  list.splice(order.value.indexOf(key), 0, from)
+// ---- Reordering: ↑ ↓, or pick a position ----
+// No drag and drop and no move animation: both flickered in Safari.
+function moveTo(key: string, pos: number) {
+  const list = order.value.filter((k) => k !== key)
+  list.splice(pos, 0, key)
   order.value = list
 }
 function move(key: string, delta: number) {
@@ -255,26 +275,8 @@ async function addStep() {
     <!-- Said once here instead of under every step's turn boxes. -->
     <p v-if="!phone" class="turns-note">{{ t('flowOrder.turnsNote') }}</p>
 
-    <TransitionGroup name="card" tag="ol" class="cards">
-      <li
-        v-for="(key, i) in order"
-        :key="key"
-        class="card"
-        :class="{ off: !enabled(key), dragging: dragging === key }"
-        :draggable="armed === key"
-        @dragstart="onDragStart(key, $event)"
-        @dragover.prevent="onDragOver(key)"
-        @drop.prevent
-        @dragend="dragging = null; armed = null"
-      >
-        <span
-          class="grip"
-          :title="t('flowOrder.dragHint')"
-          aria-hidden="true"
-          @mousedown="armed = key"
-          @mouseup="armed = null"
-          >⠿</span
-        >
+    <ol class="cards">
+      <li v-for="(key, i) in order" :key="key" class="card" :class="{ off: !enabled(key) }">
         <span class="num" :class="{ off: !enabled(key) }">{{ enabled(key) ? numbers[key] : '–' }}</span>
         <div class="body">
           <div class="name">
@@ -359,13 +361,21 @@ async function addStep() {
           >
             ↓
           </button>
+          <select
+            class="pos"
+            :value="i"
+            :aria-label="t('flowOrder.moveTo', { name: nameOf(key) })"
+            @change="moveTo(key, Number(($event.target as HTMLSelectElement).value))"
+          >
+            <option v-for="(_, n) in order" :key="n" :value="n">{{ t('flowOrder.position', { n: n + 1 }) }}</option>
+          </select>
           <button type="button" class="btn-text small" @click="emit('edit', key)">{{ t('flowOrder.edit') }}</button>
           <button type="button" class="btn-text small" :disabled="busy" @click="toggle(key)">
             {{ enabled(key) ? t('flowOrder.skip') : t('flowOrder.unskip') }}
           </button>
         </div>
       </li>
-    </TransitionGroup>
+    </ol>
 
     <div class="card fixed">
       <span class="grip placeholder" aria-hidden="true">🔒</span>
@@ -402,6 +412,108 @@ async function addStep() {
         {{ t('flowOrder.history.unit') }}
       </label>
       <span class="limits-hint">{{ t('flowOrder.history.hint') }}</span>
+    </div>
+
+    <div v-if="config && !phone" class="rules">
+      <h3>{{ t('flowOrder.rules.title') }}</h3>
+      <p class="limits-hint">{{ t('flowOrder.rules.hint') }}</p>
+      <label class="rule">
+        {{ t('flowOrder.rules.summaryMin') }}
+        <input
+          type="number"
+          min="1"
+          max="20"
+          :value="config.summary_min_turns"
+          @change="config.summary_min_turns = Math.max(1, Math.min(20, Math.round(Number(($event.target as HTMLInputElement).value)) || 3))"
+        />
+        {{ t('flowOrder.rules.summaryUnit') }}
+      </label>
+      <div class="rule">
+        {{ t('flowOrder.rules.weakKindness', { name: nameOf('flow.self_kindness') }) }}
+        <label>
+          {{ t('flowOrder.minTurns') }}
+          <input type="number" min="1" max="50" :value="config.weak_kindness[0]" @change="setWeak(0, Number(($event.target as HTMLInputElement).value))" />
+        </label>
+        <label>
+          {{ t('flowOrder.maxTurns') }}
+          <input type="number" min="1" max="50" :value="config.weak_kindness[1]" @change="setWeak(1, Number(($event.target as HTMLInputElement).value))" />
+        </label>
+      </div>
+      <div v-for="list in KEYWORD_LISTS" :key="list" class="words">
+        <div class="purposes-title">{{ t(`flowOrder.rules.words.${list}.title`) }}</div>
+        <p class="limits-hint">{{ t(`flowOrder.rules.words.${list}.hint`) }}</p>
+        <div class="chips">
+          <span v-for="(w, wi) in config.keywords[list]" :key="w" class="chip">
+            {{ w }}
+            <button type="button" :aria-label="t('flowOrder.rules.removeWord', { word: w })" @click="removeWord(list, wi)">✕</button>
+          </span>
+          <span v-if="!config.keywords[list].length" class="limits-hint">{{ t('flowOrder.rules.noWords') }}</span>
+        </div>
+        <form class="word-add" @submit.prevent="addWord(list)">
+          <input v-model="newWord[list]" :placeholder="t('flowOrder.rules.addPlaceholder')" />
+          <button type="submit" class="btn-text small" :disabled="!newWord[list].trim()">{{ t('flowOrder.rules.addWord') }}</button>
+          <button type="button" class="btn-text small" @click="resetWords(list)">{{ t('flowOrder.rules.resetWords') }}</button>
+        </form>
+      </div>
+      <div class="words">
+        <div class="purposes-title">{{ t('flowOrder.rules.crisisReply') }}</div>
+        <p class="limits-hint">{{ t('flowOrder.rules.crisisReplyHint') }}</p>
+        <textarea v-model="config.crisis_reply.zh" rows="3" maxlength="1000" :placeholder="t('flowOrder.purposes.zh')" />
+        <textarea v-model="config.crisis_reply.ko" rows="3" maxlength="1000" :placeholder="t('flowOrder.purposes.ko')" />
+        <label class="rule">
+          {{ t('flowOrder.rules.crisisCountry') }}
+          <input v-model="config.crisis_country" class="wide" maxlength="8" placeholder="KR" />
+          <span class="limits-hint">{{ t('flowOrder.rules.crisisCountryHint') }}</span>
+        </label>
+      </div>
+      <div class="words">
+        <div class="purposes-title">{{ t('flowOrder.rules.criticism.title') }}</div>
+        <p class="limits-hint">{{ t('flowOrder.rules.criticism.hint') }}</p>
+        <div class="rule">
+          <label v-for="k in ['up', 'down', 'strong'] as const" :key="k">
+            {{ t(`flowOrder.rules.criticism.${k}`) }}
+            <input
+              type="number"
+              :min="k === 'strong' ? 1 : 0"
+              max="100"
+              :value="config.criticism[k]"
+              @change="config.criticism[k] = clampPct(Number(($event.target as HTMLInputElement).value), k === 'strong' ? 1 : 0)"
+            />
+          </label>
+        </div>
+      </div>
+      <div class="words">
+        <div class="purposes-title">{{ t('flowOrder.rules.cards.title') }}</div>
+        <p class="limits-hint">{{ t('flowOrder.rules.cards.hint') }}</p>
+        <label v-for="c in CARD_TYPES" :key="c" class="rule">
+          {{ t(`flowOrder.rules.cards.${c}`) }}
+          <select v-model="config.card_steps[c]">
+            <option :value="null">{{ t('flowOrder.rules.never') }}</option>
+            <option
+              v-for="k in ruleSteps"
+              :key="k"
+              :value="k"
+              :disabled="CARD_TYPES.some((o) => o !== c && config!.card_steps[o] === k)"
+            >
+              {{ nameOf(k) }}
+            </option>
+          </select>
+        </label>
+      </div>
+      <div class="words">
+        <div class="purposes-title">{{ t('flowOrder.rules.requests.title') }}</div>
+        <label class="rule">
+          {{ t('flowOrder.rules.requests.toAction') }}
+          <select v-model="config.to_action_step">
+            <option :value="null">{{ t('flowOrder.rules.requests.ignore') }}</option>
+            <option v-for="k in ruleSteps" :key="k" :value="k">{{ t('flowOrder.purposes.jumpTo', { name: nameOf(k) }) }}</option>
+          </select>
+        </label>
+        <label class="rule">
+          <input v-model="config.end_today_enabled" type="checkbox" class="check" />
+          {{ t('flowOrder.rules.requests.endToday', { name: nameOf(CLOSING) }) }}
+        </label>
+      </div>
     </div>
 
     <ul v-if="warnings.length" class="warnings" role="status">
@@ -479,11 +591,6 @@ h2 {
   border-radius: var(--radius-md);
   background: var(--bg);
 }
-.card.dragging {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  opacity: 0.85;
-}
 .card.off {
   opacity: 0.6;
 }
@@ -495,6 +602,7 @@ h2 {
 .grip {
   flex-shrink: 0;
   cursor: grab;
+  touch-action: none;
   font-size: 18px;
   color: var(--text-muted);
   user-select: none;
@@ -682,6 +790,92 @@ h2 {
   border-radius: var(--radius-md);
   font-size: 13px;
 }
+.rules {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+.rules h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+}
+.rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 10px;
+}
+.rule input {
+  width: 56px;
+  margin-left: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+.words {
+  margin-top: 14px;
+}
+.rule select,
+.rule input.wide {
+  width: auto;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+.rule input.check {
+  width: auto;
+  margin: 0;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+.chip button {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.word-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.word-add input {
+  flex: 1;
+  min-width: 160px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+.words textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  resize: vertical;
+}
 .limits-hint {
   font-size: 12px;
   color: var(--text-muted);
@@ -713,8 +907,12 @@ h2 {
   font: inherit;
   font-size: 12.5px;
 }
-.card-move {
-  transition: transform 0.2s ease;
+.pos {
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 12px;
 }
 .ro {
   margin: 0 4px;

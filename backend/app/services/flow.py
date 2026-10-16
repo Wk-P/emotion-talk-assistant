@@ -19,7 +19,10 @@ Some built-in stages carry behaviour of their own, wherever they are placed:
 Every other stage (including stages admins add) ends when the model reports
 its goal reached (stage_done) after a minimum number of user turns, or at a
 maximum — both admin-set per step (app/services/flow_config.py). The toolbar "跳过" skips the current stage; "告诉我怎么办" / "今天先到这里"
-(reported by the model as user_request) jump to act / closing.
+(reported by the model as user_request) jump to act / closing. Which step
+each checkpoint card belongs to and where those two requests lead are
+admin-set too (flow_config): the "listen" / "act" rules above follow the
+summary / plan card wherever it is placed.
 
 A turn screened as overwhelmed (RiskLevel.WATCH) is answered with the
 stabilization prompt without changing the stage.
@@ -32,10 +35,14 @@ from app.models.session import ConversationSession
 from app.prompts import stages
 from app.services.flow_config import FlowConfig
 
-# Stages that end on something the user does, not on the model's stage_done.
-_USER_ENDED = {stages.LISTEN, stages.PURPOSE, stages.SELF_CHECK, stages.CLOSING}
-# Weak or no self-criticism: brief acceptance only ("自我批评不强时，不要反复进行自我友善活动").
-_WEAK_SELF_KINDNESS_MIN, _WEAK_SELF_KINDNESS_MAX = 1, 2
+# Stages that end on something the user does, not on the model's stage_done
+# (plus whichever step shows the summary card, see _user_ended).
+_USER_ENDED = {stages.PURPOSE, stages.SELF_CHECK, stages.CLOSING}
+
+
+def _user_ended(cfg: FlowConfig) -> set[str]:
+    summary = cfg.card_steps.get("seb_summary")
+    return _USER_ENDED | ({summary} if summary else set())
 
 PURPOSE_CARD = "purpose_options"
 
@@ -89,7 +96,9 @@ def _advance(s: dict[str, Any], cfg: FlowConfig) -> None:
 def _limits(s: dict[str, Any], cfg: FlowConfig) -> tuple[int, int | None]:
     stage = s["stage"]
     if stage == stages.SELF_KINDNESS and s.get("branch") in ("weak", "none"):
-        return _WEAK_SELF_KINDNESS_MIN, _WEAK_SELF_KINDNESS_MAX
+        # Weak or no self-criticism: brief acceptance only, admin-set
+        # ("自我批评不强时，不要反复进行自我友善活动").
+        return cfg.weak_kindness
     if stage in (stages.PURPOSE, stages.CLOSING):
         return 1, None
     return cfg.limits_for(stage)
@@ -119,18 +128,18 @@ def before_reply(
 
     # Dismissing a stage's checkpoint card counts as skipping the stage: the
     # card is shown only once, so waiting for it would stall the conversation.
-    dismissed = card in ("seb_summary", "plan_form") and not (confirmation or {}).get("fields")
-    if card == "skip" or (dismissed and stage in (stages.LISTEN, stages.ACT)):
+    # Which checkpoint card (if any) belongs to each step is admin-set.
+    own_card = cfg.card_for(stage)
+    dismissed = card is not None and card == own_card and not (confirmation or {}).get("fields")
+    if card == "skip" or dismissed:
         if stage == stages.SELF_CHECK:
             s["branch"] = "none"
         if stage != stages.CLOSING:
             _advance(s, cfg)
-    elif stage == stages.LISTEN and card == "seb_summary" and (confirmation or {}).get("fields"):
+    elif card is not None and card == own_card and (confirmation or {}).get("fields"):
         _advance(s, cfg)
     elif stage == stages.PURPOSE and (user_text or card == PURPOSE_CARD):
         s["purpose"] = _purpose_from(confirmation if card == PURPOSE_CARD else None, cfg)
-        _advance(s, cfg)
-    elif stage == stages.ACT and card == "plan_form" and (confirmation or {}).get("fields"):
         _advance(s, cfg)
     elif user_text:
         s["turns"] = s.get("turns", 0) + 1
@@ -139,7 +148,7 @@ def before_reply(
             if stage == stages.SELF_CHECK and not s.get("branch"):
                 # No clear answer: fall back on the code-side keyword signal.
                 s["branch"] = (
-                    "strong" if self_criticism_level >= 0.5 else "weak" if self_criticism_level > 0 else "none"
+                    "strong" if self_criticism_level * 100 >= cfg.criticism["strong"] else "weak" if self_criticism_level > 0 else "none"
                 )
             _advance(s, cfg)
 
@@ -157,18 +166,18 @@ def after_reply(
     s = state(session, cfg)
     stage, turns = s["stage"], s.get("turns", 0)
     request = signals.get("user_request")
-    if request == "end_today" and stage != stages.CLOSING:
+    if request == "end_today" and cfg.end_today_enabled and stage != stages.CLOSING:
         _enter(s, stages.CLOSING)
-    elif request == "to_action" and stages.ACT in _after(stage, cfg.order):
-        _enter(s, stages.ACT)
+    elif request == "to_action" and cfg.to_action_step and cfg.to_action_step in _after(stage, cfg.order):
+        _enter(s, cfg.to_action_step)
     elif stage == stages.SELF_CHECK:
         level = signals.get("self_criticism")
         if turns >= 1 and level in ("strong", "weak", "none"):
             s["branch"] = level
             _advance(s, cfg)
-    elif stage == stages.LISTEN and summary_shown and signals.get("stage_done") is True:
+    elif stage == cfg.card_steps.get("seb_summary") and summary_shown and signals.get("stage_done") is True:
         _advance(s, cfg)
-    elif stage not in _USER_ENDED and signals.get("stage_done") is True and turns >= _limits(s, cfg)[0]:
+    elif stage not in _user_ended(cfg) and signals.get("stage_done") is True and turns >= _limits(s, cfg)[0]:
         _advance(s, cfg)
     session.flow_state = s
 
