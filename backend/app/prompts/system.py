@@ -203,6 +203,22 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
         },
     ),
     (
+        "note_no_purpose_buttons",
+        {Language.ZH: "进度：目的按钮已关闭", Language.KO: "진행: 목적 버튼 꺼짐"},
+        {
+            Language.ZH: "这次不会在回复下面显示目的按钮。问用户现在最需要什么帮助时，用一两句话自然地给出几个方向，让用户直接用文字回答；忽略「目的会以按钮显示」的说法。",
+            Language.KO: "이번에는 답변 아래에 목적 버튼이 나오지 않아요. 지금 가장 필요한 도움을 물을 때 몇 가지 방향을 한두 문장으로 자연스럽게 제시하고, 사용자가 글로 답하게 하세요. '목적이 버튼으로 나온다'는 안내는 무시하세요.",
+        },
+    ),
+    (
+        "note_purpose_buttons_here",
+        {Language.ZH: "进度：这一步带目的按钮", Language.KO: "진행: 이 단계에 목적 버튼 있음"},
+        {
+            Language.ZH: "这一步的回复下面会显示目的按钮，用户点了就会进入对应的步骤。回复里不用把按钮内容列出来；用户也可以继续自己写。",
+            Language.KO: "이 단계의 답변 아래에는 목적 버튼이 나오고, 사용자가 누르면 해당 단계로 가요. 답변에서 버튼 내용을 나열하지 마세요. 사용자는 계속 직접 써도 돼요.",
+        },
+    ),
+    (
         "note_branch_strong",
         {Language.ZH: "进度：自我批评较强", Language.KO: "진행: 자기비판이 강함"},
         {

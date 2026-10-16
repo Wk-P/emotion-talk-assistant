@@ -117,6 +117,8 @@ class FlowConfig:
     card_steps: dict[str, str | None] = field(default_factory=lambda: dict(DEFAULT_CARD_STEPS))
     to_action_step: str | None = DEFAULT_TO_ACTION
     end_today_enabled: bool = True
+    # The step the purpose buttons are attached to (None = removed).
+    button_step: str | None = stages.PURPOSE
     crisis_country: str = DEFAULT_CRISIS_COUNTRY
 
     def card_for(self, stage: str) -> str | None:
@@ -165,6 +167,7 @@ def _rules_from(saved: dict[str, Any]) -> dict[str, Any]:
         "card_steps": {c: card_steps[c] if c in card_steps else DEFAULT_CARD_STEPS[c] for c in CARD_TYPES},
         "to_action_step": saved["to_action_step"] if "to_action_step" in saved else DEFAULT_TO_ACTION,
         "end_today_enabled": saved.get("end_today_enabled", True),
+        "button_step": saved["button_step"] if "button_step" in saved else stages.PURPOSE,
         "crisis_country": saved["crisis_country"] if "crisis_country" in saved else DEFAULT_CRISIS_COUNTRY,
         "summary_min_turns": saved.get("summary_min_turns") or DEFAULT_SUMMARY_MIN_TURNS,
         "weak_kindness": tuple(weak) if isinstance(weak, list) and len(weak) == 2 else DEFAULT_WEAK_KINDNESS,
@@ -207,6 +210,7 @@ async def for_admin(db: AsyncSession) -> dict[str, Any]:
             "card_steps": DEFAULT_CARD_STEPS,
             "to_action_step": DEFAULT_TO_ACTION,
             "end_today_enabled": True,
+            "button_step": stages.PURPOSE,
             "crisis_country": DEFAULT_CRISIS_COUNTRY,
         },
     }
@@ -253,6 +257,9 @@ def validate(payload: dict[str, Any], stage_keys: set[str]) -> str | None:
     steps = [k for k in payload["card_steps"].values() if k]
     if len(steps) != len(set(steps)) or any(k not in stage_keys or k in NO_LIMITS for k in steps):
         return "bad card_steps"
+    b = payload["button_step"]
+    if b and (b not in stage_keys or b in (stages.CLOSING, stages.STABILIZATION, stages.ENDING) or b in steps):
+        return "bad button_step"
     if payload["to_action_step"] and payload["to_action_step"] not in stage_keys:
         return "unknown to_action step"
     if len(payload["crisis_country"]) > 8:
@@ -277,6 +284,7 @@ async def save(db: AsyncSession, payload: dict[str, Any], admin_id: str | None) 
             "card_steps": payload["card_steps"],
             "to_action_step": payload["to_action_step"],
             "end_today_enabled": payload["end_today_enabled"],
+            "button_step": payload["button_step"],
             "crisis_country": payload["crisis_country"],
         },
         ensure_ascii=False,

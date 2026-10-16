@@ -87,6 +87,8 @@ class FlowConfigPayload(BaseModel):
     )
     to_action_step: str | None = "flow.act"
     end_today_enabled: bool = True
+    # The step the purpose buttons are attached to; None = no buttons anywhere.
+    button_step: str | None = "flow.purpose"
     crisis_country: str = "KR"
 
 

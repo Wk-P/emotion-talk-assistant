@@ -558,6 +558,8 @@ export interface FlowConfig {
   /** "Tell me what to do" jumps here (null = ignored). */
   to_action_step: string | null
   end_today_enabled: boolean
+  // The step the purpose buttons are attached to; null = none.
+  button_step: string | null
   /** Crisis resources of this country are shown ('' = all). */
   crisis_country: string
 }

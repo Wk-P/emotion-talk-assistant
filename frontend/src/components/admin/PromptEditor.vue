@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import CrisisResourcesEditor from './CrisisResourcesEditor.vue'
+import ComponentLibrary from './ComponentLibrary.vue'
 import FlowOrderEditor from './FlowOrderEditor.vue'
 import ModelPicker from './ModelPicker.vue'
 import PromptTools from './PromptTools.vue'
@@ -64,9 +64,9 @@ const emptyStageKeys = computed(() =>
 // "编辑问法" on a step card: select it and bring the editor into view.
 const editorEl = ref<HTMLElement | null>(null)
 // One part of the settings at a time, instead of everything stacked.
-type Section = 'model' | 'flow' | 'prompts' | 'tools'
-const SECTIONS: Section[] = ['model', 'flow', 'prompts', 'tools']
-const section = ref<Section>('prompts')
+type Section = 'model' | 'components' | 'flow' | 'prompts' | 'tools'
+const SECTIONS: Section[] = ['components', 'flow', 'prompts', 'model', 'tools']
+const section = ref<Section>('components')
 // Narrow screens: the block list and the editor are two screens; this is
 // whether the editor one is showing. Wide screens show both side by side.
 const narrowDetail = ref(false)
@@ -470,7 +470,14 @@ onMounted(() => load())
       @edit="editStep"
       @reload="load(true)"
     />
-    <CrisisResourcesEditor v-if="!loading && section === 'flow'" />
+    <ComponentLibrary
+      v-if="!loading && section === 'components'"
+      :modules="modules"
+      :name-of="nameOf"
+      :empty-keys="emptyStageKeys"
+      @edit="editStep"
+      @reload="load(true)"
+    />
 
     <!-- Narrow: stacked. >=1024px: list | editor, test panel below.
          >=1360px: full-width three-column workspace — list | editor | a
@@ -528,7 +535,11 @@ onMounted(() => load())
         <h2 class="panel-title">{{ nameOf(current.key) }}</h2>
         <p v-if="currentModule" class="panel-desc">{{ descOf(currentModule) }}</p>
 
-        <div v-if="currentModule" class="module-actions">
+        <p v-if="currentModule?.is_stage" class="manage-note">
+          {{ t('flowUi.manageElsewhere') }}
+          <button type="button" class="btn-text" @click="section = 'components'">{{ t('flowUi.goComponents') }}</button>
+        </p>
+        <div v-else-if="currentModule" class="module-actions">
           <template v-if="renaming">
             <form class="rename-form" @submit.prevent="saveRename">
               <input v-model="renameValue" maxlength="40" />
@@ -1019,6 +1030,19 @@ onMounted(() => load())
 }
 .editor {
   min-width: 0;
+}
+.manage-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.manage-note .btn-text {
+  padding: 0;
+  font-size: 12.5px;
 }
 .editor-meta {
   font-size: 12px;

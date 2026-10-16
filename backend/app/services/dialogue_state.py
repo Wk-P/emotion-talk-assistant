@@ -156,8 +156,17 @@ def _progress_note(
     if flow_key == cfg.card_steps.get("seb_summary") and "seb_summary" in shown:
         # The user may confirm the summary by typing instead of using the
         # card; the model reports it as stage_done and flow.after_reply moves on.
-        to_purpose = flow._after(flow_key, cfg.order)[:1] == [stages.PURPOSE]
+        next_step = flow._after(flow_key, cfg.order)[:1]
+        to_purpose = next_step == [stages.PURPOSE]
         lines.append(sys["system.note_listen_confirm" if to_purpose else "system.note_listen_confirm_other"])
+        if to_purpose and cfg.button_step != stages.PURPOSE:
+            lines.append(sys["system.note_no_purpose_buttons"])
+        elif not to_purpose and next_step == [cfg.button_step]:
+            lines.append(sys["system.note_purpose_buttons_here"])
+    elif flow_key == cfg.button_step and flow_key != stages.PURPOSE:
+        lines.append(sys["system.note_purpose_buttons_here"])
+    elif flow_key == stages.PURPOSE and cfg.button_step != stages.PURPOSE:
+        lines.append(sys["system.note_no_purpose_buttons"])
     lines += [flow.purpose_note(state, language, cfg, sys), flow.branch_note(state, sys)]
     lines = [line for line in lines if line]
     if not lines:
@@ -277,7 +286,11 @@ async def handle_turn(
         # Summary confirmed in words: this reply already asks the purpose
         # question (system.note_listen_confirm), so it carries the buttons.
         summary_step = cfg.card_steps.get("seb_summary")
-        if result.stage == summary_step and session.flow_state["stage"] == stages.PURPOSE:
+        if (
+            cfg.button_step
+            and result.stage == summary_step
+            and session.flow_state["stage"] == cfg.button_step
+        ):
             result.candidates = [flow.purpose_card(language, cfg)]
     if not user_text:
         result.user_text_used = synthetic_text
@@ -304,7 +317,7 @@ async def _continue_flow(
     effort = await current_effort(db)
     llm_response = await generate_turn(system_prompt, history, synthetic_text, model, effort=effort)
     candidates = [] if ending else _filter_candidates(llm_response.candidates, messages, flow_key, cfg)
-    if flow_key == stages.PURPOSE and not ending:
+    if flow_key == cfg.button_step and not ending:
         candidates = [flow.purpose_card(session.language, cfg)]
     return TurnResult(
         reply_text=llm_response.reply_text,

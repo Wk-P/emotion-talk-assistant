@@ -9,8 +9,12 @@ documents/01_研究资料/애플리케이션 플로우차트.png and the project
 Some built-in stages carry behaviour of their own, wherever they are placed:
   - listen ends when the user confirms the summary, on the card or in their
     own words (the model's stage_done, once the summary has been shown);
-  - purpose ends on the user's answer (purpose buttons or typed); "先让自己平静"
-    jumps ahead to regulate, "一起想想接下来怎么办" to act, if those come later;
+  - purpose ends on the user's answer (typed, or a purpose button);
+  - the purpose buttons are a component admins attach to any one step (or
+    to none, flow_config button_step). Pressing one ends that step and goes
+    to the step the button names, if it comes later ("先让自己平静" →
+    regulate, "一起想想接下来怎么办" → act by default); typing there counts
+    as an ordinary turn, except in purpose;
   - self_check ends on the user's answer and sets a branch: strong → full
     self_kindness; weak / none → self_kindness kept brief. Regulate follows
     either way (the lead's STEP 4 A/B);
@@ -84,7 +88,7 @@ def _after(stage: str, order: list[str]) -> list[str]:
 def _advance(s: dict[str, Any], cfg: FlowConfig) -> None:
     stage = s["stage"]
     rest = _after(stage, cfg.order)
-    if stage == stages.PURPOSE:
+    if stage == cfg.button_step:
         chosen = next((p for p in cfg.purposes if p["id"] == s.get("purpose")), None)
         jump = chosen.get("jump") if chosen else None
         if jump in rest:
@@ -138,8 +142,11 @@ def before_reply(
             _advance(s, cfg)
     elif card is not None and card == own_card and (confirmation or {}).get("fields"):
         _advance(s, cfg)
-    elif stage == stages.PURPOSE and (user_text or card == PURPOSE_CARD):
-        s["purpose"] = _purpose_from(confirmation if card == PURPOSE_CARD else None, cfg)
+    elif card == PURPOSE_CARD and stage == cfg.button_step:
+        s["purpose"] = _purpose_from(confirmation, cfg)
+        _advance(s, cfg)
+    elif stage == stages.PURPOSE and user_text:
+        s["purpose"] = "other"
         _advance(s, cfg)
     elif user_text:
         s["turns"] = s.get("turns", 0) + 1
