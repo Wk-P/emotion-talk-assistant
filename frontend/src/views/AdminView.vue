@@ -514,9 +514,17 @@ onMounted(load)
                 </div>
                 <Transition name="expand">
                   <div v-if="openId === item.session_id" class="messages inline">
-                    <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
-                      {{ m.content }}
-                    </div>
+                    <template v-for="(m, i) in openMessages" :key="i">
+                      <div class="message" :class="m.role">
+                        {{ m.content }}
+                      </div>
+                      <details v-if="m.flow_log?.length" class="flow-log">
+                        <summary>{{ t('admin.flowLog') }}</summary>
+                        <ul>
+                          <li v-for="(line, j) in m.flow_log" :key="j">{{ locale === 'ko' ? line.ko : line.zh }}</li>
+                        </ul>
+                      </details>
+                    </template>
                     <div v-if="openRecords.length > 0" class="saved-records">
                       <div class="saved-records-title">{{ t('admin.savedRecords') }}</div>
                       <div v-for="rec in openRecords" :key="rec.id" class="saved-record">
@@ -541,9 +549,17 @@ onMounted(load)
               <span>{{ formatDateTime(selectedSession.created_at) }}</span>
             </div>
             <div class="messages">
-              <div v-for="(m, i) in openMessages" :key="i" class="message" :class="m.role">
-                {{ m.content }}
-              </div>
+              <template v-for="(m, i) in openMessages" :key="i">
+                <div class="message" :class="m.role">
+                  {{ m.content }}
+                </div>
+                <details v-if="m.flow_log?.length" class="flow-log">
+                  <summary>{{ t('admin.flowLog') }}</summary>
+                  <ul>
+                    <li v-for="(line, j) in m.flow_log" :key="j">{{ locale === 'ko' ? line.ko : line.zh }}</li>
+                  </ul>
+                </details>
+              </template>
               <div v-if="openRecords.length > 0" class="saved-records">
                 <div class="saved-records-title">{{ t('admin.savedRecords') }}</div>
                 <div v-for="rec in openRecords" :key="rec.id" class="saved-record">
@@ -1163,6 +1179,20 @@ onMounted(load)
   flex-direction: column;
   gap: 6px;
   background: var(--bg);
+}
+.flow-log {
+  align-self: flex-start;
+  max-width: 85%;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.flow-log summary {
+  cursor: pointer;
+}
+.flow-log ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
 }
 .conv-detail .messages {
   padding: 0;

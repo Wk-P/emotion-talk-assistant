@@ -35,6 +35,8 @@ class PromptOverview(BaseModel):
     items: list[PromptItem]
     # Every block in display order (see registry.load_modules).
     modules: list[PromptModuleItem]
+    # Built-in blocks admins deleted (can be restored).
+    deleted: list[str] = []
     # Read-only: appended after every system prompt by app/services/llm.py.
     output_format: str
 

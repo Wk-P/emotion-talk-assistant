@@ -25,6 +25,10 @@ class AdminMessageItem(BaseModel):
     prompt_versions: dict[str, int] | None = None
     # The OpenAI model that wrote an assistant reply (None for older ones).
     model: str | None = None
+    # The step that answered, and what the program decided that turn
+    # ([{"zh": ..., "ko": ...}]); None for user messages and older replies.
+    stage: str | None = None
+    flow_log: list[dict[str, str]] | None = None
 
 
 class AdminRecordItem(BaseModel):

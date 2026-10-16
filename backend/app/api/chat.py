@@ -64,6 +64,7 @@ async def chat(
                 "prompt_versions": result.prompt_versions,
                 "model": result.model,
                 "stage": result.stage,
+                "flow_log": result.flow_log,
             },
         )
     )

@@ -271,13 +271,13 @@ function resetRules() {
               <button type="button" class="btn-text small" @click="emit('edit', key)">{{ t('comp.editPrompt') }}</button>
               <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(key, false)">{{ t('flowUi.takeOut') }}</button>
               <button v-if="triggered(key)" type="button" class="btn-outline small" :disabled="phone" @click="clearRole(key)">{{ t('flowUi.toLine') }}</button>
-              <button v-if="custom(key)" type="button" class="btn-text small danger" @click="remove(key)">{{ t('comp.delete') }}</button>
+              <button type="button" class="btn-text small danger" @click="remove(key)">{{ t('comp.delete') }}</button>
             </div>
             <div v-else class="step-actions">
               <span class="spacer" />
               <button type="button" class="btn-text small" @click="emit('edit', key)">{{ t('comp.editPrompt') }}</button>
               <button type="button" class="btn-outline small" :disabled="busy" @click="setOn(key, true)">{{ t('flowUi.putBackHere') }}</button>
-              <button v-if="custom(key)" type="button" class="btn-text small danger" @click="remove(key)">{{ t('comp.delete') }}</button>
+              <button type="button" class="btn-text small danger" @click="remove(key)">{{ t('comp.delete') }}</button>
             </div>
           </div>
         </li>

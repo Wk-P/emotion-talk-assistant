@@ -28,6 +28,7 @@ const { t } = useI18n()
 const lang = ref<Language>('zh')
 const items = ref<PromptItem[]>([])
 const modules = ref<PromptModuleItem[]>([])
+const deletedKeys = ref<string[]>([])
 const loading = ref(true)
 const selectedKey = ref<string>('rules.role_scope')
 // Unsaved edits, keyed `${key}|${lang}` — kept across block/language
@@ -163,6 +164,7 @@ async function load(silent = false) {
     const data = await listPrompts()
     items.value = data.items
     modules.value = data.modules
+    deletedKeys.value = data.deleted
   } finally {
     loading.value = false
   }
@@ -378,6 +380,7 @@ onMounted(() => load())
     <ComponentLibrary
       v-if="!loading && section === 'components'"
       :modules="modules"
+      :deleted="deletedKeys"
       :name-of="nameOf"
       :empty-keys="emptyStageKeys"
       @edit="editStep"

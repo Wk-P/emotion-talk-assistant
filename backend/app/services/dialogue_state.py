@@ -9,6 +9,7 @@ The LLM only ever produces the reply text and candidate suggestions for the
 turn; it never decides safety routing or writes directly into confirmed_context.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -60,6 +61,42 @@ class TurnResult:
     model: str | None = None
     # The listen summary was shown before this turn (flow.after_reply).
     summary_shown: bool = False
+    # What the program decided this turn, for the admin transcript:
+    # [{"zh": ..., "ko": ...}] (see _format_log).
+    flow_log: list[dict[str, str]] = field(default_factory=list)
+
+
+# Card names in the admin log.
+_CARD_NAMES = {
+    "seb_summary": ("总结卡片", "요약 카드"),
+    "plan_form": ("行动计划卡片", "행동 계획 카드"),
+    "skip": ("跳过", "건너뛰기"),
+    "end": ("结束对话", "대화 끝내기"),
+    "emotion_options": ("情绪选项", "감정 선택지"),
+    "self_kindness_options": ("自我友善选项", "자기 친절 선택지"),
+    "stabilization_options": ("平静下来选项", "진정 선택지"),
+    "recovery_action_options": ("恢复行动选项", "회복 행동 선택지"),
+}
+
+
+def _card_name(card: Any, i: int) -> str:
+    return _CARD_NAMES.get(str(card), (str(card), str(card)))[i]
+
+
+async def _format_log(db: AsyncSession, log: list[tuple[str, str]]) -> list[dict[str, str]]:
+    """Fills in step names ("{k:<key>}") in each admin language."""
+
+    modules = {m.key: m for m in await registry.load_modules(db)}
+
+    def fill(text: str, language: Language) -> str:
+        def name(match: re.Match[str]) -> str:
+            m = modules.get(match.group(1))
+            title = m.title(language) if m else match.group(1)
+            return f"「{title}」" if language == Language.ZH else f'"{title}"'
+
+        return re.sub(r"\{k:([^}]+)\}", name, text)
+
+    return [{"zh": fill(zh, Language.ZH), "ko": fill(ko, Language.KO)} for zh, ko in log]
 
 
 async def _crisis_turn(db: AsyncSession, language: Language, cfg: flow_config.FlowConfig) -> TurnResult:
@@ -250,7 +287,11 @@ async def handle_turn(
             user_text, session.self_criticism_level, cfg.keywords, cfg.criticism
         )
         if risk == RiskLevel.CRISIS:
-            return await _crisis_turn(db, language, cfg)
+            result = await _crisis_turn(db, language, cfg)
+            result.flow_log = await _format_log(
+                db, [("发现危机关键词：不走步骤，直接回复危机求助信息", "위기 키워드 감지: 단계를 건너뛰고 위기 도움 안내로 답해요")]
+            )
+            return result
 
     confirmation_description = _describe_confirmation(confirmation, language) if confirmation else None
     synthetic_text = (
@@ -259,25 +300,43 @@ async def handle_turn(
         or ("(已确认选择，请继续)" if language == Language.ZH else "(선택을 확인했어요, 계속해 주세요)")
     )
     ending = bool(confirmation and confirmation.get("card_type") == "end")
+    log: list[tuple[str, str]] = []
+    if user_text:
+        log.append((f"安全检查：{'情绪特别激动' if risk == RiskLevel.WATCH else '正常'}；自我批评程度 {round(session.self_criticism_level * 100)}", f"안전 확인: {'많이 격해 보임' if risk == RiskLevel.WATCH else '정상'}; 자기비판 정도 {round(session.self_criticism_level * 100)}"))
+    if confirmation:
+        card = confirmation.get("card_type")
+        log.append((f"用户操作了卡片：{_card_name(card, 0)}", f"사용자의 카드 조작: {_card_name(card, 1)}"))
     # The stage is decided in code (app/services/flow.py); an overwhelmed
     # turn is answered with the stabilization prompt without leaving it.
     state = flow.state(session, cfg) if ending else flow.before_reply(
-        session, user_text, confirmation, session.self_criticism_level, cfg
+        session, user_text, confirmation, session.self_criticism_level, cfg, log
     )
     # Admins may turn ending / stabilization off: the current step answers.
     # Which step (if any) answers these is admin-set.
     if ending and cfg.usable(cfg.ending_step):
         flow_key = cfg.ending_step
+        log.append((f"用户点了「结束对话」：这次由 {{k:{flow_key}}} 回复，之后对话锁定", f"사용자가 \"대화 끝내기\"를 눌렀어요: {{k:{flow_key}}}이(가) 답하고 대화가 잠겨요"))
     elif risk == RiskLevel.WATCH and cfg.usable(cfg.stabilize_step):
         flow_key = cfg.stabilize_step
+        log.append((f"情绪特别激动：这一轮临时由 {{k:{flow_key}}} 回复，步骤不变", f"많이 격해 보여요: 이번에만 {{k:{flow_key}}}이(가) 답하고 단계는 그대로예요"))
     else:
         flow_key = state["stage"]
+    log.append((f"本次回复使用：{{k:{flow_key}}}", f"이번 답변 단계: {{k:{flow_key}}}"))
 
     result = await _continue_flow(
         db, session, synthetic_text=synthetic_text, flow_key=flow_key, state=state, cfg=cfg, risk=risk, ending=ending
     )
+    if result.candidates:
+        log.append((
+            f"附带卡片：{'、'.join(_card_name(c.get('type'), 0) for c in result.candidates)}",
+            f"함께 보낸 카드: {', '.join(_card_name(c.get('type'), 1) for c in result.candidates)}",
+        ))
     if not ending and risk != RiskLevel.WATCH:
-        flow.after_reply(session, result.signals, cfg, summary_shown=result.summary_shown)
+        flow.after_reply(session, result.signals, cfg, summary_shown=result.summary_shown, log=log)
+        nxt = (session.flow_state or {}).get("stage")
+        if nxt:
+            log.append((f"下一轮将从 {{k:{nxt}}} 开始", f"다음 차례는 {{k:{nxt}}}에서 시작해요"))
+    result.flow_log = await _format_log(db, log)
     if not user_text:
         result.user_text_used = synthetic_text
     return result

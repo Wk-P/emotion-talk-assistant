@@ -6,7 +6,7 @@ admins can rename and disable any block, and add (and delete) their own."""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,6 +91,7 @@ async def list_prompts(
     return PromptOverview(
         items=[_item(key, lang, latest[lang].get(key), usernames) for key in keys for lang in Language],
         modules=[_module_item(m) for m in modules],
+        deleted=await registry.deleted_keys(db),
         output_format=registry.default_content("system.output_json", Language.ZH),
     )
 
@@ -248,21 +249,45 @@ async def delete_module(
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(get_current_admin_required),
 ) -> Response:
-    """Only admin-added blocks can be deleted (built-in ones can be disabled
-    instead). Their saved text versions are kept, so past messages'
-    prompt_versions still point at real text for research analysis."""
+    """Deletes any block, built-in or added, with all its saved text
+    versions and every flow setting that pointed at it. A deleted built-in
+    block can be restored (with its code default text)."""
 
-    if not key.startswith(registry.CUSTOM_PREFIX):
-        raise HTTPException(status_code=400, detail="built-in blocks can only be disabled")
-    row = await db.get(PromptModule, key)
-    if row is None:
+    modules = {m.key: m for m in await registry.load_modules(db)}
+    m = modules.get(key)
+    if m is None or m.group == "system":
         raise HTTPException(status_code=404, detail="unknown prompt key")
-    if row.group == "flow" and not row.flow_key:
+    if m.is_stage and sum(x.is_stage for x in modules.values()) <= 1:
+        raise HTTPException(status_code=400, detail="the last step cannot be deleted")
+    row = await db.get(PromptModule, key)
+    if m.is_stage:
         # A step of its own: blocks attached to it would be left pointing at nothing.
         attached = await db.execute(select(PromptModule.key).where(PromptModule.flow_key == key).limit(1))
         if attached.first():
             raise HTTPException(status_code=409, detail="step still has blocks attached")
-    await db.delete(row)
+    if row is not None:
+        await db.delete(row)
+    await db.execute(delete(PromptVersion).where(PromptVersion.key == key))
+    if m.built_in:
+        await registry.set_deleted_keys(db, [*await registry.deleted_keys(db), key])
+    if m.is_stage:
+        await flow_config.forget(db, key)
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/modules/{key}/restore", status_code=204)
+async def restore_module(
+    key: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_required),
+) -> Response:
+    """Brings back a deleted built-in block, with its code default text."""
+
+    gone = await registry.deleted_keys(db)
+    if key not in gone:
+        raise HTTPException(status_code=404, detail="not deleted")
+    await registry.set_deleted_keys(db, [k for k in gone if k != key])
     await db.commit()
     return Response(status_code=204)
 

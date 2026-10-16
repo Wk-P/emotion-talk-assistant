@@ -182,6 +182,24 @@ async def load(db: AsyncSession) -> FlowConfig:
     )
 
 
+async def forget(db: AsyncSession, key: str) -> None:
+    """After a step is deleted: drop every setting that pointed at it."""
+
+    saved = await _saved(db)
+    rules = _rules_from(saved)
+    limits = saved.get("limits") if isinstance(saved.get("limits"), dict) else {}
+    limits.pop(key, None)
+    saved["limits"] = limits
+    saved["card_steps"] = {c: None if v == key else v for c, v in rules["card_steps"].items()}
+    saved["to_action_step"] = None if rules["to_action_step"] == key else rules["to_action_step"]
+    for r in ROLE_KEYS:
+        saved[r] = None if rules[r] == key else rules[r]
+    saved["safety_steps"] = [k for k in rules["safety_steps"] if k != key]
+    row = await db.get(AppSetting, SETTING_KEY) or AppSetting(key=SETTING_KEY, value="")
+    row.value = json.dumps(saved, ensure_ascii=False)
+    db.add(row)
+
+
 async def for_admin(db: AsyncSession) -> dict[str, Any]:
     """Everything the admin page edits, with defaults filled in."""
 

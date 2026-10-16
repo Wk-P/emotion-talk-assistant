@@ -180,6 +180,9 @@ export const en = {
     delete: "Delete",
     deleteConfirm: "Delete \"{name}\"? Its prompt is deleted too and can't be restored.",
     deleted: "Deleted \"{name}\".",
+    restored: "Restored \"{name}\" with its original default prompt.",
+    deletedTitle: "Deleted built-in components",
+    deletedDesc: "Click to add one back. Its prompt returns to the original default; earlier text does not come back.",
     editPrompt: "Edit prompt →",
     renameHint: "Leave empty to use the default name.",
     new: "New component",
@@ -434,6 +437,7 @@ export const en = {
     generic: 'This was put together from your conversation. You can edit it before confirming.',
   },
   admin: {
+    flowLog: "Program decisions (which step, and why)",
     back: 'Back',
     title: 'Admin',
     note: 'Only conversations users agreed to keep are shown. Participants are shown by account ID.',

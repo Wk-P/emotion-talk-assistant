@@ -85,6 +85,27 @@ async def _saved_order(db: AsyncSession) -> list[str]:
     return [k for k in value if isinstance(k, str)] if isinstance(value, list) else []
 
 
+# Built-in blocks an admin deleted: a JSON list of keys. Their text versions
+# are deleted with them; restoring one brings back the code default.
+DELETED_SETTING = "deleted_modules"
+DELETABLE_BUILT_IN = set(RULE_KEYS) | set(FLOW_KEYS)
+
+
+async def deleted_keys(db: AsyncSession) -> list[str]:
+    row = await db.get(AppSetting, DELETED_SETTING)
+    try:
+        value = json.loads(row.value) if row and row.value else []
+    except ValueError:
+        return []
+    return [k for k in value if k in DELETABLE_BUILT_IN] if isinstance(value, list) else []
+
+
+async def set_deleted_keys(db: AsyncSession, keys: list[str]) -> None:
+    row = await db.get(AppSetting, DELETED_SETTING) or AppSetting(key=DELETED_SETTING, value="")
+    row.value = json.dumps(list(dict.fromkeys(keys)))
+    db.add(row)
+
+
 async def load_modules(db: AsyncSession) -> list[Module]:
     """Every block in the order it is listed and sent: built-in principles,
     then added principles; the stages in the admins' order (each followed by
@@ -105,11 +126,12 @@ async def load_modules(db: AsyncSession) -> list[Module]:
         stage = row.group == "flow" and not row.flow_key
         return Module(row.key, row.group, False, row.enabled, dict(row.names or {}), row.flow_key, stage)
 
-    movable = DEFAULT_SEQUENCE + [r.key for r in custom if r.group == "flow" and not r.flow_key]
+    gone = set(await deleted_keys(db))
+    movable = [k for k in DEFAULT_SEQUENCE if k not in gone] + [r.key for r in custom if r.group == "flow" and not r.flow_key]
     saved = await _saved_order(db)
     sequence = [k for k in saved if k in movable] + [k for k in movable if k not in saved]
 
-    out = [built_in(k, "rules") for k in RULE_KEYS]
+    out = [built_in(k, "rules") for k in RULE_KEYS if k not in gone]
     out += [added(r) for r in custom if r.group == "rules"]
     for stage_key in sequence:
         out.append(built_in(stage_key, "flow") if stage_key in FLOW_KEYS else added(by_key[stage_key]))

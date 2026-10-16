@@ -50,6 +50,8 @@ async function forgetStep(key: string) {
     if (!c) continue
     delete c.limits[key]
     if (c.to_action_step === key) c.to_action_step = null
+    for (const r of ['closing_step', 'stabilize_step', 'ending_step'] as const) if (c[r] === key) c[r] = null
+    c.safety_steps = c.safety_steps.filter((k) => k !== key)
     for (const card of Object.keys(c.card_steps) as (keyof FlowConfig['card_steps'])[])
       if (c.card_steps[card] === key) c.card_steps[card] = null
   }

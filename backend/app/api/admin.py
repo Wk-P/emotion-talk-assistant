@@ -44,6 +44,8 @@ def _admin_message(m: Message) -> AdminMessageItem:
         created_at=kst_iso(m.created_at),
         prompt_versions=(m.meta or {}).get("prompt_versions"),
         model=(m.meta or {}).get("model"),
+        stage=(m.meta or {}).get("stage"),
+        flow_log=(m.meta or {}).get("flow_log"),
     )
 
 

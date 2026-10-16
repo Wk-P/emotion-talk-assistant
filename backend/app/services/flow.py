@@ -80,12 +80,37 @@ def _after(stage: str, order: list[str]) -> list[str]:
     return [k for k in order if k in later] or order[-1:]
 
 
-def _advance(s: dict[str, Any], cfg: FlowConfig) -> None:
+# A decision log for admins (shown with the reply in the admin transcript):
+# each entry is (zh, ko); "{k:<step key>}" is replaced by the step's name.
+Log = list[tuple[str, str]] | None
+
+
+_WORDS = {
+    "strong": ("强", "강함"), "weak": ("弱", "약함"), "none": ("没有", "없음"),
+    "end_today": ("今天先到这里", "오늘은 여기까지"), "to_action": ("告诉我怎么办", "어떻게 하면 좋을지"),
+}
+
+
+def _w(value: Any, i: int, empty: tuple[str, str]) -> str:
+    if not value:
+        return empty[i]
+    return _WORDS.get(str(value), (str(value), str(value)))[i]
+
+
+def _note(log: Log, zh: str, ko: str) -> None:
+    if log is not None:
+        log.append((zh, ko))
+
+
+def _advance(s: dict[str, Any], cfg: FlowConfig, log: Log = None) -> None:
     stage = s["stage"]
     rest = _after(stage, cfg.order)
     if rest:
         _enter(s, rest[0])
-    # Nothing left: stay in the last step.
+        _note(log, f"进入下一步：{{k:{rest[0]}}}", f"다음 단계로: {{k:{rest[0]}}}")
+    else:
+        # Nothing left: stay in the last step.
+        _note(log, "已经是最后一步，停在这里", "마지막 단계라 그대로 머물러요")
 
 
 def _limits(s: dict[str, Any], cfg: FlowConfig) -> tuple[int, int | None]:
@@ -105,6 +130,7 @@ def before_reply(
     confirmation: dict[str, Any] | None,
     self_criticism_level: float,
     cfg: FlowConfig,
+    log: Log = None,
 ) -> dict[str, Any]:
     """Applies what the user just did; returns the state the reply is
     written in (also saved on the session)."""
@@ -112,6 +138,7 @@ def before_reply(
     s = state(session, cfg)
     card = (confirmation or {}).get("card_type")
     stage = s["stage"]
+    _note(log, f"回复前所在步骤：{{k:{stage}}}（这一步已聊 {s.get('turns', 0)} 轮）", f"답하기 전 단계: {{k:{stage}}} (이 단계에서 {s.get('turns', 0)}번 대화함)")
 
     # Dismissing a stage's checkpoint card counts as skipping the stage: the
     # card is shown only once, so waiting for it would stall the conversation.
@@ -119,32 +146,43 @@ def before_reply(
     own_card = cfg.card_for(stage)
     dismissed = card is not None and card == own_card and not (confirmation or {}).get("fields")
     if card == "skip" or dismissed:
+        _note(log, "用户点了「跳过」或关掉了这一步的卡片", "사용자가 \"건너뛰기\"를 누르거나 이 단계의 카드를 닫았어요")
         if stage == stages.SELF_CHECK:
             s["branch"] = "none"
         if stage != cfg.closing_step:
-            _advance(s, cfg)
+            _advance(s, cfg, log)
+        else:
+            _note(log, "收尾步骤不能跳过，留在原地", "마무리 단계는 건너뛸 수 없어 그대로예요")
     elif card is not None and card == own_card and (confirmation or {}).get("fields"):
-        _advance(s, cfg)
+        _note(log, "用户填写并确认了这一步的卡片", "사용자가 이 단계의 카드를 작성하고 확인했어요")
+        _advance(s, cfg, log)
     elif stage == stages.PURPOSE and user_text:
+        _note(log, "用户没有点选项，直接打字回答了目的", "사용자가 선택지 대신 직접 목적을 입력했어요")
         s["purpose"] = "other"
-        _advance(s, cfg)
+        _advance(s, cfg, log)
     elif user_text:
         s["turns"] = s.get("turns", 0) + 1
-        _, most = _limits(s, cfg)
+        least, most = _limits(s, cfg)
+        _note(
+            log,
+            f"这一步第 {s['turns']} 轮（最少 {least} 轮，最多 {most if most is not None else '不限'} 轮）",
+            f"이 단계 {s['turns']}번째 (최소 {least}, 최대 {most if most is not None else '제한 없음'})",
+        )
         if most is not None and s["turns"] >= most:
+            _note(log, "已到最多轮数，自动进入下一步", "최대 횟수에 도달해 다음 단계로 넘어가요")
             if stage == stages.SELF_CHECK and not s.get("branch"):
                 # No clear answer: fall back on the code-side keyword signal.
                 s["branch"] = (
                     "strong" if self_criticism_level * 100 >= cfg.criticism["strong"] else "weak" if self_criticism_level > 0 else "none"
                 )
-            _advance(s, cfg)
+            _advance(s, cfg, log)
 
     session.flow_state = s
     return s
 
 
 def after_reply(
-    session: ConversationSession, signals: dict[str, Any], cfg: FlowConfig, summary_shown: bool = False
+    session: ConversationSession, signals: dict[str, Any], cfg: FlowConfig, summary_shown: bool = False, log: Log = None
 ) -> None:
     """Applies the model's progress signals for the next turn.
     `summary_shown`: the listen summary was shown before this turn, so a
@@ -154,19 +192,31 @@ def after_reply(
     stage, turns = s["stage"], s.get("turns", 0)
     request = signals.get("user_request")
     closing = cfg.closing_step
+    _note(
+        log,
+        f"AI 的判断：这一步{'已完成' if signals.get('stage_done') is True else '还没完成'}；用户请求：{_w(request, 0, ('无', '없음'))}；自我批评：{_w(signals.get('self_criticism'), 0, ('未判断', '판단 없음'))}",
+        f"AI 판단: 이 단계 {'완료' if signals.get('stage_done') is True else '미완료'}; 사용자 요청: {_w(request, 1, ('无', '없음'))}; 자기비판: {_w(signals.get('self_criticism'), 1, ('未判断', '판단 없음'))}",
+    )
     if request == "end_today" and cfg.end_today_enabled and closing and stage != closing and closing in cfg.order:
+        _note(log, f"用户说今天先到这里，跳到收尾：{{k:{closing}}}", f"사용자가 오늘은 여기까지라고 해 마무리로: {{k:{closing}}}")
         _enter(s, closing)
     elif request == "to_action" and cfg.to_action_step and cfg.to_action_step in _after(stage, cfg.order):
+        _note(log, f"用户想知道怎么办，跳到：{{k:{cfg.to_action_step}}}", f"사용자가 방법을 원해 이동: {{k:{cfg.to_action_step}}}")
         _enter(s, cfg.to_action_step)
     elif stage == stages.SELF_CHECK:
         level = signals.get("self_criticism")
         if turns >= 1 and level in ("strong", "weak", "none"):
+            _note(log, f"自我批评程度判断为：{_w(level, 0, ('', ''))}", f"자기비판 정도: {_w(level, 1, ('', ''))}")
             s["branch"] = level
-            _advance(s, cfg)
+            _advance(s, cfg, log)
     elif stage == cfg.card_steps.get("seb_summary") and summary_shown and signals.get("stage_done") is True:
-        _advance(s, cfg)
+        _note(log, "用户确认了总结", "사용자가 요약을 확인했어요")
+        _advance(s, cfg, log)
     elif stage not in _user_ended(cfg) and signals.get("stage_done") is True and turns >= _limits(s, cfg)[0]:
-        _advance(s, cfg)
+        _note(log, "AI 判断完成且已到最少轮数", "AI가 완료로 판단했고 최소 횟수도 채웠어요")
+        _advance(s, cfg, log)
+    elif signals.get("stage_done") is True:
+        _note(log, "AI 判断完成，但还没到最少轮数（或这一步要等用户操作），留在原地", "AI는 완료로 봤지만 최소 횟수 전이거나 사용자 조작을 기다리는 단계라 그대로예요")
     session.flow_state = s
 
 

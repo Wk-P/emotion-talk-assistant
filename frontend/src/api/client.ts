@@ -92,6 +92,10 @@ export interface HistoryMessageItem {
   role: 'user' | 'assistant' | 'system'
   content: string
   created_at: string
+  // Admin transcript only: the step that answered and what the program
+  // decided that turn (missing for older replies).
+  stage?: string | null
+  flow_log?: { zh: string; ko: string }[] | null
 }
 
 /** Switch an ongoing conversation's language: later AI replies use it. */
@@ -466,6 +470,8 @@ export interface PromptOverview {
   items: PromptItem[]
   modules: PromptModuleItem[]
   output_format: string
+  // Built-in components admins deleted (can be restored).
+  deleted: string[]
 }
 
 export interface PromptVersionItem {
@@ -581,6 +587,10 @@ export async function saveFlowOrder(order: string[]) {
 
 export async function deletePromptModule(key: string) {
   await api.delete(`/api/admin/prompts/modules/${key}`)
+}
+
+export async function restorePromptModule(key: string) {
+  await api.post(`/api/admin/prompts/modules/${key}/restore`)
 }
 
 // ---- prompt tools (backend app/api/prompt_tools.py) ----

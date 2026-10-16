@@ -6,6 +6,7 @@ import { useFlowSettings } from '@/utils/flowSettings'
 import {
   createPromptModule,
   deletePromptModule,
+  restorePromptModule,
   errorStatus,
   updatePromptModule,
   type Language,
@@ -17,6 +18,8 @@ import {
 // "对话流程" page; what the AI says in them is the "提示词" page.
 const props = defineProps<{
   modules: PromptModuleItem[]
+  // Built-in components that were deleted (can be restored).
+  deleted: string[]
   nameOf: (key: string) => string
   // Steps with no text in the language being edited.
   emptyKeys: string[]
@@ -111,6 +114,20 @@ async function toggle(m: PromptModuleItem) {
     await updatePromptModule(m.key, { enabled: !m.enabled })
     emit('reload')
     done(m.enabled ? t('comp.offDone', { name: props.nameOf(m.key) }) : t('comp.onDone', { name: props.nameOf(m.key) }))
+  } catch {
+    error.value = t('flowOrder.failed')
+  } finally {
+    busy.value = false
+  }
+}
+
+async function restore(key: string) {
+  busy.value = true
+  error.value = ''
+  try {
+    await restorePromptModule(key)
+    emit('reload')
+    done(t('comp.restored', { name: props.nameOf(key) }))
   } catch {
     error.value = t('flowOrder.failed')
   } finally {
@@ -302,7 +319,7 @@ async function saveSettings() {
             {{ m.enabled ? t('comp.turnOff') : t('comp.turnOn') }}
           </button>
           <button v-if="!phone" type="button" class="btn-text small" @click="startRename(m)">{{ t('prompts.rename') }}</button>
-          <button v-if="!m.built_in && !phone" type="button" class="btn-text small danger" @click="remove(m)">{{ t('comp.delete') }}</button>
+          <button v-if="!phone" type="button" class="btn-text small danger" @click="remove(m)">{{ t('comp.delete') }}</button>
           <button type="button" class="btn-text small push" @click="emit('edit', m.key)">{{ t('comp.editPrompt') }}</button>
         </div>
       </article>
@@ -354,7 +371,7 @@ async function saveSettings() {
             {{ m.enabled ? t('comp.turnOff') : t('comp.turnOn') }}
           </button>
           <button v-if="!phone" type="button" class="btn-text small" @click="startRename(m)">{{ t('prompts.rename') }}</button>
-          <button v-if="!m.built_in && !phone" type="button" class="btn-text small danger" @click="remove(m)">{{ t('comp.delete') }}</button>
+          <button v-if="!phone" type="button" class="btn-text small danger" @click="remove(m)">{{ t('comp.delete') }}</button>
           <button type="button" class="btn-text small push" @click="emit('edit', m.key)">{{ t('comp.editPrompt') }}</button>
         </div>
       </article>
@@ -387,6 +404,16 @@ async function saveSettings() {
       </article>
     </div>
 
+    <template v-if="deleted.length">
+      <h3 class="sub">{{ t('comp.deletedTitle') }}</h3>
+      <p class="sub-desc">{{ t('comp.deletedDesc') }}</p>
+      <div class="restore-list">
+        <button v-for="k in deleted" :key="k" type="button" class="btn-outline small" :disabled="busy || phone" @click="restore(k)">
+          ＋ {{ nameOf(k) }}
+        </button>
+      </div>
+    </template>
+
     <p v-if="flash" class="flash" role="status">{{ flash }}</p>
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -399,6 +426,11 @@ async function saveSettings() {
 </template>
 
 <style scoped>
+.restore-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .library {
   display: flex;
   flex-direction: column;
