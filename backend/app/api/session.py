@@ -1,17 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.timefmt import kst_iso, kst_iso_or_none
 from app.api.deps import get_current_user_required, get_owned_session
 from app.db.session import get_db
+from app.models.enums import MessageRole
 from app.models.message import Message
 from app.models.record import SavedRecord
 from app.models.session import ConversationSession
 from app.models.user import User
-from app.schemas.chat import HistoryMessageItem, SessionCreateRequest, SessionHistoryItem, SessionResponse
+from app.schemas.chat import HistoryMessageItem, SessionCreateRequest, SessionHistoryItem, SessionResponse, SessionSyncResponse
 
 router = APIRouter(prefix="/api/session", tags=["session"])
+
+HISTORY_TITLE_LENGTH = 40
 
 
 @router.post("/start", response_model=SessionResponse)
@@ -50,17 +53,37 @@ async def list_history(
 
     owner_filter = ConversationSession.user_id == user.id
 
-    count_subq = (
-        select(Message.session_id, func.count(Message.id).label("message_count"))
+    stats_subq = (
+        select(
+            Message.session_id,
+            func.count(Message.id).label("message_count"),
+            func.max(Message.created_at).label("last_at"),
+        )
         .group_by(Message.session_id)
         .subquery()
     )
     result = await db.execute(
-        select(ConversationSession, func.coalesce(count_subq.c.message_count, 0))
-        .outerjoin(count_subq, count_subq.c.session_id == ConversationSession.id)
+        select(ConversationSession, func.coalesce(stats_subq.c.message_count, 0), stats_subq.c.last_at)
+        .outerjoin(stats_subq, stats_subq.c.session_id == ConversationSession.id)
         .where(owner_filter, ConversationSession.participated.is_(True))
-        .order_by(ConversationSession.created_at.desc())
     )
+    rows = result.all()
+
+    # First user message of each listed conversation, for its title.
+    titles: dict[str, str] = {}
+    if rows:
+        first = await db.execute(
+            select(Message.session_id, Message.content)
+            .where(Message.session_id.in_([s.id for s, _, _ in rows]), Message.role == MessageRole.USER)
+            .order_by(Message.created_at.asc())
+        )
+        for session_id, content in first.all():
+            titles.setdefault(session_id, " ".join(content.split())[:HISTORY_TITLE_LENGTH])
+
+    items = [
+        (last_at or session.created_at, session, message_count) for session, message_count, last_at in rows
+    ]
+    items.sort(key=lambda x: kst_iso(x[0]), reverse=True)
     return [
         SessionHistoryItem(
             session_id=session.id,
@@ -68,8 +91,10 @@ async def list_history(
             created_at=kst_iso(session.created_at),
             ended_at=kst_iso_or_none(session.ended_at),
             message_count=message_count,
+            last_active_at=kst_iso(last_active),
+            title=titles.get(session.id, ""),
         )
-        for session, message_count in result.all()
+        for last_active, session, message_count in items
     ]
 
 
@@ -85,6 +110,31 @@ async def get_session_messages(
         HistoryMessageItem(role=m.role.value, content=m.content, created_at=kst_iso(m.created_at))
         for m in result.scalars().all()
     ]
+
+
+@router.get("/{session_id}/sync", response_model=SessionSyncResponse)
+async def sync_session(
+    after: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    session: ConversationSession = Depends(get_owned_session),
+) -> SessionSyncResponse:
+    """Polled by an open chat so a conversation continued on another device
+    shows up here too: only what came after the `after` messages it has."""
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session.id, Message.role.in_([MessageRole.USER, MessageRole.ASSISTANT]))
+        .order_by(Message.created_at.asc())
+    )
+    rows = result.scalars().all()
+    return SessionSyncResponse(
+        messages=[
+            HistoryMessageItem(role=m.role.value, content=m.content, created_at=kst_iso(m.created_at))
+            for m in rows[after:]
+        ],
+        total=len(rows),
+        ended=session.ended_at is not None,
+    )
 
 
 @router.delete("/history", status_code=204)

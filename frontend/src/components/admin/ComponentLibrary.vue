@@ -31,7 +31,9 @@ const phone = usePhone()
 const { config, defaults, dirty, load, save, discard, forgetStep } = useFlowSettings()
 
 // Steps that end on something the user does: only a maximum applies.
-const MAX_ONLY = new Set(['flow.listen', 'flow.self_check'])
+// Steps that move on by the user's answer, never by "AI judges it done":
+// a minimum would never be checked (app/services/flow.py _after_signals).
+const MAX_ONLY = new Set(['flow.self_check'])
 const ROLES = ['closing_step', 'stabilize_step', 'ending_step'] as const
 type Role = (typeof ROLES)[number]
 

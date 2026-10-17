@@ -32,6 +32,21 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
         },
     ),
     (
+        "part_goal",
+        {Language.ZH: "步骤「目标」的标题", Language.KO: "단계 \"목표\" 제목"},
+        {Language.ZH: "【这一步要达成什么】", Language.KO: "[이 단계의 목표]"},
+    ),
+    (
+        "part_ask",
+        {Language.ZH: "步骤「问法」的标题", Language.KO: "단계 \"질문 방식\" 제목"},
+        {Language.ZH: "【怎么问】", Language.KO: "[질문 방식]"},
+    ),
+    (
+        "part_example",
+        {Language.ZH: "步骤「示例」的标题", Language.KO: "단계 \"예시\" 제목"},
+        {Language.ZH: "【示例】", Language.KO: "[예시]"},
+    ),
+    (
         "stage_heading",
         {Language.ZH: "当前步骤的标题", Language.KO: "현재 단계 제목"},
         {Language.ZH: "【当前步骤：{name}】", Language.KO: "[현재 단계: {name}]"},
@@ -224,6 +239,20 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
         {
             Language.ZH: "用户的自我批评较弱或没有：只简短进行自我接纳和人类共同性，不要反复进行自我友善活动。",
             Language.KO: "사용자의 자기비판이 약하거나 없어요: 자기수용과 보편적 인간성만 짧게 다루고, 자기친절 활동을 반복하지 마세요.",
+        },
+    ),
+    (
+        "note_confirm_jump",
+        {Language.ZH: "进度：确认用户是否想直接要办法", Language.KO: "진행: 바로 방법을 원하는지 확인"},
+        {
+            Language.ZH: (
+                "用户上一句可能是想直接要办法。这一轮先回应用户的话，再简短问一句是否现在就聊具体怎么做；"
+                "只有用户这一句明确表示要办法时，user_request 才给 \"to_action\"。"
+            ),
+            Language.KO: (
+                "사용자가 앞선 말에서 바로 방법을 원했을 수 있어요. 이번에는 먼저 사용자의 말에 답한 뒤, 지금 바로 구체적인 방법을 이야기할지 짧게 물어보세요. "
+                "사용자가 이번 말에서 분명히 방법을 원할 때만 user_request를 \"to_action\"으로 주세요."
+            ),
         },
     ),
 ]

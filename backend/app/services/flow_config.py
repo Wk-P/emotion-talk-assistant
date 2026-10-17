@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.app_setting import AppSetting
 from app.models.enums import Language
 from app.prompts import registry, stages
+from app.services import ai_params
 
 SETTING_KEY = "flow_config"
 
@@ -103,6 +104,12 @@ class FlowConfig:
     criticism: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_CRITICISM))
     card_steps: dict[str, str | None] = field(default_factory=lambda: dict(DEFAULT_CARD_STEPS))
     to_action_step: str | None = DEFAULT_TO_ACTION
+    # Steps where "tell me what to do" is not acted on (e.g. a step that
+    # itself asks what help the user wants).
+    to_action_skip: list[str] = field(default_factory=list)
+    # Jump only when the model reports the request two turns running: the
+    # first time the next reply is told to check with the user.
+    to_action_confirm: bool = True
     end_today_enabled: bool = True
     # Steps admins turned off.
     disabled: set[str] = field(default_factory=set)
@@ -157,6 +164,8 @@ def _rules_from(saved: dict[str, Any]) -> dict[str, Any]:
         "criticism": {**DEFAULT_CRITICISM, **(saved.get("criticism") or {})},
         "card_steps": {c: card_steps[c] if c in card_steps else DEFAULT_CARD_STEPS[c] for c in CARD_TYPES},
         "to_action_step": saved["to_action_step"] if "to_action_step" in saved else DEFAULT_TO_ACTION,
+        "to_action_skip": list(saved["to_action_skip"]) if isinstance(saved.get("to_action_skip"), list) else [],
+        "to_action_confirm": saved.get("to_action_confirm", True),
         "end_today_enabled": saved.get("end_today_enabled", True),
         "crisis_country": saved["crisis_country"] if "crisis_country" in saved else DEFAULT_CRISIS_COUNTRY,
         "summary_min_turns": saved.get("summary_min_turns") or DEFAULT_SUMMARY_MIN_TURNS,
@@ -177,7 +186,8 @@ async def load(db: AsyncSession) -> FlowConfig:
         order=await registry.active_flow_order(db),
         disabled=await registry.disabled_keys(db),
         limits=_limits_from(saved),
-        history_turns=saved.get("history_turns") or DEFAULT_HISTORY,
+        # Set on the advanced settings page now (ai_params).
+        history_turns=(await ai_params.load(db))["history_turns"],
         **rules,
     )
 
@@ -192,6 +202,7 @@ async def forget(db: AsyncSession, key: str) -> None:
     saved["limits"] = limits
     saved["card_steps"] = {c: None if v == key else v for c, v in rules["card_steps"].items()}
     saved["to_action_step"] = None if rules["to_action_step"] == key else rules["to_action_step"]
+    saved["to_action_skip"] = [k for k in rules["to_action_skip"] if k != key]
     for r in ROLE_KEYS:
         saved[r] = None if rules[r] == key else rules[r]
     saved["safety_steps"] = [k for k in rules["safety_steps"] if k != key]
@@ -208,7 +219,8 @@ async def for_admin(db: AsyncSession) -> dict[str, Any]:
     steps = [m.key for m in await registry.load_modules(db) if m.is_stage and m.key not in NO_LIMITS]
     return {
         "limits": {k: list(limits.get(k) or DEFAULT_LIMITS.get(k, (DEFAULT_MIN, DEFAULT_MAX))) for k in steps},
-        "history_turns": saved.get("history_turns") or DEFAULT_HISTORY,
+        # Lives in the AI-parameters settings now; the flow page only echoes it.
+        "history_turns": (await ai_params.load(db))["history_turns"],
         **_rules_from(saved),
         "defaults": {
             "limits": {k: list(DEFAULT_LIMITS.get(k, (DEFAULT_MIN, DEFAULT_MAX))) for k in steps},
@@ -220,6 +232,8 @@ async def for_admin(db: AsyncSession) -> dict[str, Any]:
             "criticism": DEFAULT_CRITICISM,
             "card_steps": DEFAULT_CARD_STEPS,
             "to_action_step": DEFAULT_TO_ACTION,
+            "to_action_skip": [],
+            "to_action_confirm": True,
             "end_today_enabled": True,
             "crisis_country": DEFAULT_CRISIS_COUNTRY,
             **DEFAULT_ROLES,
@@ -259,6 +273,8 @@ def validate(payload: dict[str, Any], stage_keys: set[str]) -> str | None:
         return "bad card_steps"
     if payload["to_action_step"] and payload["to_action_step"] not in stage_keys:
         return "unknown to_action step"
+    if any(k not in stage_keys for k in payload["to_action_skip"]):
+        return "unknown to_action_skip step"
     roles = [payload[k] for k in ROLE_KEYS if payload[k]]
     if any(k not in stage_keys for k in roles) or len(roles) != len(set(roles)):
         return "bad step roles"
@@ -284,6 +300,8 @@ async def save(db: AsyncSession, payload: dict[str, Any], admin_id: str | None) 
             "criticism": payload["criticism"],
             "card_steps": payload["card_steps"],
             "to_action_step": payload["to_action_step"],
+            "to_action_skip": list(dict.fromkeys(payload["to_action_skip"])),
+            "to_action_confirm": payload["to_action_confirm"],
             "end_today_enabled": payload["end_today_enabled"],
             "crisis_country": payload["crisis_country"],
             **{k: payload[k] for k in ROLE_KEYS},

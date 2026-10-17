@@ -70,6 +70,7 @@ def state(session: ConversationSession, cfg: FlowConfig) -> dict[str, Any]:
 def _enter(s: dict[str, Any], stage: str) -> None:
     s["stage"] = stage
     s["turns"] = 0
+    s.pop("jump_asked", None)
 
 
 def _after(stage: str, order: list[str]) -> list[str]:
@@ -191,6 +192,9 @@ def after_reply(
     s = state(session, cfg)
     stage, turns = s["stage"], s.get("turns", 0)
     request = signals.get("user_request")
+    # Set when the last turn's "tell me what to do" was held back to check
+    # with the user; only good for the very next turn.
+    asked = s.pop("jump_asked", False)
     closing = cfg.closing_step
     _note(
         log,
@@ -200,10 +204,30 @@ def after_reply(
     if request == "end_today" and cfg.end_today_enabled and closing and stage != closing and closing in cfg.order:
         _note(log, f"用户说今天先到这里，跳到收尾：{{k:{closing}}}", f"사용자가 오늘은 여기까지라고 해 마무리로: {{k:{closing}}}")
         _enter(s, closing)
-    elif request == "to_action" and cfg.to_action_step and cfg.to_action_step in _after(stage, cfg.order):
+    elif request == "to_action" and cfg.to_action_step and stage in cfg.to_action_skip:
+        _note(log, "用户似乎想知道怎么办，但这一步设置为不跳转", "사용자가 방법을 원하는 것 같지만 이 단계에서는 이동하지 않도록 설정돼 있어요")
+        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+    elif request == "to_action" and cfg.to_action_step and cfg.to_action_step not in _after(stage, cfg.order):
+        _note(log, f"用户似乎想知道怎么办，但目标步骤（{{k:{cfg.to_action_step}}}）已停用或不在当前步骤后面，不跳转", f"사용자가 방법을 원하는 것 같지만 목표 단계({{k:{cfg.to_action_step}}})가 꺼져 있거나 현재 단계 뒤에 없어 이동하지 않아요")
+        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+    elif request == "to_action" and cfg.to_action_step and cfg.to_action_confirm and not asked:
+        _note(log, "用户似乎想知道怎么办：先不跳，下一轮让 AI 跟用户确认", "사용자가 방법을 원하는 것 같아요: 바로 이동하지 않고 다음 번에 AI가 확인해요")
+        s["jump_asked"] = True
+        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+    elif request == "to_action" and cfg.to_action_step:
         _note(log, f"用户想知道怎么办，跳到：{{k:{cfg.to_action_step}}}", f"사용자가 방법을 원해 이동: {{k:{cfg.to_action_step}}}")
         _enter(s, cfg.to_action_step)
-    elif stage == stages.SELF_CHECK:
+    else:
+        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+    session.flow_state = s
+
+
+def _after_signals(
+    s: dict[str, Any], stage: str, turns: int, signals: dict[str, Any], cfg: FlowConfig, summary_shown: bool, log: Log
+) -> None:
+    """The ordinary progress rules, when no user request moved the step."""
+
+    if stage == stages.SELF_CHECK:
         level = signals.get("self_criticism")
         if turns >= 1 and level in ("strong", "weak", "none"):
             _note(log, f"自我批评程度判断为：{_w(level, 0, ('', ''))}", f"자기비판 정도: {_w(level, 1, ('', ''))}")
@@ -217,7 +241,6 @@ def after_reply(
         _advance(s, cfg, log)
     elif signals.get("stage_done") is True:
         _note(log, "AI 判断完成，但还没到最少轮数（或这一步要等用户操作），留在原地", "AI는 완료로 봤지만 최소 횟수 전이거나 사용자 조작을 기다리는 단계라 그대로예요")
-    session.flow_state = s
 
 
 def purpose_note(s: dict[str, Any], language: Language, cfg: FlowConfig, sys: dict[str, str]) -> str:
@@ -228,6 +251,12 @@ def purpose_note(s: dict[str, Any], language: Language, cfg: FlowConfig, sys: di
         return ""
     what = "见用户上一句话" if language == Language.ZH else "사용자의 앞선 말 참고"
     return sys["system.note_purpose"].replace("{purpose}", what)
+
+
+def jump_note(s: dict[str, Any], sys: dict[str, str]) -> str:
+    """For the prompt: last turn looked like "tell me what to do" and was held back."""
+
+    return sys["system.note_confirm_jump"] if s.get("jump_asked") else ""
 
 
 def branch_note(s: dict[str, Any], sys: dict[str, str]) -> str:

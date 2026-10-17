@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AdvancedSettings from './AdvancedSettings.vue'
 import ComponentLibrary from './ComponentLibrary.vue'
 import FlowOrderEditor from './FlowOrderEditor.vue'
 import ModelPicker from './ModelPicker.vue'
@@ -19,6 +20,7 @@ import {
 } from '@/api/client'
 import { formatDateTime } from '@/utils/time'
 import { usePhone } from '@/utils/phone'
+import { PARTS, joinParts, partsEmpty, splitParts, type Part } from '@/utils/promptParts'
 
 const { t } = useI18n()
 
@@ -55,14 +57,14 @@ const GROUPS: PromptGroup[] = ['rules', 'flow', 'other', 'system']
 const FLOW_KEYS = computed(() => modules.value.filter((m) => m.is_stage).map((m) => m.key))
 // Steps with no text in the language being edited (flagged by the order editor).
 const emptyStageKeys = computed(() =>
-  langItems.value.filter((i) => FLOW_KEYS.value.includes(i.key) && !i.content.trim()).map((i) => i.key),
+  langItems.value.filter((i) => FLOW_KEYS.value.includes(i.key) && partsEmpty(i.content)).map((i) => i.key),
 )
 
 // "编辑问法" on a step card: select it and bring the editor into view.
 const editorEl = ref<HTMLElement | null>(null)
 // One part of the settings at a time, instead of everything stacked.
-type Section = 'model' | 'components' | 'flow' | 'prompts' | 'tools'
-const SECTIONS: Section[] = ['components', 'flow', 'prompts', 'model', 'tools']
+type Section = 'model' | 'components' | 'flow' | 'prompts' | 'tools' | 'advanced'
+const SECTIONS: Section[] = ['components', 'flow', 'prompts', 'model', 'advanced', 'tools']
 const section = ref<Section>('components')
 async function editStep(key: string) {
   section.value = 'prompts'
@@ -85,7 +87,7 @@ function optionLabel(m: PromptModuleItem, item: PromptItem): string {
   const tags: string[] = []
   if (isDirty(item)) tags.push(t('prompts.unsaved'))
   if (!m.enabled) tags.push(t('prompts.disabledBadge'))
-  if (!m.built_in && !item.content.trim()) tags.push(t('prompts.emptyBadge'))
+  if (!m.built_in && partsEmpty(item.content)) tags.push(t('prompts.emptyBadge'))
   else if (m.built_in && item.version > 0) tags.push(t('prompts.modified'))
   const indent = !m.is_stage && m.group === 'flow' ? '　└ ' : ''
   return `${indent}${nameOf(m.key)}${tags.length ? `（${tags.join('·')}）` : ''}`
@@ -128,30 +130,22 @@ function isDirty(item: PromptItem) {
 }
 
 const dirty = computed(() => (current.value ? isDirty(current.value) : false))
-// A step written in three boxes (backend app/prompts/stages.py SLOT_*): the
-// text is stored and sent as one piece with these headings.
-const SLOT_HEADS = ['【这一步要达成什么】', '【示例问题】', '【这一步不要做什么】']
-function parseSlots(text: string): string[] | null {
-  const at = SLOT_HEADS.map((h) => text.indexOf(h))
-  if (at.some((i) => i < 0) || at[0]! > 0 || !(at[0]! < at[1]! && at[1]! < at[2]!)) return null
-  return SLOT_HEADS.map((h, i) => {
-    let part = text.slice(at[i]! + h.length, i < 2 ? at[i + 1] : undefined)
-    if (part.startsWith('\n')) part = part.slice(1)
-    if (i < 2 && part.endsWith('\n\n')) part = part.slice(0, -2)
-    return part
-  })
+
+// A step is written in three boxes (目标 / 问法 / 示例); every other block is
+// one box.
+const split = computed(() => !!currentModule.value?.is_stage)
+const draftParts = computed(() => splitParts(draft.value))
+function setPart(part: Part, value: string) {
+  draft.value = joinParts({ ...draftParts.value, [part]: value })
 }
-const joinSlots = (parts: string[]) => SLOT_HEADS.map((h, i) => `${h}\n${parts[i] ?? ''}`).join('\n\n')
-const slots = computed(() => (currentModule.value?.is_stage ? parseSlots(draft.value) : null))
-function setSlot(i: number, value: string) {
-  const parts = [...(slots.value ?? ['', '', ''])]
-  parts[i] = value
-  draft.value = joinSlots(parts)
+// A stored version, readable: each part under its label.
+function readable(content: string): string {
+  const p = splitParts(content)
+  if (!p.ask.trim() && !p.example.trim()) return content
+  return PARTS.filter((k) => p[k].trim())
+    .map((k) => `〔${t(`prompts.parts.${k}`)}〕\n${p[k].trim()}`)
+    .join('\n\n')
 }
-function toSlots() {
-  draft.value = joinSlots([draft.value.trim(), '', ''])
-}
-const SLOT_KEYS = ['goal', 'examples', 'avoid'] as const
 const phone = usePhone()
 
 const draftIsDefault = computed(() => current.value !== null && draft.value === current.value.default_content)
@@ -194,7 +188,7 @@ function errorMessage(e: unknown): string {
 }
 
 async function save() {
-  if (!current.value || !dirty.value || !draft.value.trim()) return
+  if (!current.value || !dirty.value || partsEmpty(draft.value)) return
   saving.value = true
   error.value = ''
   try {
@@ -336,6 +330,7 @@ onMounted(() => load())
     <p v-if="phone && section !== 'tools'" class="phone-note">{{ t('prompts.phoneNote') }}</p>
 
     <ModelPicker v-if="section === 'model'" />
+    <AdvancedSettings v-else-if="section === 'advanced'" />
     <PromptTools v-else-if="section === 'tools'" />
 
     <div v-if="section === 'prompts'" class="toolbar">
@@ -401,7 +396,7 @@ onMounted(() => load())
           <button type="button" class="btn-text" @click="section = 'components'">{{ t('flowUi.goComponents') }}</button>
         </p>
         <p v-if="currentModule && !currentModule.enabled" class="off-note">{{ t('prompts.disabledNote') }}</p>
-        <p v-else-if="currentModule && !currentModule.built_in && !current.content.trim()" class="off-note">
+        <p v-else-if="currentModule && !currentModule.built_in && partsEmpty(current.content)" class="off-note">
           {{ t('prompts.emptyNote') }}
         </p>
         <p class="editor-meta">
@@ -422,29 +417,32 @@ onMounted(() => load())
           </ul>
         </details>
 
-        <div v-if="phone" class="ro-text">{{ draft }}</div>
-        <div v-else-if="slots" class="slots">
-          <label v-for="(k, i) in SLOT_KEYS" :key="k" class="slot">
-            <span class="slot-title">{{ t(`prompts.slots.${k}.title`) }}</span>
-            <span class="slot-hint">{{ t(`prompts.slots.${k}.hint`) }}</span>
+        <template v-if="split">
+          <div v-for="k in PARTS" :key="k" class="part">
+            <label class="part-head" :for="`part-${k}`">
+              <span class="part-name">{{ t(`prompts.parts.${k}`) }}</span>
+              <span class="part-hint">{{ t(`prompts.parts.hint_${k}`) }}</span>
+            </label>
+            <div v-if="phone" class="ro-text">{{ draftParts[k] || '—' }}</div>
             <textarea
-              :value="slots[i]"
-              class="content slot-text"
+              v-else
+              :id="`part-${k}`"
+              class="content part-box"
               spellcheck="false"
-              @input="setSlot(i, ($event.target as HTMLTextAreaElement).value)"
+              :placeholder="t(`prompts.parts.placeholder_${k}`)"
+              :value="draftParts[k]"
+              @input="setPart(k, ($event.target as HTMLTextAreaElement).value)"
             />
-          </label>
-        </div>
+          </div>
+        </template>
         <template v-else>
-          <textarea v-model="draft" class="content" spellcheck="false" />
-          <button v-if="currentModule?.is_stage" type="button" class="btn-text to-slots" @click="toSlots">
-            {{ t('prompts.slots.convert') }}
-          </button>
+          <div v-if="phone" class="ro-text">{{ draft }}</div>
+          <textarea v-else v-model="draft" class="content" spellcheck="false" />
         </template>
 
         <div class="save-row">
           <input v-model="note" class="note-input" maxlength="200" :placeholder="t('prompts.notePlaceholder')" />
-          <button type="button" class="btn-primary" :disabled="!dirty || saving || !draft.trim()" @click="save">
+          <button type="button" class="btn-primary" :disabled="!dirty || saving || partsEmpty(draft)" @click="save">
             {{ saving ? t('prompts.saving') : t('prompts.save') }}
           </button>
         </div>
@@ -478,7 +476,7 @@ onMounted(() => load())
             <div v-if="v.note" class="version-note">{{ v.note }}</div>
             <details>
               <summary>{{ t('prompts.viewContent') }}</summary>
-              <pre>{{ v.content }}</pre>
+              <pre>{{ readable(v.content) }}</pre>
             </details>
           </div>
         </div>
@@ -808,35 +806,6 @@ onMounted(() => load())
   color: var(--accent);
   font-weight: 600;
   box-shadow: var(--shadow-sm);
-}
-.slots {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.slot {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.slot-title {
-  font-weight: 700;
-  font-size: 14px;
-}
-.slot-hint {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-.content.slot-text {
-  min-height: 140px;
-  height: auto;
-  field-sizing: content;
-  max-height: 520px;
-}
-.to-slots {
-  align-self: flex-start;
-  margin-top: 6px;
-  font-size: 13px;
 }
 .content {
   width: 100%;
@@ -1184,6 +1153,32 @@ pre {
   background: var(--danger-soft);
   color: var(--danger);
   font-size: 12.5px;
+}
+.part {
+  margin-bottom: 12px;
+}
+.part-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+}
+.part-name {
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.part-hint {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.content.part-box {
+  min-height: 160px;
+  height: auto;
 }
 .sp-toggle {
   display: flex;

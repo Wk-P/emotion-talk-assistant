@@ -32,7 +32,7 @@ from app.schemas.prompt import (
     PromptSaveRequest,
     PromptVersionItem,
 )
-from app.services import flow_config
+from app.services import ai_params, flow_config
 from app.services.llm import LLMUnavailable, generate_turn
 from app.services.model_settings import current_effort, current_model
 
@@ -383,12 +383,13 @@ async def preview_prompt(
             payload.message,
             await current_model(db),
             effort=await current_effort(db),
+            params=await ai_params.load(db),
         )
     except LLMUnavailable as e:
         raise HTTPException(status_code=503, detail=f"ai service unavailable: {e.reason}") from e
     return PromptPreviewResponse(
         reply_text=response.reply_text,
         candidates=response.candidates,
-        system_prompt=system_prompt,
+        system_prompt="\n\n========== system #2 ==========\n\n".join(system_prompt),
         prompt_versions=versions,
     )

@@ -86,6 +86,8 @@ export interface SessionHistoryItem {
   created_at: string
   ended_at: string | null
   message_count: number
+  last_active_at: string
+  title: string
 }
 
 export interface HistoryMessageItem {
@@ -110,6 +112,18 @@ export async function listHistory() {
 
 export async function getSessionMessages(sessionId: string) {
   const { data } = await api.get<HistoryMessageItem[]>(`/api/session/${sessionId}/messages`)
+  return data
+}
+
+export interface SessionSync {
+  messages: HistoryMessageItem[]
+  total: number
+  ended: boolean
+}
+
+/** What was said in a conversation after the first `after` messages (backend app/api/session.py sync_session). */
+export async function syncSession(sessionId: string, after: number) {
+  const { data } = await api.get<SessionSync>(`/api/session/${sessionId}/sync`, { params: { after } })
   return data
 }
 
@@ -395,6 +409,51 @@ export async function setAdminUserRole(userId: string, role: UserRole) {
   return data
 }
 
+// ---- Advanced AI settings (backend app/api/ai_params.py) ----
+
+export type AiParamName =
+  | 'history_turns'
+  | 'temperature'
+  | 'top_p'
+  | 'max_tokens'
+  | 'presence_penalty'
+  | 'frequency_penalty'
+  | 'timeout_seconds'
+  | 'max_retries'
+
+/** `null` = not sent: the model's own default applies. */
+export type AiParamValues = Record<AiParamName, number | null>
+
+export interface AiParamsOverview {
+  values: AiParamValues
+  defaults: AiParamValues
+  ranges: Record<AiParamName, { min: number; max: number; integer: boolean; required: boolean }>
+  model: string
+  effort: ReasoningEffort | null
+}
+
+export interface AiParamsRecommendation {
+  values: AiParamValues
+  reasons: Partial<Record<AiParamName, string>>
+  /** false: the AI call failed and built-in values came back instead. */
+  from_ai: boolean
+}
+
+export async function getAiParams() {
+  const { data } = await api.get<AiParamsOverview>('/api/admin/ai-params')
+  return data
+}
+
+export async function setAiParams(values: AiParamValues) {
+  const { data } = await api.put<AiParamsOverview>('/api/admin/ai-params', values)
+  return data
+}
+
+export async function recommendAiParams(language: string) {
+  const { data } = await api.post<AiParamsRecommendation>('/api/admin/ai-params/recommend', { language })
+  return data
+}
+
 // ---- AI model choice (backend app/api/ai_model.py) ----
 
 export interface ModelCandidate {
@@ -555,6 +614,10 @@ export interface FlowConfig {
   card_steps: Record<'seb_summary' | 'plan_form', string | null>
   /** "Tell me what to do" jumps here (null = ignored). */
   to_action_step: string | null
+  /** Steps where "tell me what to do" is not acted on. */
+  to_action_skip: string[]
+  /** Check with the user for one turn before jumping. */
+  to_action_confirm: boolean
   end_today_enabled: boolean
   /** Crisis resources of this country are shown ('' = all). */
   crisis_country: string

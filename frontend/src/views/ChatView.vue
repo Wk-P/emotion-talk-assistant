@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
 import AppMenu from '@/components/AppMenu.vue'
@@ -75,6 +75,24 @@ function scrollToBottom() {
 watch(() => session.turns.length, scrollToBottom)
 watch(() => session.sending, scrollToBottom)
 
+// Cross-device: while this page is visible, check every few seconds for
+// messages sent from elsewhere, and at once when it comes back into view.
+const SYNC_MS = 4000
+let syncTimer: number | undefined
+function syncNow() {
+  if (document.visibilityState === 'visible') void session.sync()
+}
+onMounted(() => {
+  syncTimer = window.setInterval(syncNow, SYNC_MS)
+  document.addEventListener('visibilitychange', syncNow)
+  window.addEventListener('focus', syncNow)
+})
+onBeforeUnmount(() => {
+  window.clearInterval(syncTimer)
+  document.removeEventListener('visibilitychange', syncNow)
+  window.removeEventListener('focus', syncNow)
+})
+
 function submit() {
   const text = draft.value.trim()
   if (!text || session.sending) return
@@ -124,6 +142,9 @@ async function saveRecordFor(idx: number) {
       </header>
 
       <div ref="scrollEl" class="turns" :lang="session.language === 'ko' ? 'ko' : 'zh-CN'">
+        <p v-if="session.deletedNotice && session.turns.length === 0" class="deleted-notice" role="status">
+          {{ t('chat.deletedNotice') }}
+        </p>
         <div v-if="showEmptyHint" class="chat-empty">
           <!-- documents/02_内容与需求/首选提示题建议.md, verbatim and not edited: the welcome
                sentence plus the starter list, as plain text (no clickable options). -->
@@ -283,6 +304,15 @@ async function saveRecordFor(idx: number) {
   max-width: 560px;
   margin: 15vh auto 0;
   padding: 0 16px;
+  text-align: center;
+}
+.deleted-notice {
+  margin: 12px auto 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border-radius: 999px;
   text-align: center;
 }
 .chat-empty-hint {
@@ -484,11 +514,20 @@ async function saveRecordFor(idx: number) {
   flex-wrap: wrap;
 }
 .ended-actions > * {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  line-height: 1.3;
   min-width: 140px;
   padding: 9px 16px;
   font-size: 14px;
   text-decoration: none;
   text-align: center;
+}
+.ended-actions > .btn-outline {
+  border-color: var(--border);
 }
 .send-btn {
   flex-shrink: 0;

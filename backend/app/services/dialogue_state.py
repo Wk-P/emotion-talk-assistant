@@ -23,7 +23,7 @@ from app.models.resource import CrisisResource
 from app.models.session import ConversationSession
 from app.prompts import registry, stages
 from app.prompts.router import build_prompt
-from app.services import flow, flow_config, safety
+from app.services import ai_params, flow, flow_config, safety
 from app.services.llm import generate_turn
 from app.services.model_settings import current_effort, current_model
 
@@ -199,7 +199,7 @@ def _progress_note(
     elif flow_key == stages.PURPOSE:
         # Prompts written when there were purpose buttons may still mention them.
         lines.append(sys["system.note_no_purpose_buttons"])
-    lines += [flow.purpose_note(state, language, cfg, sys), flow.branch_note(state, sys)]
+    lines += [flow.purpose_note(state, language, cfg, sys), flow.branch_note(state, sys), flow.jump_note(state, sys)]
     lines = [line for line in lines if line]
     if not lines:
         return ""
@@ -355,12 +355,14 @@ async def _continue_flow(
     system_prompt, prompt_versions = await build_prompt(db, flow_key, session.language, triggered=flow_key != state["stage"])
     messages = await _load_messages(db, session.id)
     sys = await registry.system_texts(db, session.language)
-    system_prompt += _progress_note(messages, state, cfg, session.language, flow_key, sys)
+    # Progress notes are the program's: they go with its message, the first.
+    system_prompt[0] += _progress_note(messages, state, cfg, session.language, flow_key, sys)
     history = _history_for_llm(messages, synthetic_text, cfg.history_turns)
 
     model = await current_model(db)
     effort = await current_effort(db)
-    llm_response = await generate_turn(system_prompt, history, synthetic_text, model, effort=effort)
+    params = await ai_params.load(db)
+    llm_response = await generate_turn(system_prompt, history, synthetic_text, model, effort=effort, params=params)
     candidates = [] if ending else _filter_candidates(llm_response.candidates, messages, flow_key, cfg)
     return TurnResult(
         reply_text=llm_response.reply_text,

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
 import {
+  deleteSession,
   endSession,
   getSessionMessages,
   errorStatus,
@@ -9,6 +10,7 @@ import {
   sendChat,
   updateSessionLanguage,
   startSession,
+  syncSession,
   updateConsent,
 } from '@/api/client'
 import type { RecordDraft } from '@/utils/fieldLabels'
@@ -40,6 +42,12 @@ export const useSessionStore = defineStore('session', () => {
   // The user chose "结束对话" (or reopened one they had ended): the AI's
   // closing reply is shown and no further messages can be sent.
   const ended = ref(false)
+  // How many user/assistant messages the backend has for this conversation
+  // as far as we know — sync() asks only for what came after them.
+  const serverCount = ref(0)
+  // Set after the user ended a conversation and chose to delete it; the
+  // chat page says so until a new conversation starts.
+  const deletedNotice = ref(false)
 
   function begin(lang: Language) {
     reset()
@@ -63,6 +71,7 @@ export const useSessionStore = defineStore('session', () => {
     turns.value = messages
       .filter((m): m is typeof m & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, text: m.content }))
+    serverCount.value = turns.value.length
     answeredTurnIndices.value = new Set()
     recordDrafts.value = new Map()
     savedTurns.value = new Set()
@@ -90,6 +99,9 @@ export const useSessionStore = defineStore('session', () => {
       })
       lastFailedSend.value = null
       if (confirmation?.card_type === 'end') ended.value = true
+      // This device already shows the turn; just catch up on the count
+      // (a card confirmation may be stored as a user message too).
+      void catchUp(sessionId.value, false)
     } catch (e) {
       // 409: this conversation was already ended (e.g. in another tab).
       if (errorStatus(e) === 409) {
@@ -104,6 +116,26 @@ export const useSessionStore = defineStore('session', () => {
     } finally {
       sending.value = false
     }
+  }
+
+  // Picks up messages sent from another device (or tab) into the open
+  // conversation. Polled by ChatView while the page is visible.
+  async function sync() {
+    if (!sessionId.value || sending.value || error.value) return
+    await catchUp(sessionId.value, true)
+  }
+
+  async function catchUp(id: string, show: boolean) {
+    const res = await syncSession(id, serverCount.value).catch(() => null)
+    // Dropped if the user sent, switched or reset meanwhile.
+    if (!res || sessionId.value !== id || (show && sending.value)) return
+    if (show) {
+      for (const m of res.messages) {
+        if (m.role === 'user' || m.role === 'assistant') turns.value.push({ role: m.role, text: m.content })
+      }
+    }
+    serverCount.value = res.total
+    if (res.ended) ended.value = true
   }
 
   async function retry() {
@@ -173,6 +205,14 @@ export const useSessionStore = defineStore('session', () => {
     await send(undefined, { card_type: 'end' })
   }
 
+  // "终止对话" → "删除": removes the whole conversation instead of keeping it.
+  async function discardConversation() {
+    if (sending.value) return
+    if (sessionId.value) await deleteSession(sessionId.value)
+    reset()
+    deletedNotice.value = true
+  }
+
   // Drops the in-memory reference to the current session without calling the
   // backend — used after clearing history, which may delete the session
   // that's currently open in ChatView. Without this, the next message send
@@ -188,6 +228,8 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     lastFailedSend.value = null
     ended.value = false
+    serverCount.value = 0
+    deletedNotice.value = false
   }
 
   return {
@@ -201,9 +243,12 @@ export const useSessionStore = defineStore('session', () => {
     error,
     ended,
     endConversation,
+    discardConversation,
+    deletedNotice,
     begin,
     resume,
     send,
+    sync,
     retry,
     markAnswered,
     setLanguage,

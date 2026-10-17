@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { deleteSession, listHistory, type SessionHistoryItem } from '@/api/client'
 import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
-import { formatDateTime } from '@/utils/time'
+import { displayDay, formatDateTime, toDate, DISPLAY_TIME_ZONE } from '@/utils/time'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -15,8 +15,21 @@ const session = useSessionStore()
 
 const recent = ref<SessionHistoryItem[]>([])
 
+// Signed-out visitors have no history; a failed refresh keeps the old list.
 async function loadRecent() {
-  recent.value = await listHistory()
+  if (!auth.user) {
+    recent.value = []
+    return
+  }
+  recent.value = await listHistory().catch(() => recent.value)
+}
+
+// Today → "14:05"; earlier → the date. The full time is in the tooltip.
+function shortTime(value: string): string {
+  if (displayDay(value) === displayDay()) {
+    return toDate(value).toLocaleTimeString(undefined, { timeZone: DISPLAY_TIME_ZONE, hour: '2-digit', minute: '2-digit' })
+  }
+  return toDate(value).toLocaleDateString(undefined, { timeZone: DISPLAY_TIME_ZONE, month: 'numeric', day: 'numeric' })
 }
 
 async function openConversation(item: SessionHistoryItem) {
@@ -26,8 +39,15 @@ async function openConversation(item: SessionHistoryItem) {
 }
 
 const confirmingDelete = ref<string | null>(null)
+const deleteFailed = ref(false)
 async function removeConversation(item: SessionHistoryItem) {
-  await deleteSession(item.session_id)
+  deleteFailed.value = false
+  try {
+    await deleteSession(item.session_id)
+  } catch {
+    deleteFailed.value = true
+    return
+  }
   confirmingDelete.value = null
   if (session.sessionId === item.session_id) {
     session.reset()
@@ -60,7 +80,25 @@ watch(
   },
 )
 
-onMounted(loadRecent)
+// Keep the list current: a conversation started, ended or deleted here, a
+// different account signed in, or one continued on another device.
+watch(() => [session.sessionId, session.ended, session.deletedNotice, auth.user?.id], loadRecent)
+
+function onVisible() {
+  if (document.visibilityState === 'visible') loadRecent()
+}
+let timer: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  loadRecent()
+  timer = setInterval(onVisible, 15_000)
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('focus', loadRecent)
+})
+onBeforeUnmount(() => {
+  clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisible)
+  window.removeEventListener('focus', loadRecent)
+})
 </script>
 
 <template>
@@ -82,25 +120,29 @@ onMounted(loadRecent)
         :class="{ active: item.session_id === session.sessionId, confirming: confirmingDelete === item.session_id }"
       >
         <template v-if="confirmingDelete === item.session_id">
-          <span class="recent-confirm">{{ t('history.deleteShort') }}</span>
+          <span class="recent-confirm">{{ deleteFailed ? t('toolbar.deleteFailed') : t('sidebar.deleteConfirm') }}</span>
           <button type="button" class="recent-yes" @click="removeConversation(item)">{{ t('history.deleteYes') }}</button>
-          <button type="button" class="recent-no" @click="confirmingDelete = null">{{ t('history.clearConfirmNo') }}</button>
+          <button type="button" class="recent-no" @click="confirmingDelete = null; deleteFailed = false">{{ t('history.clearConfirmNo') }}</button>
         </template>
         <template v-else>
           <button
             type="button"
             class="recent-item"
-            :title="formatDateTime(item.created_at)"
+            :title="formatDateTime(item.last_active_at)"
             @click="openConversation(item)"
           >
-            {{ formatDateTime(item.created_at) }}
+            <span class="recent-title">{{ item.title || t('sidebar.untitled') }}</span>
+            <span class="recent-meta">
+              {{ shortTime(item.last_active_at) }}
+              <span v-if="item.ended_at" class="recent-ended">· {{ t('sidebar.ended') }}</span>
+            </span>
           </button>
           <button
             type="button"
             class="recent-delete"
             :aria-label="t('history.delete')"
             :title="t('history.delete')"
-            @click="confirmingDelete = item.session_id"
+            @click="confirmingDelete = item.session_id; deleteFailed = false"
           >
             ×
           </button>
@@ -194,7 +236,8 @@ onMounted(loadRecent)
   background: var(--accent-soft);
 }
 .recent-row.confirming {
-  padding: 4px 6px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
   background: var(--danger-soft);
 }
 .recent-delete {
@@ -223,7 +266,8 @@ onMounted(loadRecent)
   }
 }
 .recent-confirm {
-  flex: 1;
+  flex: 1 1 100%;
+  line-height: 1.4;
   font-size: 12px;
   color: var(--danger);
 }
@@ -253,16 +297,26 @@ onMounted(loadRecent)
   border-radius: var(--radius-sm);
   font-size: 12.5px;
   color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.recent-title,
+.recent-meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex-shrink: 0;
+}
+.recent-meta {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 .recent-item:hover,
 .recent-row.active .recent-item {
   color: var(--accent);
 }
-.recent-row.active .recent-item {
+.recent-row.active .recent-title {
   font-weight: 600;
 }
 .side-nav {

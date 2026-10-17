@@ -78,6 +78,10 @@ class FlowConfigPayload(BaseModel):
         default_factory=lambda: {"seb_summary": "flow.listen", "plan_form": "flow.act"}
     )
     to_action_step: str | None = "flow.act"
+    # Steps where "tell me what to do" is not acted on.
+    to_action_skip: list[str] = Field(default_factory=list, max_length=100)
+    # Ask the user first; jump only if they still want advice next turn.
+    to_action_confirm: bool = True
     end_today_enabled: bool = True
     crisis_country: str = "KR"
     # Which step answers "enough for today" / an overwhelmed user / the end

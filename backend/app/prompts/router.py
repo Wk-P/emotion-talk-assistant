@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import Language
-from app.prompts import registry
+from app.prompts import parts, registry
 from app.prompts.base import build_system_prompt
 from app.prompts.principles import titled_sections
 
@@ -19,7 +19,7 @@ async def build_prompt(
     language: Language,
     overrides: dict[str, str] | None = None,
     triggered: bool = False,
-) -> tuple[str, dict[str, int]]:
+) -> tuple[list[str], dict[str, int]]:
     """Returns the system prompt plus {key: version} of the blocks it was
     built from, for recording on the resulting message. `overrides` (admin
     preview only) substitutes unsaved draft text, reported as version -1.
@@ -40,22 +40,26 @@ async def build_prompt(
         if key in resolved:
             resolved[key] = registry.ResolvedPrompt(content, -1)
 
+    # A step's text may be split into 目标 / 问法 / 示例 (app/prompts/parts.py).
+    def body(m: registry.Module) -> str:
+        return parts.compose(resolved[m.key].content, sys)
+
     def text(group: str) -> str:
-        return titled_sections([(m.title(language), resolved[m.key].content) for m in modules if m.group == group])
+        return titled_sections([(m.title(language), body(m)) for m in modules if m.group == group])
 
     flow_blocks = [m for m in modules if m.group == "flow"]
     stage = next((m for m in flow_blocks if m.key == flow_key), None)
-    # The built-in flow's own text goes first and untitled (it opens with its
-    # own "当前阶段：…" line); blocks admins added to it follow under their names.
+    # The step's own text goes first and untitled, under the step heading;
+    # blocks admins added to it follow under their names.
     flow_text = "\n\n".join(
         part
         for part in (
-            _stage_heading(stage, language, sys) + resolved[flow_key].content.strip() if stage else "",
-            titled_sections([(m.title(language), resolved[m.key].content) for m in flow_blocks if m.key != flow_key]),
+            _stage_heading(stage, language, sys) + body(stage) if stage else "",
+            titled_sections([(m.title(language), body(m)) for m in flow_blocks if m.key != flow_key]),
         )
         if part
     )
 
     prompt = build_system_prompt(text("rules"), flow_text, flow_key, sys, text("other"), triggered)
-    used = {key: resolved[key].version for key in keys if resolved[key].content.strip()}
-    return prompt, used
+    versions = {key: resolved[key].version for key in keys if not parts.is_empty(resolved[key].content)}
+    return prompt, versions

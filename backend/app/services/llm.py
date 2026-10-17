@@ -5,6 +5,7 @@ from typing import Any
 from openai import APIError, AsyncOpenAI, BadRequestError
 
 from app.core.config import get_settings
+from app.services import ai_params
 
 
 logger = logging.getLogger(__name__)
@@ -34,38 +35,55 @@ class LLMResponse:
         self.signals = signals or {}
 
 
-def _client() -> AsyncOpenAI:
+def _client(params: dict[str, Any] | None = None) -> AsyncOpenAI:
     settings = get_settings()
-    return AsyncOpenAI(api_key=settings.openai_api_key)
+    params = params or {}
+    return AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        timeout=params.get("timeout_seconds") or ai_params.FIELDS["timeout_seconds"][3],
+        max_retries=params.get("max_retries", ai_params.FIELDS["max_retries"][3]),
+    )
 
 
-def _messages(system_prompt: str, history: list[dict[str, str]], user_message: str) -> list[dict[str, str]]:
-    messages = [{"role": "system", "content": system_prompt}]
+def _messages(system_prompt: list[str], history: list[dict[str, str]], user_message: str) -> list[dict[str, str]]:
+    # One system message per part (app/prompts/base.py): program, then admin.
+    messages = [{"role": "system", "content": p} for p in system_prompt]
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
     return messages
 
 
-async def _create(messages: list[dict[str, str]], model: str, effort: str | None):
+async def _create(
+    messages: list[dict[str, str]], model: str, effort: str | None, params: dict[str, Any] | None = None
+):
     kwargs: dict[str, Any] = {"reasoning_effort": effort} if effort else {}
-    try:
-        return await _client().chat.completions.create(
-            model=model, messages=messages, response_format={"type": "json_object"}, **kwargs
-        )
-    except BadRequestError as e:
-        # The admin set an effort, then switched to a model that doesn't take
-        # one: answer at the model's default rather than failing every turn.
-        if effort and "reasoning" in str(e).lower():
-            logger.warning("model %s rejected reasoning_effort=%s; retrying without it", model, effort)
-            return await _client().chat.completions.create(
-                model=model, messages=messages, response_format={"type": "json_object"}
+    kwargs.update(ai_params.request_args(params))
+    client = _client(params)
+    while True:
+        try:
+            return await client.chat.completions.create(
+                model=model, messages=messages, response_format={"type": "json_object"}, **kwargs
             )
-        raise
+        except BadRequestError as e:
+            # A setting the model doesn't take (an effort set before switching
+            # models, temperature on a reasoning model, …): drop it and answer
+            # at the model's default rather than failing every turn.
+            text = str(e).lower()
+            rejected = [k for k in kwargs if k in text]
+            if not rejected and "reasoning_effort" in kwargs and "reasoning" in text:
+                rejected = ["reasoning_effort"]
+            if not rejected:
+                raise
+            logger.warning("model %s rejected %s; retrying without", model, rejected)
+            for k in rejected:
+                kwargs.pop(k)
 
 
-async def _complete_json(messages: list[dict[str, str]], model: str, effort: str | None) -> dict[str, Any] | str:
+async def _complete_json(
+    messages: list[dict[str, str]], model: str, effort: str | None, params: dict[str, Any] | None = None
+) -> dict[str, Any] | str:
     try:
-        completion = await _create(messages, model, effort)
+        completion = await _create(messages, model, effort, params)
     except APIError as e:
         logger.exception("OpenAI call failed (model=%s)", model)
         status = getattr(e, "status_code", None)
@@ -79,15 +97,17 @@ async def _complete_json(messages: list[dict[str, str]], model: str, effort: str
 
 
 async def generate_turn(
-    system_prompt: str,
+    system_prompt: list[str],
     history: list[dict[str, str]],
     user_message: str,
     model: str,
     effort: str | None = None,
+    params: dict[str, Any] | None = None,
 ) -> LLMResponse:
     # `model` and `effort` come from model_settings (admin choice; model
-    # falls back to .env, effort to OpenAI's default for the model).
-    parsed = await _complete_json(_messages(system_prompt, history, user_message), model, effort)
+    # falls back to .env, effort to OpenAI's default for the model); `params`
+    # from ai_params (the admin's advanced settings).
+    parsed = await _complete_json(_messages(system_prompt, history, user_message), model, effort, params)
     if isinstance(parsed, str):
         parsed = {"reply_text": parsed, "candidates": []}
 

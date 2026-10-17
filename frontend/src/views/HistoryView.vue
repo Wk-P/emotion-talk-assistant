@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import SiteFooter from '@/components/SiteFooter.vue'
 import SiteHeader from '@/components/SiteHeader.vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
@@ -85,7 +85,29 @@ async function doClear() {
   await load()
 }
 
-onMounted(load)
+// Cross-device: refresh the list (and the open conversation) when the page
+// comes back into view, and every so often while it stays visible.
+async function refresh() {
+  if (document.visibilityState !== 'visible') return
+  items.value = await listHistory().catch(() => items.value)
+  if (openId.value && items.value.some((i) => i.session_id === openId.value)) {
+    const id = openId.value
+    const messages = await getSessionMessages(id).catch(() => null)
+    if (messages && openId.value === id) openMessages.value = messages
+  }
+}
+let refreshTimer: number | undefined
+onMounted(() => {
+  load()
+  refreshTimer = window.setInterval(refresh, 10000)
+  document.addEventListener('visibilitychange', refresh)
+  window.addEventListener('focus', refresh)
+})
+onBeforeUnmount(() => {
+  window.clearInterval(refreshTimer)
+  document.removeEventListener('visibilitychange', refresh)
+  window.removeEventListener('focus', refresh)
+})
 </script>
 
 <template>

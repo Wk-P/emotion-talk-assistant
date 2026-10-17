@@ -41,17 +41,18 @@ def build_system_prompt(
     sys: dict[str, str],
     other_text: str = "",
     triggered: bool = False,
-) -> str:
-    # The program's own part (sys, app/prompts/system.py) first, then the
-    # admins' blocks under the priority header, then the output format. All
-    # of it is admin-editable; a turned-off piece is simply left out.
+) -> list[str]:
+    # Two separate system messages: the program's own part (sys,
+    # app/prompts/system.py: format, signals, language, JSON output) first,
+    # then the admins' blocks under the priority header. All of it is
+    # admin-editable; a turned-off piece is simply left out.
     technical = "\n".join(
         p for p in (sys["system.format"], _flow_format(flow_key, sys), _signals(flow_key, sys, triggered), sys["system.reply_language"]) if p
     )
     sections = [s for s in (rules_text, flow_instructions, other_text) if s.strip()]
     admin = "\n\n".join(p for p in (sys["system.priority_header"], "\n\n---\n".join(sections)) if p)
-    prompt = "\n\n---\n".join(p for p in (technical, admin, sys["system.output_json"]) if p)
+    program = "\n\n---\n".join(p for p in (technical, sys["system.output_json"]) if p)
     # OpenAI's JSON mode refuses a request whose messages never say "JSON".
-    if "json" not in prompt.lower():
-        prompt += "\n\nJSON"
-    return prompt
+    if "json" not in (program + admin).lower():
+        program += "\n\nJSON"
+    return [p for p in (program, admin) if p.strip()]
