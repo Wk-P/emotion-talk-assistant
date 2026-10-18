@@ -78,6 +78,8 @@ export function recordFromConfirmation(card: ConfirmedCard, c: Confirmation): Re
       return hasFields ? { recordType: 'situation_emotion_behavior', payload: c.fields! } : null
     case 'plan_form':
       return hasFields ? { recordType: 'recovery_plan', payload: c.fields! } : null
+    case 'kindness_form':
+      return fieldText(c.fields?.text) ? { recordType: 'self_kindness', payload: { text: fieldText(c.fields?.text) } } : null
     case 'self_kindness_options':
       return chosen.length ? { recordType: 'self_kindness', payload: { text: chosen.join('\n') } } : null
     case 'recovery_action_options':

@@ -64,6 +64,8 @@ export interface ChatResponse {
   reply_text: string
   candidates: CandidateCard[]
   risk_level: 'none' | 'watch' | 'crisis'
+  user_message_id: string | null
+  assistant_message_id: string | null
 }
 
 export interface ConfirmationPayload {
@@ -91,6 +93,7 @@ export interface SessionHistoryItem {
 }
 
 export interface HistoryMessageItem {
+  id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   created_at: string
@@ -611,7 +614,7 @@ export interface FlowConfig {
   /** Self-criticism scoring, 0-100. */
   criticism: { up: number; down: number; strong: number }
   /** Checkpoint card -> the step it may show in (null = never). */
-  card_steps: Record<'seb_summary' | 'plan_form', string | null>
+  card_steps: Record<'seb_summary' | 'plan_form' | 'kindness_form', string | null>
   /** "Tell me what to do" jumps here (null = ignored). */
   to_action_step: string | null
   /** Steps where "tell me what to do" is not acted on. */

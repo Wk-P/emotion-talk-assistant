@@ -163,7 +163,7 @@ const warnings = computed(() => {
 // Each switch turns a rule on (picking the first free step) or off (null).
 type StepRule = 'stabilize_step' | 'ending_step' | 'closing_step' | 'to_action_step'
 const ROLE_RULES = ['stabilize_step', 'ending_step', 'closing_step'] as const
-const CARD_TYPES = ['seb_summary', 'plan_form'] as const
+const CARD_TYPES = ['seb_summary', 'plan_form', 'kindness_form'] as const
 // A step may hold only one role and one card (the backend refuses doubles).
 function takenByOther(rule: string, key: string): boolean {
   const c = config.value

@@ -70,6 +70,7 @@ class TurnResult:
 _CARD_NAMES = {
     "seb_summary": ("总结卡片", "요약 카드"),
     "plan_form": ("行动计划卡片", "행동 계획 카드"),
+    "kindness_form": ("友善的话卡片", "따뜻한 말 카드"),
     "skip": ("跳过", "건너뛰기"),
     "end": ("结束对话", "대화 끝내기"),
     "emotion_options": ("情绪选项", "감정 선택지"),
@@ -176,7 +177,11 @@ def _filter_candidates(
 # Tells the model which one-time checkpoints are already done, so it neither
 # re-offers them (they'd be filtered anyway) nor refers to a card the user
 # will never see. Wording: admin page "程序附加说明" (app/prompts/system.py).
-_SHOWN_CARD_NOTES = {"seb_summary": "system.note_summary_shown", "plan_form": "system.note_plan_shown"}
+_SHOWN_CARD_NOTES = {
+    "seb_summary": "system.note_summary_shown",
+    "plan_form": "system.note_plan_shown",
+    "kindness_form": "system.note_kindness_shown",
+}
 
 
 def _progress_note(
@@ -220,6 +225,8 @@ def merge_confirmation(session: ConversationSession, confirmation: dict[str, Any
 
     if card_type == "emotion_options":
         ctx["emotions"] = list({*ctx.get("emotions", []), *values})
+    elif card_type == "kindness_form" and (confirmation.get("fields") or {}).get("text"):
+        ctx.setdefault("self_kindness_texts", []).append(confirmation["fields"]["text"])
     elif card_type == "self_kindness_options" and values:
         ctx.setdefault("self_kindness_texts", []).append(values[0])
     elif card_type == "stabilization_options" and values:
@@ -352,7 +359,9 @@ async def _continue_flow(
     risk: RiskLevel = RiskLevel.NONE,
     ending: bool = False,
 ) -> TurnResult:
-    system_prompt, prompt_versions = await build_prompt(db, flow_key, session.language, triggered=flow_key != state["stage"])
+    system_prompt, prompt_versions = await build_prompt(
+        db, flow_key, session.language, triggered=flow_key != state["stage"], card=cfg.card_for(flow_key)
+    )
     messages = await _load_messages(db, session.id)
     sys = await registry.system_texts(db, session.language)
     # Progress notes are the program's: they go with its message, the first.

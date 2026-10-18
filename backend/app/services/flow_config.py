@@ -82,9 +82,13 @@ MAX_CRISIS_REPLY = 1000
 # Self-criticism level, 0-100: each message with a self-criticism word adds
 # `up`, each without takes off `down`; at `strong` or more it counts as strong.
 DEFAULT_CRITICISM = {"up": 25, "down": 5, "strong": 50}
-# The two checkpoint cards and the step each may show in (None = never).
-CARD_TYPES = ("seb_summary", "plan_form")
-DEFAULT_CARD_STEPS: dict[str, str | None] = {"seb_summary": stages.LISTEN, "plan_form": stages.ACT}
+# The checkpoint cards and the step each may show in (None = never).
+CARD_TYPES = ("seb_summary", "plan_form", "kindness_form")
+DEFAULT_CARD_STEPS: dict[str, str | None] = {
+    "seb_summary": stages.LISTEN,
+    "plan_form": stages.ACT,
+    "kindness_form": stages.SELF_KINDNESS,
+}
 # "Tell me what to do": the step it jumps to (None = ignored).
 DEFAULT_TO_ACTION = stages.ACT
 # Crisis resources shown: this country's ("" = all).

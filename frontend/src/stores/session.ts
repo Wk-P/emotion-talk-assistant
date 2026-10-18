@@ -16,6 +16,9 @@ import {
 import type { RecordDraft } from '@/utils/fieldLabels'
 
 export interface ChatTurn {
+  // The stored message's id; a turn just typed has none until the reply
+  // comes back. Sync uses it so a message is never shown twice.
+  id?: string
   role: 'user' | 'assistant'
   text: string
   candidates?: CandidateCard[]
@@ -70,7 +73,7 @@ export const useSessionStore = defineStore('session', () => {
     language.value = lang
     turns.value = messages
       .filter((m): m is typeof m & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role, text: m.content }))
+      .map((m) => ({ id: m.id, role: m.role, text: m.content }))
     serverCount.value = turns.value.length
     answeredTurnIndices.value = new Set()
     recordDrafts.value = new Map()
@@ -82,7 +85,10 @@ export const useSessionStore = defineStore('session', () => {
   async function send(message?: string, confirmation?: ConfirmationPayload, opts?: { skipBubble?: boolean }) {
     if ((!sessionId.value && !pending.value) || sending.value || ended.value) return
     error.value = null
+    syncSeq++
+    let bubble: ChatTurn | undefined
     if (message && !opts?.skipBubble) turns.value.push({ role: 'user', text: message })
+    if (message) bubble = [...turns.value].reverse().find((t) => t.role === 'user' && !t.id && t.text === message)
     sending.value = true
     try {
       if (!sessionId.value) {
@@ -91,7 +97,9 @@ export const useSessionStore = defineStore('session', () => {
         pending.value = false
       }
       const res = await sendChat(sessionId.value, message, confirmation)
+      if (bubble && res.user_message_id) bubble.id = res.user_message_id
       turns.value.push({
+        id: res.assistant_message_id ?? undefined,
         role: 'assistant',
         text: res.reply_text,
         candidates: res.candidates,
@@ -121,17 +129,31 @@ export const useSessionStore = defineStore('session', () => {
   // Picks up messages sent from another device (or tab) into the open
   // conversation. Polled by ChatView while the page is visible.
   async function sync() {
-    if (!sessionId.value || sending.value || error.value) return
+    if (!sessionId.value || sending.value || error.value || catchingUp > 0) return
     await catchUp(sessionId.value, true)
   }
 
+  // Bumped by every send: a poll that started before it is stale (it would
+  // re-add the turn this device just showed) and must be dropped.
+  let syncSeq = 0
+  // Catch-ups in flight; a poll waits until the count is up to date, or it
+  // would ask from the old count and show this device's own turn again.
+  let catchingUp = 0
+
   async function catchUp(id: string, show: boolean) {
-    const res = await syncSession(id, serverCount.value).catch(() => null)
+    const seq = syncSeq
+    catchingUp++
+    const res = await syncSession(id, serverCount.value)
+      .catch(() => null)
+      .finally(() => catchingUp--)
     // Dropped if the user sent, switched or reset meanwhile.
-    if (!res || sessionId.value !== id || (show && sending.value)) return
+    if (!res || sessionId.value !== id) return
+    if (show && (sending.value || seq !== syncSeq)) return
     if (show) {
+      const known = new Set(turns.value.map((t) => t.id).filter(Boolean))
       for (const m of res.messages) {
-        if (m.role === 'user' || m.role === 'assistant') turns.value.push({ role: m.role, text: m.content })
+        if (known.has(m.id)) continue
+        if (m.role === 'user' || m.role === 'assistant') turns.value.push({ id: m.id, role: m.role, text: m.content })
       }
     }
     serverCount.value = res.total

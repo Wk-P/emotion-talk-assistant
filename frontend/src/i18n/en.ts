@@ -167,6 +167,7 @@ export const en = {
         hint: 'A card only shows in its step; confirming it ends that step.',
         seb_summary: 'Summary card',
         plan_form: 'Action plan card',
+        kindness_form: 'Kind words card',
       },
       requests: {
         title: 'Special user requests',
@@ -263,6 +264,7 @@ export const en = {
       closing_step: "When the user says \"that's enough for today\", wrap up with",
       seb_summary: "Show the summary card in",
       plan_form: "Show the action-plan card in",
+      kindness_form: "Show the kind-words card in",
       after: "after the user has said at least",
       afterUnit: "things",
       to_action_step: "When the user asks \"what should I do\", go to",
@@ -497,6 +499,7 @@ export const en = {
   fieldsCard: {
     seb_summary: 'This is a short summary (situation – emotion – behaviour) based on what you just said. Check whether it’s right; you can edit it directly.',
     plan_form: 'This is a draft action plan based on your conversation. You can change it before confirming.',
+    kindness_form: 'Some kind words you want to say to yourself. Change them into your own words before confirming.',
     generic: 'This was put together from your conversation. You can edit it before confirming.',
   },
   admin: {
@@ -691,6 +694,7 @@ export const en = {
         output_json: { name: 'Output format (JSON)', desc: 'Sent last, every turn: reply in a format the program can read. ⚠️ Don\'t rename or delete reply_text, candidates etc., or replies won\'t show.' },
         format: { name: 'Card ground rule', desc: 'Sent every turn: no cards by default; options go in the reply text.' },
         card_listen: { name: 'Summary card (hear the concern)', desc: 'Only in “Hear the concern”: when to show the what-happened/feeling/response card. ⚠️ Keep seb_summary, situation, emotion, behavior.' },
+        card_kindness: { name: 'Kind words card (self-kindness)', desc: 'Only in the step holding the kind-words card: when to show it. ⚠️ Keep kindness_form, text.' },
         card_act: { name: 'Plan card (small recovery action)', desc: 'Only in “Small recovery action”: when to show the plan card. ⚠️ Keep plan_form, action, when, support, backup.' },
         no_cards: { name: 'No cards in other steps', desc: 'Sent in every other step: no card here.' },
         signals: { name: 'Progress signals', desc: 'Sent in every step (except calming and ending): the AI tells the program whether the step is done and whether the user wants advice now or to stop; the program moves steps on this. ⚠️ Keep stage_done, user_request, to_action, end_today.' },
@@ -698,6 +702,7 @@ export const en = {
         note_header: { name: '“Progress” heading', desc: 'Heading placed before the progress notes below when any appear.' },
         note_summary_shown: { name: 'Progress: summary shown', desc: 'Added after the summary card was shown, so the AI doesn\'t summarize again.' },
         note_plan_shown: { name: 'Progress: plan shown', desc: 'Added after the plan card was shown, so the AI doesn\'t make another.' },
+        note_kindness_shown: { name: 'Progress: kind words shown', desc: 'Added after the kind-words card was shown, so the AI doesn\'t make another.' },
         note_listen_confirm: { name: 'Progress: awaiting summary confirmation (purpose next)', desc: 'Added in “Hear the concern” after the summary, when “Confirm the purpose” is next: how to move on when the user confirms by typing. ⚠️ Keep stage_done.' },
         note_listen_confirm_other: { name: 'Progress: awaiting summary confirmation (other step next)', desc: 'As above, when the next step isn\'t “Confirm the purpose”. ⚠️ Keep stage_done.' },
         note_purpose: { name: 'Progress: chosen purpose', desc: 'Added every turn once the user picked a purpose. {purpose} becomes that purpose.' },

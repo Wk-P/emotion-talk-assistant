@@ -28,6 +28,7 @@ class SessionHistoryItem(BaseModel):
 
 
 class HistoryMessageItem(BaseModel):
+    id: str
     role: str
     content: str
     created_at: str
@@ -64,3 +65,7 @@ class ChatResponse(BaseModel):
     reply_text: str
     candidates: list[CandidateCard] = []
     risk_level: RiskLevel = RiskLevel.NONE
+    # Ids of the stored messages for this turn, so the client can tell its
+    # own turn apart from ones a sync brings in (no duplicates).
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None

@@ -107,7 +107,7 @@ async def get_session_messages(
         select(Message).where(Message.session_id == session.id).order_by(Message.created_at.asc())
     )
     return [
-        HistoryMessageItem(role=m.role.value, content=m.content, created_at=kst_iso(m.created_at))
+        HistoryMessageItem(id=m.id, role=m.role.value, content=m.content, created_at=kst_iso(m.created_at))
         for m in result.scalars().all()
     ]
 
@@ -129,7 +129,7 @@ async def sync_session(
     rows = result.scalars().all()
     return SessionSyncResponse(
         messages=[
-            HistoryMessageItem(role=m.role.value, content=m.content, created_at=kst_iso(m.created_at))
+            HistoryMessageItem(id=m.id, role=m.role.value, content=m.content, created_at=kst_iso(m.created_at))
             for m in rows[after:]
         ],
         total=len(rows),

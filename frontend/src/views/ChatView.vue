@@ -39,7 +39,7 @@ function onKeydown(e: KeyboardEvent) {
 function exportConversation() {
   const content = buildTranscriptMarkdown(
     new Date().toISOString(),
-    session.turns.map((turn) => ({ role: turn.role, content: turn.text, created_at: '' })),
+    session.turns.map((turn) => ({ id: turn.id ?? '', role: turn.role, content: turn.text, created_at: '' })),
     { title: t('app.title'), createdAt: t('history.title'), user: t('chat.you'), assistant: t('chat.assistant') },
   )
   downloadTextFile(`conversation-${displayDay()}.md`, content)

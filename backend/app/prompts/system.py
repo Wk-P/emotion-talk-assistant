@@ -119,6 +119,22 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
         },
     ),
     (
+        "card_kindness",
+        {Language.ZH: "友善的话卡片（自我友善）", Language.KO: "따뜻한 말 카드(자기친절)"},
+        {
+            Language.ZH: (
+                "- 只有在和用户一起整理出一句他想对自己说的友善的话、请他确认时，才在 candidates 里放一条 type 为 'kindness_form' 的记录，"
+                "fields 固定用一个键：text（用户想对自己说的友善的话，尽量用用户自己的说法）；"
+                "每次对话只生成一次。其余时候 candidates 一律给空数组。"
+            ),
+            Language.KO: (
+                "- 사용자와 함께 자신에게 건네고 싶은 따뜻한 말 한마디를 정리해 확인받을 때에만 candidates에 type 'kindness_form' 항목 하나를 넣으세요. "
+                "fields는 한 키로 고정: text(사용자가 자신에게 건네고 싶은 따뜻한 말, 가능하면 사용자의 표현 그대로). "
+                "대화당 한 번만 생성하세요. 그 외에는 candidates를 항상 빈 배열로 두세요."
+            ),
+        },
+    ),
+    (
         "no_cards",
         {Language.ZH: "其他步骤不出卡片", Language.KO: "다른 단계는 카드 없음"},
         {
@@ -177,6 +193,14 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
         {
             Language.ZH: "本次对话已经给用户看过整理好的小计划了，不要再生成计划，也不要在回复里说「下面是计划」。",
             Language.KO: "이번 대화에서 정리한 작은 계획은 이미 보여 주었어요. 다시 만들지 말고, 답변에서 '아래 계획'이라고 말하지 마세요.",
+        },
+    ),
+    (
+        "note_kindness_shown",
+        {Language.ZH: "进度：友善的话已给过", Language.KO: "진행: 따뜻한 말을 이미 보여 줌"},
+        {
+            Language.ZH: "本次对话已经给用户看过整理好的友善的话了，不要再生成这张卡片。",
+            Language.KO: "이번 대화에서 정리한 따뜻한 말은 이미 보여 주었어요. 이 카드를 다시 만들지 마세요.",
         },
     ),
     (

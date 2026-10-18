@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,8 +31,10 @@ async def chat(
 
     confirmation = payload.confirmation.model_dump() if payload.confirmation else None
 
+    user_message_id: str | None = None
     if payload.message:
-        db.add(Message(session_id=session.id, role=MessageRole.USER, content=payload.message))
+        user_message_id = str(uuid.uuid4())
+        db.add(Message(id=user_message_id, session_id=session.id, role=MessageRole.USER, content=payload.message))
         session.participated = True
 
     try:
@@ -50,11 +53,14 @@ async def chat(
     # dialogue_state._describe_confirmation). Persist that too so later turns'
     # history reconstruction still shows what was picked, not just this reply.
     if not payload.message and result.user_text_used:
-        db.add(Message(session_id=session.id, role=MessageRole.USER, content=result.user_text_used))
+        user_message_id = str(uuid.uuid4())
+        db.add(Message(id=user_message_id, session_id=session.id, role=MessageRole.USER, content=result.user_text_used))
         session.participated = True
 
+    assistant_message_id = str(uuid.uuid4())
     db.add(
         Message(
+            id=assistant_message_id,
             session_id=session.id,
             role=MessageRole.ASSISTANT,
             content=result.reply_text,
@@ -81,4 +87,10 @@ async def chat(
     # via ConsentCategory.DIALOGUE_HISTORY — enforced in app/api/consent.py's
     # `end_session`, not here.
 
-    return ChatResponse(reply_text=result.reply_text, candidates=result.candidates, risk_level=result.risk_level)
+    return ChatResponse(
+        reply_text=result.reply_text,
+        candidates=result.candidates,
+        risk_level=result.risk_level,
+        user_message_id=user_message_id,
+        assistant_message_id=assistant_message_id,
+    )

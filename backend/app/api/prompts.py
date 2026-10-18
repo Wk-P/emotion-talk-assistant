@@ -374,7 +374,8 @@ async def preview_prompt(
     cfg = await flow_config.load(db)
     triggered = payload.stage in (cfg.stabilize_step, cfg.ending_step)
     system_prompt, versions = await build_prompt(
-        db, payload.stage, payload.language, overrides=payload.overrides, triggered=triggered
+        db, payload.stage, payload.language, overrides=payload.overrides, triggered=triggered,
+        card=cfg.card_for(payload.stage),
     )
     try:
         response = await generate_turn(

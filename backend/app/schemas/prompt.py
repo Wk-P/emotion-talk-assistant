@@ -75,7 +75,7 @@ class FlowConfigPayload(BaseModel):
     criticism: dict[str, int] = Field(default_factory=lambda: {"up": 25, "down": 5, "strong": 50})
     # Checkpoint card type -> the step it may show in (None = never).
     card_steps: dict[str, str | None] = Field(
-        default_factory=lambda: {"seb_summary": "flow.listen", "plan_form": "flow.act"}
+        default_factory=lambda: {"seb_summary": "flow.listen", "plan_form": "flow.act", "kindness_form": "flow.self_kindness"}
     )
     to_action_step: str | None = "flow.act"
     # Steps where "tell me what to do" is not acted on.
