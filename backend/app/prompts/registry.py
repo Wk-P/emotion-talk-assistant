@@ -41,7 +41,8 @@ MAX_MODULE_NAME_LENGTH = 40
 DEFAULTS: dict[str, dict[Language, str]] = {**principles.DEFAULTS, **stages.FLOW_INSTRUCTIONS, **system.DEFAULTS}
 
 
-MAX_CONTENT_LENGTH = 20000
+# Only a guard against runaway pastes; real prompts never come close.
+MAX_CONTENT_LENGTH = 1_000_000
 
 
 @dataclass

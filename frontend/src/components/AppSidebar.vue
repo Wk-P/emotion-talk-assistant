@@ -33,8 +33,8 @@ function shortTime(value: string): string {
 }
 
 async function openConversation(item: SessionHistoryItem) {
-  if (item.session_id === session.sessionId) return
-  await session.resume(item.session_id, item.language, !!item.ended_at)
+  // Already open: just go back to it (it may be open behind another page).
+  if (item.session_id !== session.sessionId) await session.resume(item.session_id, item.language, !!item.ended_at)
   router.push('/')
 }
 
@@ -66,7 +66,7 @@ function logout() {
   // Clear the open chat too — it belongs to the account being signed out.
   auth.signOut(() => {
     session.reset()
-    return router.push('/')
+    return router.push('/login')
   })
 }
 
@@ -151,14 +151,11 @@ onBeforeUnmount(() => {
     </div>
 
     <nav class="side-nav">
-      <button type="button" @click="router.push('/reflection')">{{ t('reflection.title') }}</button>
-      <button type="button" @click="router.push('/history')">{{ t('toolbar.history') }}</button>
-      <button type="button" @click="router.push('/records')">{{ t('toolbar.records') }}</button>
-      <button type="button" @click="router.push('/help')">{{ t('toolbar.help') }}</button>
-      <button type="button" @click="router.push('/privacy')">{{ t('privacy.title') }}</button>
-      <button v-if="auth.user && auth.user.role !== 'user'" type="button" @click="router.push('/admin')">
-        {{ t('admin.entry') }}
-      </button>
+      <RouterLink to="/history">{{ t('toolbar.history') }}</RouterLink>
+      <RouterLink to="/records">{{ t('toolbar.records') }}</RouterLink>
+      <RouterLink to="/reflection">{{ t('reflection.title') }}</RouterLink>
+      <RouterLink to="/help">{{ t('toolbar.help') }}</RouterLink>
+      <RouterLink to="/privacy">{{ t('privacy.title') }}</RouterLink>
     </nav>
 
     <LanguageSwitch class="sidebar-lang" show-label />
@@ -168,6 +165,7 @@ onBeforeUnmount(() => {
         {{ t('toolbar.login') }}
       </button>
       <template v-else>
+        <RouterLink v-if="auth.user.role !== 'user'" to="/admin" class="btn-outline to-admin">{{ t('admin.entry') }}</RouterLink>
         <div class="email">{{ auth.user.username }}</div>
         <button type="button" class="btn-text" @click="logout">{{ t('toolbar.logout') }}</button>
       </template>
@@ -177,8 +175,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .sidebar {
-  width: 220px;
   flex-shrink: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -205,8 +203,8 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
 }
 .recent {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 160px;
+  min-height: 120px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -325,19 +323,27 @@ onBeforeUnmount(() => {
   gap: 4px;
   flex-shrink: 0;
 }
-.side-nav button {
-  text-align: left;
+.side-nav a {
   padding: 9px 10px;
-  border: none;
-  background: none;
   border-radius: var(--radius-sm);
   font-size: 13.5px;
   color: var(--text);
+  text-decoration: none;
 }
-.side-nav button:hover {
+.side-nav a:hover,
+.side-nav a.router-link-active {
   background: var(--accent-soft);
   color: var(--accent);
-  transform: none;
+}
+.side-nav a.router-link-active {
+  font-weight: 600;
+}
+.to-admin {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  text-align: center;
+  text-decoration: none;
 }
 .account {
   margin-top: auto;

@@ -9,9 +9,7 @@ import {
   type Reflection,
   type ReflectionAnswers,
 } from '@/api/client'
-import SiteFooter from '@/components/SiteFooter.vue'
 import { chatLangFor } from '@/i18n/langPreference'
-import SiteHeader from '@/components/SiteHeader.vue'
 import { displayDay } from '@/utils/time'
 
 // 每日省察 — the daily usage reflection questionnaire
@@ -72,7 +70,6 @@ onMounted(load)
 
 <template>
   <div class="reflection-view">
-    <SiteHeader />
     <main class="page-body">
       <h1 class="page-title">{{ t('reflection.title') }}</h1>
       <p class="lead">{{ t('reflection.lead') }}</p>
@@ -133,7 +130,6 @@ onMounted(load)
         </section>
       </div>
     </main>
-    <SiteFooter />
   </div>
 </template>
 

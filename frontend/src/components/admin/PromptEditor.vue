@@ -7,10 +7,12 @@ import FlowOrderEditor from './FlowOrderEditor.vue'
 import ModelPicker from './ModelPicker.vue'
 import PromptTools from './PromptTools.vue'
 import {
+  deletePromptDraft,
   listPromptVersions,
   listPrompts,
   previewPrompt,
   savePrompt,
+  savePromptDraft,
   type CandidateCard,
   type Language,
   type PromptGroup,
@@ -38,6 +40,9 @@ const selectedKey = ref<string>('rules.role_scope')
 const drafts = ref<Record<string, string>>({})
 const note = ref('')
 const saving = ref(false)
+const savingDraft = ref(false)
+const draftFlash = ref(false)
+const maxLength = ref(1_000_000)
 const error = ref('')
 const savedFlash = ref(false)
 
@@ -86,6 +91,7 @@ const groupedItems = computed(() =>
 function optionLabel(m: PromptModuleItem, item: PromptItem): string {
   const tags: string[] = []
   if (isDirty(item)) tags.push(t('prompts.unsaved'))
+  else if (item.draft_content !== null) tags.push(t('prompts.draftTag'))
   if (!m.enabled) tags.push(t('prompts.disabledBadge'))
   if (!m.built_in && partsEmpty(item.content)) tags.push(t('prompts.emptyBadge'))
   else if (m.built_in && item.version > 0) tags.push(t('prompts.modified'))
@@ -117,19 +123,27 @@ function descOf(m: PromptModuleItem): string {
 }
 
 const draft = computed({
-  get: () => (current.value ? (drafts.value[draftId(current.value.key, lang.value)] ?? current.value.content) : ''),
+  get: () => (current.value ? (drafts.value[draftId(current.value.key, lang.value)] ?? baseline(current.value)) : ''),
   set: (value: string) => {
     if (!current.value) return
     drafts.value = { ...drafts.value, [draftId(current.value.key, lang.value)]: value }
   },
 })
 
+// What the editor would show with no local edits: the saved draft if
+// there is one, else the text in use.
+const baseline = (item: PromptItem) => item.draft_content ?? item.content
+
+// Edited since the last 暂存 (or since load).
 function isDirty(item: PromptItem) {
   const d = drafts.value[draftId(item.key, item.language)]
-  return d !== undefined && d !== item.content
+  return d !== undefined && d !== baseline(item)
 }
 
 const dirty = computed(() => (current.value ? isDirty(current.value) : false))
+// Differs from the text in use — what 启用 would change.
+const differsFromLive = computed(() => current.value !== null && draft.value !== current.value.content)
+const tooLong = computed(() => draft.value.length > maxLength.value)
 
 // A step is written in three boxes (目标 / 问法 / 示例); every other block is
 // one box.
@@ -159,6 +173,7 @@ async function load(silent = false) {
     items.value = data.items
     modules.value = data.modules
     deletedKeys.value = data.deleted
+    maxLength.value = data.max_content_length ?? maxLength.value
   } finally {
     loading.value = false
   }
@@ -184,20 +199,42 @@ function errorMessage(e: unknown): string {
   const status = (e as { response?: { status?: number } }).response?.status
   if (status === 409) return t('prompts.conflict')
   if (status === 400) return t('prompts.unchanged')
-  return t('prompts.saveFailed')
+  if (status === 422) return t('prompts.tooLong', { max: maxLength.value.toLocaleString() })
+  // Tag the cause so a screenshot is enough to tell what happened.
+  return `${t('prompts.saveFailed')} (${status ?? 'network'})`
 }
 
+function replaceItem(updated: PromptItem) {
+  const idx = items.value.findIndex((i) => i.key === updated.key && i.language === updated.language)
+  if (idx !== -1) items.value[idx] = updated
+  const next = { ...drafts.value }
+  delete next[draftId(updated.key, updated.language)]
+  drafts.value = next
+}
+
+// 暂存: keep the edit on the server without putting it in use.
+async function stash() {
+  if (!current.value || !dirty.value || partsEmpty(draft.value) || tooLong.value) return
+  savingDraft.value = true
+  error.value = ''
+  try {
+    replaceItem(await savePromptDraft(current.value.key, lang.value, draft.value))
+    draftFlash.value = true
+    setTimeout(() => (draftFlash.value = false), 2000)
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    savingDraft.value = false
+  }
+}
+
+// 启用: publish what's in the editor (the saved draft goes with it).
 async function save() {
-  if (!current.value || !dirty.value || partsEmpty(draft.value)) return
+  if (!current.value || !differsFromLive.value || partsEmpty(draft.value) || tooLong.value) return
   saving.value = true
   error.value = ''
   try {
-    const updated = await savePrompt(current.value.key, lang.value, draft.value, note.value)
-    const idx = items.value.findIndex((i) => i.key === updated.key && i.language === updated.language)
-    if (idx !== -1) items.value[idx] = updated
-    const next = { ...drafts.value }
-    delete next[draftId(updated.key, updated.language)]
-    drafts.value = next
+    replaceItem(await savePrompt(current.value.key, lang.value, draft.value, note.value))
     note.value = ''
     savedFlash.value = true
     setTimeout(() => (savedFlash.value = false), 2000)
@@ -214,6 +251,19 @@ function discard() {
   const next = { ...drafts.value }
   delete next[draftId(current.value.key, lang.value)]
   drafts.value = next
+}
+
+// Throw the saved draft away: back to the text in use.
+async function dropDraft() {
+  const item = current.value
+  if (!item || item.draft_content === null) return
+  error.value = ''
+  try {
+    await deletePromptDraft(item.key, item.language)
+    replaceItem({ ...item, draft_content: null, draft_updated_at: null, draft_updated_by: null })
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
 }
 
 function loadDefault() {
@@ -249,7 +299,9 @@ const testLogEl = ref<HTMLElement | null>(null)
 const draftOverrides = computed(() => {
   const out: Record<string, string> = {}
   for (const item of langItems.value) {
-    if (isDirty(item)) out[item.key] = drafts.value[draftId(item.key, item.language)]!
+    // Unapplied text — typed here or 暂存'd — is what gets tried.
+    const text = drafts.value[draftId(item.key, item.language)] ?? baseline(item)
+    if (text !== item.content) out[item.key] = text
   }
   return out
 })
@@ -264,8 +316,8 @@ watch(() => testTurns.value.length, scrollTestLog)
 watch(testSending, scrollTestLog)
 
 // Candidate cards come back either as selectable items or as a fields form
-// (seb_summary / plan_form) — shown read-only here, just so the researcher
-// sees what the model proposed.
+// — shown read-only here, just so the researcher sees what the model
+// proposed (the chat itself never shows them).
 function candidateLines(card: CandidateCard): string[] {
   if (card.items?.length) return card.items.map((i) => i.label)
   return Object.entries(card.fields ?? {})
@@ -440,9 +492,31 @@ onMounted(() => load())
           <textarea v-else v-model="draft" class="content" spellcheck="false" />
         </template>
 
+        <p class="char-count" :class="{ over: tooLong }">
+          {{ t('prompts.charCount', { n: draft.length.toLocaleString(), max: maxLength.toLocaleString() }) }}
+          <template v-if="tooLong"> · {{ t('prompts.tooLong', { max: maxLength.toLocaleString() }) }}</template>
+        </p>
+        <p v-if="current.draft_content !== null" class="draft-note">
+          {{ t('prompts.draftPending', { who: current.draft_updated_by ?? '—', time: current.draft_updated_at ? formatDateTime(current.draft_updated_at) : '' }) }}
+          <button type="button" class="btn-text" @click="dropDraft">{{ t('prompts.deleteDraft') }}</button>
+        </p>
+
         <div class="save-row">
           <input v-model="note" class="note-input" maxlength="200" :placeholder="t('prompts.notePlaceholder')" />
-          <button type="button" class="btn-primary" :disabled="!dirty || saving || partsEmpty(draft)" @click="save">
+          <button
+            type="button"
+            class="btn-outline"
+            :disabled="!dirty || savingDraft || saving || partsEmpty(draft) || tooLong"
+            @click="stash"
+          >
+            {{ savingDraft ? t('prompts.savingDraft') : t('prompts.saveDraft') }}
+          </button>
+          <button
+            type="button"
+            class="btn-primary"
+            :disabled="!differsFromLive || saving || savingDraft || partsEmpty(draft) || tooLong"
+            @click="save"
+          >
             {{ saving ? t('prompts.saving') : t('prompts.save') }}
           </button>
         </div>
@@ -461,6 +535,7 @@ onMounted(() => load())
             {{ showVersions ? t('prompts.hideHistory') : t('prompts.showHistory') }}
           </button>
           <span v-if="savedFlash" class="flash">{{ t('prompts.saved') }}</span>
+          <span v-if="draftFlash" class="flash">{{ t('prompts.draftSaved') }}</span>
           <span v-if="error" class="error">{{ error }}</span>
         </div>
         <p class="hint">{{ t('prompts.saveHint') }}</p>
@@ -773,6 +848,7 @@ onMounted(() => load())
   overflow-wrap: anywhere;
 }
 .phone .save-row,
+.phone .char-count,
 .phone .secondary-row,
 .phone .secondary-row + .hint,
 .phone .versions {
@@ -849,6 +925,28 @@ onMounted(() => load())
   gap: 8px;
   margin-top: 12px;
 }
+.char-count {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+}
+.char-count.over {
+  color: var(--danger);
+  font-weight: 600;
+}
+.draft-note {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.draft-note .btn-text {
+  margin-left: 6px;
+}
+.save-row .btn-outline,
 .save-row .btn-primary {
   padding: 10px 18px;
   font-size: 14px;

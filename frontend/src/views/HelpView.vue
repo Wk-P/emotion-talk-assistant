@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SiteFooter from '@/components/SiteFooter.vue'
-import SiteHeader from '@/components/SiteHeader.vue'
 import { CONTACT } from '@/content/contact'
 
 // Help & contact in one page: about the tool, emergency resources (first, so
@@ -47,7 +45,6 @@ async function copy(key: string, value: string) {
 
 <template>
   <div class="help-view">
-    <SiteHeader />
     <main class="page-body">
       <h1 class="page-title">{{ t('help.title') }}</h1>
       <p class="lead">{{ t('help.lead') }}</p>
@@ -151,7 +148,6 @@ async function copy(key: string, value: string) {
         </div>
       </div>
     </main>
-    <SiteFooter />
   </div>
 </template>
 

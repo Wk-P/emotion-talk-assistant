@@ -116,3 +116,14 @@ async def generate_turn(
         candidates=parsed.get("candidates", []) or [],
         signals={k: parsed.get(k) for k in SIGNAL_FIELDS},
     )
+
+
+async def generate_json(
+    system_prompt: str, user_message: str, model: str, effort: str | None = None, params: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """A one-off JSON answer outside the conversation (e.g. the conversation
+    card, app/services/summary_card.py). {} when the model didn't return an
+    object."""
+
+    parsed = await _complete_json(_messages([system_prompt], [], user_message), model, effort, params)
+    return parsed if isinstance(parsed, dict) else {}

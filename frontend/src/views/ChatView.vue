@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
-import AppMenu from '@/components/AppMenu.vue'
-import AppSidebar from '@/components/AppSidebar.vue'
+import type { ConfirmationPayload, Language } from '@/api/client'
 import BottomToolbar from '@/components/BottomToolbar.vue'
 import CandidateCardView from '@/components/cards/CandidateCardView.vue'
+import ConversationCard from '@/components/cards/ConversationCard.vue'
+import EndFlow from '@/components/cards/EndFlow.vue'
 import ConsentDialog from '@/components/ConsentDialog.vue'
 import { useSessionStore } from '@/stores/session'
-import { recordFromConfirmation } from '@/utils/fieldLabels'
 import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
 import { displayDay } from '@/utils/time'
 
 const { t } = useI18n()
+// Narrow screens: opens AppLayout's sidebar drawer.
+const openNav = inject<() => void>('openNav', () => {})
 const session = useSessionStore()
 const draft = ref('')
 const scrollEl = ref<HTMLElement | null>(null)
@@ -61,6 +62,7 @@ const showEmptyHint = computed(() => !needsAck.value && session.turns.length ===
 // safety response, app/services/dialogue_state.py, is still fixed by code).
 function onAcknowledge(lang: Language) {
   session.begin(lang)
+  nextTick(() => inputEl.value?.focus())
 }
 
 function scrollToBottom() {
@@ -82,16 +84,36 @@ let syncTimer: number | undefined
 function syncNow() {
   if (document.visibilityState === 'visible') void session.sync()
 }
+// Back on the page: also the moment a review card may be due.
+function onReturn() {
+  if (document.visibilityState !== 'visible') return
+  void session.sync()
+  void session.checkReview()
+}
 onMounted(() => {
   syncTimer = window.setInterval(syncNow, SYNC_MS)
-  document.addEventListener('visibilitychange', syncNow)
-  window.addEventListener('focus', syncNow)
+  document.addEventListener('visibilitychange', onReturn)
+  window.addEventListener('focus', onReturn)
 })
 onBeforeUnmount(() => {
   window.clearInterval(syncTimer)
-  document.removeEventListener('visibilitychange', syncNow)
-  window.removeEventListener('focus', syncNow)
+  document.removeEventListener('visibilitychange', onReturn)
+  window.removeEventListener('focus', onReturn)
 })
+
+// Conversation cards shown inline after the message they followed: review
+// cards, and a final card once it was kept (while the end flow is still on
+// the card step, EndFlow shows it).
+function cardsAfter(idx: number) {
+  return session.cards.filter(
+    (c) =>
+      c.after_messages === idx + 1 &&
+      (c.kind === 'review' || (c.decision === 'saved' && session.endFlow !== 'card')),
+  )
+}
+const inEndFlow = computed(() => session.ended && (session.endFlow === 'card' || session.endFlow === 'conversation'))
+watch(() => session.cards.length, scrollToBottom)
+watch(() => session.endFlow, scrollToBottom)
 
 function submit() {
   const text = draft.value.trim()
@@ -100,33 +122,19 @@ function submit() {
   session.send(text)
 }
 
-function onCardConfirm(idx: number, card: CandidateCard, payload: ConfirmationPayload) {
+function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   session.markAnswered(idx)
-  const draft = recordFromConfirmation(card, payload)
-  if (draft) session.offerRecord(idx, draft)
   session.send(undefined, payload)
-}
-
-const saveFailed = ref<number | null>(null)
-async function saveRecordFor(idx: number) {
-  saveFailed.value = null
-  try {
-    await session.saveTurnRecord(idx)
-  } catch {
-    saveFailed.value = idx
-  }
 }
 </script>
 
 <template>
   <div class="chat-shell">
-    <!-- >=960px: persistent nav replaces the header's dropdown menu. Kept in
-         the DOM at all widths and toggled with CSS so there's no layout
-         flash while resizing. -->
-    <AppSidebar class="wide-only" />
-
     <div class="chat-view">
       <header class="chat-header">
+        <button type="button" class="menu-btn" :aria-label="t('toolbar.menu')" @click="openNav">
+          <span /><span /><span />
+        </button>
         <span class="title">{{ t('app.title') }}</span>
         <div class="header-actions">
           <button
@@ -137,7 +145,6 @@ async function saveRecordFor(idx: number) {
           >
             {{ t('chat.export') }}
           </button>
-          <AppMenu class="narrow-only" />
         </div>
       </header>
 
@@ -145,6 +152,7 @@ async function saveRecordFor(idx: number) {
         <p v-if="session.deletedNotice && session.turns.length === 0" class="deleted-notice" role="status">
           {{ t('chat.deletedNotice') }}
         </p>
+        <ConsentDialog v-if="needsAck" @start="onAcknowledge" />
         <div v-if="showEmptyHint" class="chat-empty">
           <!-- documents/02_内容与需求/首选提示题建议.md, verbatim and not edited: the welcome
                sentence plus the starter list, as plain text (no clickable options). -->
@@ -159,26 +167,14 @@ async function saveRecordFor(idx: number) {
               :key="cIdx"
               :card="card"
               :disabled="session.answeredTurnIndices.has(idx)"
-              @confirm="(payload) => onCardConfirm(idx, card, payload)"
+              @confirm="(payload) => onCardConfirm(idx, payload)"
             />
-            <div v-if="session.recordDrafts.has(idx)" class="save-record">
-              <template v-if="session.savedTurns.has(idx)">
-                <span class="saved">✓ {{ t('chat.recordSaved') }}</span>
-                <RouterLink to="/records" class="btn-text">{{ t('chat.viewRecords') }}</RouterLink>
-              </template>
-              <template v-else>
-                <button
-                  type="button"
-                  class="btn-outline save-btn"
-                  :disabled="session.savingTurn !== null"
-                  @click="saveRecordFor(idx)"
-                >
-                  {{ session.savingTurn === idx ? t('chat.recordSaving') : t('chat.saveRecord') }}
-                </button>
-                <span class="save-hint">{{ saveFailed === idx ? t('chat.recordSaveFailed') : t('chat.saveRecordHint') }}</span>
-              </template>
+            <div v-for="c in cardsAfter(idx)" :key="c.id" class="inline-card">
+              <ConversationCard :card="c" plain />
             </div>
           </div>
+
+          <EndFlow v-if="inEndFlow && !session.sending" key="end-flow" class="turn" />
 
           <div v-if="session.sending" key="typing" class="turn assistant">
             <div class="bubble typing" role="status" :aria-label="t('chat.assistant')">
@@ -197,7 +193,9 @@ async function saveRecordFor(idx: number) {
         </Transition>
       </div>
 
-      <div v-if="session.ended" class="footer ended-panel">
+      <!-- No input until the notice is accepted, nothing to type into yet. -->
+      <div v-if="inEndFlow || needsAck" class="footer" />
+      <div v-else-if="session.ended" class="footer ended-panel">
         <p class="ended-title">{{ t('chat.endedTitle') }}</p>
         <p class="ended-hint">{{ t('chat.endedHint') }}</p>
         <div class="ended-actions">
@@ -239,18 +237,15 @@ async function saveRecordFor(idx: number) {
       </div>
     </div>
 
-    <ConsentDialog v-if="needsAck" @start="onAcknowledge" />
   </div>
 </template>
 
 <style scoped>
 .chat-shell {
   display: flex;
-  height: 100dvh;
+  flex: 1;
+  min-height: 0;
   background: var(--surface);
-}
-.wide-only {
-  display: none;
 }
 .chat-view {
   flex: 1;
@@ -260,26 +255,16 @@ async function saveRecordFor(idx: number) {
   height: 100%;
 }
 
-/* >=960px: real desktop layout — sidebar + a chat column that fills all
-   the remaining width. Only the bubbles themselves are capped (see .bubble
-   below), so a long reply still reads as a message, not a wall of text. */
-@media (min-width: 960px) {
-  .wide-only {
-    display: flex;
-  }
-  .narrow-only {
-    display: none;
-  }
-}
 
 .chat-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 8px 8px 16px;
+  gap: 8px;
+  padding: 8px 8px 8px 8px;
   min-height: 52px;
 }
 .chat-header .title {
+  flex: 1;
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.01em;
@@ -324,26 +309,11 @@ async function saveRecordFor(idx: number) {
   white-space: pre-line;
   text-align: left;
 }
-.save-record {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  max-width: 100%;
-}
-.save-btn {
-  padding: 6px 14px;
-  font-size: 12.5px;
-  border-radius: 999px;
-}
-.save-hint {
-  font-size: 11.5px;
-  color: var(--text-muted);
-}
-.saved {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #1c8a4a;
+.inline-card {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 520px;
+  margin-top: 6px;
 }
 .turns-inner {
   display: flex;

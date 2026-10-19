@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import SiteFooter from '@/components/SiteFooter.vue'
-import SiteHeader from '@/components/SiteHeader.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import {
   createAdminUser,
   deleteAdminSession,
@@ -30,6 +29,7 @@ import {
   USERNAME_PATTERN,
 } from '@/api/client'
 import AdminReflections from '@/components/admin/AdminReflections.vue'
+import AdminRecords from '@/components/admin/AdminRecords.vue'
 import PromptEditor from '@/components/admin/PromptEditor.vue'
 import AdminGuide from '@/components/admin/AdminGuide.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -39,7 +39,19 @@ import { displayDay, displayDayStart, formatDate, formatDateTime } from '@/utils
 const { t, te, locale } = useI18n()
 const auth = useAuthStore()
 
-const tab = ref<'conversations' | 'users' | 'reflections' | 'prompts' | 'guide'>('conversations')
+// Which section is open comes from the address (/admin/users …); the
+// sidebar (components/admin/AdminSidebar.vue) switches between them.
+type AdminTab = 'conversations' | 'users' | 'records' | 'reflections' | 'prompts' | 'guide'
+const TAB_LABELS: Record<AdminTab, string> = {
+  conversations: 'admin.tabConversations',
+  users: 'admin.tabUsers',
+  records: 'admin.tabRecords',
+  reflections: 'admin.tabReflections',
+  prompts: 'admin.tabPrompts',
+  guide: 'admin.tabGuide',
+}
+const route = useRoute()
+const tab = computed(() => route.params.tab as AdminTab)
 
 const items = ref<AdminSessionItem[]>([])
 // Doubles as "selected session" for the >=1024px master-detail layout and
@@ -57,7 +69,7 @@ const confirmingDeleteSession = ref<string | null>(null)
 const collapsedGroups = ref<Set<string>>(new Set())
 
 const users = ref<AdminUserItem[]>([])
-// Starts false, not true: switchTab() below used to gate its first fetch on
+// Starts false, not true: the users-tab watch below used to gate its first fetch on
 // `!usersLoading`, and since this hadn't loaded yet that read as "already in
 // flight" — the very first switch to this tab silently fetched nothing.
 const usersLoading = ref(false)
@@ -350,39 +362,23 @@ async function doDeleteUser(userId: string) {
   await loadUsers()
 }
 
-function switchTab(next: 'conversations' | 'users' | 'reflections' | 'prompts' | 'guide') {
-  tab.value = next
-  if (next === 'users' && users.value.length === 0 && !usersLoading.value && !usersFiltered.value) loadUsers()
-}
+watch(
+  tab,
+  (next) => {
+    if (next === 'users' && users.value.length === 0 && !usersLoading.value && !usersFiltered.value) loadUsers()
+  },
+  { immediate: true },
+)
 
 onMounted(load)
 </script>
 
 <template>
   <div class="admin-view">
-    <SiteHeader />
     <main class="page-body">
 
-    <h1 class="page-title">{{ t('admin.title') }}</h1>
+    <h1 class="page-title">{{ t(TAB_LABELS[tab]) }}</h1>
     <p class="note">{{ t('admin.note') }}</p>
-
-    <div class="tabs">
-      <button type="button" class="btn-outline" :class="{ active: tab === 'conversations' }" @click="switchTab('conversations')">
-        {{ t('admin.tabConversations') }}
-      </button>
-      <button type="button" class="btn-outline" :class="{ active: tab === 'users' }" @click="switchTab('users')">
-        {{ t('admin.tabUsers') }}
-      </button>
-      <button type="button" class="btn-outline" :class="{ active: tab === 'reflections' }" @click="switchTab('reflections')">
-        {{ t('admin.tabReflections') }}
-      </button>
-      <button type="button" class="btn-outline" :class="{ active: tab === 'prompts' }" @click="switchTab('prompts')">
-        {{ t('admin.tabPrompts') }}
-      </button>
-      <button type="button" class="btn-outline" :class="{ active: tab === 'guide' }" @click="switchTab('guide')">
-        {{ t('admin.tabGuide') }}
-      </button>
-    </div>
 
     <template v-if="tab === 'conversations'">
       <div class="filters">
@@ -584,6 +580,7 @@ onMounted(load)
     <AdminGuide v-else-if="tab === 'guide'" />
 
     <AdminReflections v-else-if="tab === 'reflections'" />
+    <AdminRecords v-else-if="tab === 'records'" />
 
     <template v-else>
       <div class="account-bar">
@@ -829,28 +826,10 @@ onMounted(load)
       </div>
     </template>
   </main>
-    <SiteFooter />
   </div>
 </template>
 
 <style scoped>
-.tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 18px;
-  /* Narrow screens: one row that scrolls sideways instead of wrapping. */
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.tabs button {
-  flex: 1 0 auto;
-  white-space: nowrap;
-}
-.tabs button.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
 .page-title {
   margin-bottom: 6px;
 }

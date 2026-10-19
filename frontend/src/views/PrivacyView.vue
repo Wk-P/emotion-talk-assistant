@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import SiteFooter from '@/components/SiteFooter.vue'
-import SiteHeader from '@/components/SiteHeader.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { UiLang } from '@/i18n/langPreference'
@@ -13,7 +11,6 @@ const doc = computed(() => PRIVACY[locale.value as UiLang] ?? PRIVACY.zh)
 
 <template>
   <div class="privacy-view">
-    <SiteHeader />
     <main class="page-body">
 
     <h1 class="page-title">{{ t('privacy.title') }}</h1>
@@ -26,7 +23,6 @@ const doc = computed(() => PRIVACY[locale.value as UiLang] ?? PRIVACY.zh)
       </section>
     </div>
   </main>
-    <SiteFooter />
   </div>
 </template>
 

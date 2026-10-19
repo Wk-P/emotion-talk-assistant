@@ -15,6 +15,10 @@ class PromptItem(BaseModel):
     default_content: str
     updated_at: str | None
     updated_by: str | None
+    # A saved-but-not-published edit ("暂存"), if any.
+    draft_content: str | None = None
+    draft_updated_at: str | None = None
+    draft_updated_by: str | None = None
 
 
 class PromptModuleItem(BaseModel):
@@ -37,6 +41,8 @@ class PromptOverview(BaseModel):
     modules: list[PromptModuleItem]
     # Built-in blocks admins deleted (can be restored).
     deleted: list[str] = []
+    # Most characters one block may hold (the editor's counter shows it).
+    max_content_length: int = MAX_CONTENT_LENGTH
     # Read-only: appended after every system prompt by app/services/llm.py.
     output_format: str
 
@@ -54,6 +60,10 @@ class PromptSaveRequest(BaseModel):
     note: str | None = Field(default=None, max_length=200)
 
 
+class PromptDraftRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=MAX_CONTENT_LENGTH)
+
+
 class FlowOrder(BaseModel):
     # Every step, in order (turned-off ones too).
     order: list[str] = Field(max_length=100)
@@ -65,7 +75,6 @@ class FlowConfigPayload(BaseModel):
     history_turns: int
     # Rules the program applies (see app/services/flow_config.py). Optional
     # so an older admin page that doesn't send them keeps the saved values.
-    summary_min_turns: int = 3
     weak_kindness: tuple[int, int] = (1, 2)
     # "crisis" / "watch" / "self_criticism" -> words.
     keywords: dict[str, list[str]] = Field(default_factory=dict)
@@ -73,10 +82,6 @@ class FlowConfigPayload(BaseModel):
     crisis_reply: dict[str, str] = Field(default_factory=dict)
     # Self-criticism scoring, 0-100: "up", "down", "strong".
     criticism: dict[str, int] = Field(default_factory=lambda: {"up": 25, "down": 5, "strong": 50})
-    # Checkpoint card type -> the step it may show in (None = never).
-    card_steps: dict[str, str | None] = Field(
-        default_factory=lambda: {"seb_summary": "flow.listen", "plan_form": "flow.act", "kindness_form": "flow.self_kindness"}
-    )
     to_action_step: str | None = "flow.act"
     # Steps where "tell me what to do" is not acted on.
     to_action_skip: list[str] = Field(default_factory=list, max_length=100)

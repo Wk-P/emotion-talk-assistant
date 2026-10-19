@@ -23,7 +23,9 @@ async function submit() {
   error.value = null
   try {
     await auth.login(username.value, password.value)
-    router.push(redirectTarget(route))
+    // Admins start on the admin page; a ?redirect= still wins.
+    const admin = auth.user && auth.user.role !== 'user'
+    router.push(admin && !route.query.redirect ? '/admin' : redirectTarget(route))
   } catch (e: unknown) {
     // Only a 401 means a wrong ID or password. Anything else (no response at
     // all, CORS refusal, server error) must not be reported as one.

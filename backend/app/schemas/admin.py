@@ -41,6 +41,15 @@ class AdminRecordItem(BaseModel):
     created_at: str
 
 
+class AdminUserRecordItem(AdminRecordItem):
+    """A record in the all-participants list (GET /api/admin/records)."""
+
+    participant_label: str
+    session_id: str
+    # The participant deleted the conversation it came from; the record stays.
+    session_deleted: bool
+
+
 class AdminSessionExport(BaseModel):
     session_id: str
     participant_label: str

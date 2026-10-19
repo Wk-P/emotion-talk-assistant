@@ -41,6 +41,19 @@
   --site-header-h: 60px;
 }
 
+/* Admin pages (/admin/…): same look, teal instead of purple, so it's always
+   clear which side you're on. Set by AppLayout. */
+html.admin-area {
+  --accent: #0e8a7d;
+  --accent-hover: #0b7569;
+  --accent-soft: #e3f4f1;
+  --bg: #f3f8f7;
+  --border: #dbe9e6;
+}
+html.admin-area .btn-primary {
+  box-shadow: 0 2px 6px rgba(14, 138, 125, 0.22);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -169,7 +182,7 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   width: 100%;
-  min-height: 100dvh;
+  flex: 1 0 auto;
   margin: 0;
   background: var(--surface);
 }

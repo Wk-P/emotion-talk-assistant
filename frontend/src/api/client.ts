@@ -134,9 +134,45 @@ export async function clearHistory() {
   await api.delete('/api/session/history')
 }
 
-/** Delete one of your own conversations (and the records saved from it). */
+/** Delete one of your own conversations (what was saved to "我的记录" from it stays). */
 export async function deleteSession(sessionId: string) {
   await api.delete(`/api/session/${sessionId}`)
+}
+
+// ---- Conversation cards (backend app/services/summary_card.py) ----
+
+export interface SummaryCard {
+  id: string
+  /** review: shown when coming back after a long break; final: after ending. */
+  kind: 'review' | 'final'
+  /** plan is '' when no plan came up. */
+  content: { summary: string; plan: string; kindness: string }
+  /** Shown after this many user/assistant messages. */
+  after_messages: number
+  /** Final card: null until the user picks. */
+  decision: 'saved' | 'discarded' | null
+}
+
+export async function listCards(sessionId: string) {
+  const { data } = await api.get<SummaryCard[]>(`/api/session/${sessionId}/cards`)
+  return data
+}
+
+/** The program decides whether a review card is due; null when it isn't. */
+export async function requestReviewCard(sessionId: string) {
+  const { data } = await api.post<SummaryCard | null>(`/api/session/${sessionId}/review-card`)
+  return data
+}
+
+/** The ended conversation's card (written the first time). */
+export async function requestFinalCard(sessionId: string) {
+  const { data } = await api.post<SummaryCard>(`/api/session/${sessionId}/final-card`)
+  return data
+}
+
+/** Keep the final card in "我的记录" or not. */
+export async function decideCard(sessionId: string, cardId: string, save: boolean) {
+  await api.post(`/api/session/${sessionId}/cards/${cardId}/decision`, { save })
 }
 
 export async function sendChat(sessionId: string, message?: string, confirmation?: ConfirmationPayload) {
@@ -178,7 +214,9 @@ export async function saveRecord(sessionId: string, recordType: string, payload:
 
 export interface OwnRecord extends SavedRecord {
   session_id: string
-  session_created_at: string
+  /** null once that conversation was deleted (the record is kept). */
+  session_created_at: string | null
+  session_deleted: boolean
 }
 
 /** Every record the current user saved, across all their conversations. */
@@ -304,6 +342,21 @@ export interface AdminRecordItem {
   record_type: string
   payload: Record<string, unknown>
   created_at: string
+}
+
+export interface AdminUserRecord extends AdminRecordItem {
+  participant_label: string
+  session_id: string
+  /** The participant deleted that conversation; the record stays. */
+  session_deleted: boolean
+}
+
+/** Everything participants saved to "我的记录" (backend GET /api/admin/records). */
+export async function listAdminRecords(
+  filter: { participant?: string; record_type?: string; day_from?: string; day_to?: string } = {},
+) {
+  const { data } = await api.get<AdminUserRecord[]>('/api/admin/records', { params: filter })
+  return data
 }
 
 export async function getAdminSessionRecords(sessionId: string) {
@@ -511,6 +564,10 @@ export interface PromptItem {
   default_content: string
   updated_at: string | null
   updated_by: string | null
+  // A saved-but-not-applied edit ("暂存"), if any.
+  draft_content: string | null
+  draft_updated_at: string | null
+  draft_updated_by: string | null
 }
 
 export type PromptGroup = 'rules' | 'flow' | 'other' | 'system'
@@ -534,6 +591,8 @@ export interface PromptOverview {
   output_format: string
   // Built-in components admins deleted (can be restored).
   deleted: string[]
+  // Most characters one block may hold.
+  max_content_length: number
 }
 
 export interface PromptVersionItem {
@@ -575,6 +634,15 @@ export async function savePrompt(key: string, language: Language, content: strin
   return data
 }
 
+export async function savePromptDraft(key: string, language: Language, content: string) {
+  const { data } = await api.put<PromptItem>(`/api/admin/prompts/${key}/${language}/draft`, { content })
+  return data
+}
+
+export async function deletePromptDraft(key: string, language: Language) {
+  await api.delete(`/api/admin/prompts/${key}/${language}/draft`)
+}
+
 export async function previewPrompt(payload: PromptPreviewRequest) {
   const { data } = await api.post<PromptPreviewResponse>('/api/admin/prompts/preview', payload)
   return data
@@ -603,8 +671,6 @@ export interface FlowConfig {
   limits: Record<string, [number, number]>
   /** How many recent messages the AI sees each turn. */
   history_turns: number
-  /** The user must have said at least this many things before the summary card shows. */
-  summary_min_turns: number
   /** [min, max] turns of the self-kindness step when self-criticism is weak. */
   weak_kindness: [number, number]
   /** Extra crisis words (built-ins always apply), "overwhelmed" words, self-criticism words. */
@@ -613,8 +679,6 @@ export interface FlowConfig {
   crisis_reply: Partial<Record<Language, string>>
   /** Self-criticism scoring, 0-100. */
   criticism: { up: number; down: number; strong: number }
-  /** Checkpoint card -> the step it may show in (null = never). */
-  card_steps: Record<'seb_summary' | 'plan_form' | 'kindness_form', string | null>
   /** "Tell me what to do" jumps here (null = ignored). */
   to_action_step: string | null
   /** Steps where "tell me what to do" is not acted on. */

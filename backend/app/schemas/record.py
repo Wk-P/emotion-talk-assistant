@@ -24,4 +24,6 @@ class OwnRecordItem(RecordResponse):
     conversations — so it carries which conversation it came from."""
 
     session_id: str
-    session_created_at: KSTDateTime
+    # None once that conversation was deleted (the record is kept).
+    session_created_at: KSTDateTime | None = None
+    session_deleted: bool = False

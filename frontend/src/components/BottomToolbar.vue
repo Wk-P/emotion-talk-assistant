@@ -6,16 +6,9 @@ import { useSessionStore } from '@/stores/session'
 const { t } = useI18n()
 const session = useSessionStore()
 
-// "终止对话" first asks save or delete; delete asks once more, since it
-// also removes what the user saved to "我的记录" from this conversation.
-const step = ref<'idle' | 'ask' | 'confirmDelete'>('idle')
-const deleting = ref(false)
-const failed = ref(false)
-
-function close() {
-  step.value = 'idle'
-  failed.value = false
-}
+// "终止对话" asks once before ending; what to keep is asked after the
+// AI's closing reply (components/cards/EndFlow.vue).
+const confirming = ref(false)
 
 function skipQuestion() {
   if (session.sending) return
@@ -30,50 +23,19 @@ function anotherQuestion() {
 }
 
 async function endConversation() {
-  close()
+  confirming.value = false
   await session.endConversation()
-}
-
-async function discardConversation() {
-  failed.value = false
-  deleting.value = true
-  try {
-    await session.discardConversation()
-    step.value = 'idle'
-  } catch {
-    failed.value = true
-  } finally {
-    deleting.value = false
-  }
 }
 </script>
 
 <template>
-  <nav v-if="step === 'ask'" class="toolbar confirm" role="alertdialog" :aria-label="t('toolbar.endConfirm')">
+  <nav v-if="confirming" class="toolbar confirm" role="alertdialog" :aria-label="t('toolbar.endConfirm')">
     <span class="confirm-text">{{ t('toolbar.endConfirm') }}</span>
     <div class="confirm-actions">
       <button type="button" class="btn-primary" :disabled="session.sending" @click="endConversation">
-        {{ t('toolbar.endSave') }}
+        {{ t('toolbar.endYes') }}
       </button>
-      <button type="button" class="btn-danger" :disabled="session.sending" @click="step = 'confirmDelete'">
-        {{ t('toolbar.endDelete') }}
-      </button>
-      <button type="button" class="btn-outline" @click="close">{{ t('toolbar.endNo') }}</button>
-    </div>
-  </nav>
-  <nav v-else-if="step === 'confirmDelete'" class="toolbar confirm" role="alertdialog" :aria-label="t('toolbar.deleteConfirm')">
-    <span class="confirm-text">
-      {{ t('toolbar.deleteConfirm') }}
-      <template v-if="session.savedTurns.size > 0">{{ t('toolbar.deleteRecords', { n: session.savedTurns.size }) }}</template>
-    </span>
-    <span v-if="failed" class="confirm-text error">{{ t('toolbar.deleteFailed') }}</span>
-    <div class="confirm-actions">
-      <button type="button" class="btn-danger" :disabled="session.sending || deleting" @click="discardConversation">
-        {{ deleting ? t('toolbar.deleting') : t('toolbar.deleteYes') }}
-      </button>
-      <button type="button" class="btn-outline" :disabled="deleting" @click="step = 'ask'; failed = false">
-        {{ t('toolbar.deleteBack') }}
-      </button>
+      <button type="button" class="btn-outline" @click="confirming = false">{{ t('toolbar.endNo') }}</button>
     </div>
   </nav>
   <nav v-else class="toolbar">
@@ -83,7 +45,7 @@ async function discardConversation() {
     <button type="button" class="btn-outline" :disabled="session.sending" @click="skipQuestion">
       {{ t('toolbar.skip') }}
     </button>
-    <button type="button" class="btn-outline end-btn" :disabled="session.sending" @click="step = 'ask'">
+    <button type="button" class="btn-outline end-btn" :disabled="session.sending" @click="confirming = true">
       {{ t('toolbar.end') }}
     </button>
   </nav>
@@ -114,7 +76,7 @@ async function discardConversation() {
   color: var(--danger);
 }
 /* Not scrollable like the chip row: that clipped the buttons' shadow and
-   bottom edge. All three buttons share one size and shape. */
+   bottom edge. Both buttons share one size and shape. */
 .toolbar.confirm {
   flex-direction: column;
   align-items: stretch;
@@ -126,9 +88,6 @@ async function discardConversation() {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text);
-}
-.confirm-text.error {
-  color: var(--danger);
 }
 .confirm-actions {
   display: flex;
@@ -147,8 +106,5 @@ async function discardConversation() {
 }
 .toolbar.confirm .confirm-actions .btn-outline {
   border-color: var(--border);
-}
-.toolbar.confirm .confirm-actions .btn-danger {
-  border-color: var(--danger-border);
 }
 </style>

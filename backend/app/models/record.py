@@ -21,7 +21,11 @@ class SavedRecord(Base):
     __tablename__ = "saved_records"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    # The conversation it came from. A record outlives that conversation
+    # being deleted by its owner (they chose to keep it), so ownership is
+    # `user_id`, not this.
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     record_type: Mapped[RecordType]
     payload_encrypted: Mapped[bytes] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

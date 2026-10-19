@@ -12,7 +12,19 @@ mkdir -p "$PID_DIR"
 BACKEND_PID_FILE="$PID_DIR/backend.pid"
 FRONTEND_PID_FILE="$PID_DIR/frontend.pid"
 
+# Local test accounts, created (or reset to these passwords) on every start.
+# Local database only — never use these on the server.
+TEST_ADMIN_USER="${TEST_ADMIN_USER:-testadmin}"
+TEST_ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-testadmin123}"
+TEST_USER_USER="${TEST_USER_USER:-testuser}"
+TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-testuser123}"
+BACKEND_URL="http://localhost:8000"
+
 start() {
+  (cd "$BACKEND_DIR" && uv run python -m app.db.dev_users \
+    "$TEST_ADMIN_USER" "$TEST_ADMIN_PASSWORD" "$TEST_USER_USER" "$TEST_USER_PASSWORD") \
+    || echo "(could not create the test accounts — see the error above)"
+
   if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
     echo "backend already running (pid $(cat "$BACKEND_PID_FILE"))"
   else
@@ -30,6 +42,33 @@ start() {
     pgrep -f "vite" | head -1 > "$FRONTEND_PID_FILE"
     echo "frontend started (pid $(cat "$FRONTEND_PID_FILE")), log: $PID_DIR/frontend.log"
   fi
+
+  print_access
+}
+
+# Vite moves to the next free port when 5173 is taken, so read it from the log.
+frontend_url() {
+  local url=""
+  for _ in $(seq 1 15); do
+    url="$(sed 's/\x1b\[[0-9;]*m//g' "$PID_DIR/frontend.log" 2>/dev/null | grep -Eo 'http://localhost:[0-9]+/?' | head -1 || true)"
+    [ -n "$url" ] && break
+    sleep 1
+  done
+  echo "${url:-http://localhost:5173/}"
+}
+
+print_access() {
+  local url
+  url="$(frontend_url)"
+  echo ""
+  echo "=============================================="
+  echo " 用户端:     $url"
+  echo " 管理后台:   ${url%/}/admin"
+  echo " 后端接口:   $BACKEND_URL/docs"
+  echo "----------------------------------------------"
+  echo " 测试管理员: $TEST_ADMIN_USER / $TEST_ADMIN_PASSWORD"
+  echo " 测试用户:   $TEST_USER_USER / $TEST_USER_PASSWORD"
+  echo "=============================================="
 }
 
 stop() {
@@ -50,6 +89,7 @@ stop() {
 }
 
 status() {
+  print_access
   echo "--- listening ports ---"
   lsof -iTCP -sTCP:LISTEN -P 2>/dev/null | grep -E ":8000|:5173|:5174" || echo "(none found)"
   echo "--- tracked pids ---"

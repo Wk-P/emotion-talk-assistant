@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import SiteFooter from '@/components/SiteFooter.vue'
-import SiteHeader from '@/components/SiteHeader.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { deleteRecord, listMyRecords, type OwnRecord } from '@/api/client'
@@ -20,8 +18,16 @@ const shown = computed(() =>
 const confirmingDelete = ref<string | null>(null)
 
 // Each payload field as a labelled line; a lone `text` field (a saved
-// sentence) is shown as the sentence itself, without a label.
+// sentence) is shown as the sentence itself, without a label. A
+// conversation card always shows its three parts, an empty one as "空".
+const CARD_FIELDS = ['summary', 'plan', 'kindness']
 function recordLines(record: OwnRecord) {
+  if (record.record_type === 'conversation_summary')
+    return CARD_FIELDS.map((key) => ({
+      key,
+      label: fieldLabel(t, te, key),
+      text: fieldText(record.payload[key]) || t('chat.card.empty'),
+    }))
   return Object.entries(record.payload)
     .map(([key, value]) => ({ key, label: fieldLabel(t, te, key), text: fieldText(value) }))
     .filter((line) => line.text)
@@ -47,7 +53,6 @@ onMounted(load)
 
 <template>
   <div class="records-view">
-    <SiteHeader />
     <main class="page-body">
     <div class="page-full">
 
@@ -94,7 +99,11 @@ onMounted(load)
         </dl>
         <div class="meta">
           <span :title="formatDateTime(record.created_at)">
-            {{ t('records.fromConversation', { date: formatDate(record.session_created_at) }) }}
+            {{
+              record.session_created_at
+                ? t('records.fromConversation', { date: formatDate(record.session_created_at) })
+                : t('records.fromDeleted', { date: formatDate(record.created_at) })
+            }}
           </span>
           <div v-if="confirmingDelete === record.id" class="confirm">
             <span>{{ t('records.deleteConfirm') }}</span>
@@ -109,7 +118,6 @@ onMounted(load)
       </div>
     </div>
   </main>
-    <SiteFooter />
   </div>
 </template>
 

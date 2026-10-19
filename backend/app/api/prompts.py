@@ -14,7 +14,7 @@ from app.core.timefmt import kst_iso
 from app.api.deps import get_current_admin_required
 from app.db.session import get_db
 from app.models.enums import Language
-from app.models.prompt import PromptModule, PromptVersion
+from app.models.prompt import PromptDraft, PromptModule, PromptVersion
 from app.models.user import User
 from app.prompts import registry
 from app.prompts.router import build_prompt
@@ -22,6 +22,7 @@ from app.schemas.prompt import (
     FlowConfigOverview,
     FlowConfigPayload,
     FlowOrder,
+    PromptDraftRequest,
     PromptItem,
     PromptModuleCreateRequest,
     PromptModuleItem,
@@ -66,9 +67,18 @@ async def _usernames(db: AsyncSession, user_ids: set[str]) -> dict[str, str]:
     return dict(result.all())
 
 
-def _item(key: str, language: Language, row: PromptVersion | None, usernames: dict[str, str]) -> PromptItem:
+def _item(
+    key: str,
+    language: Language,
+    row: PromptVersion | None,
+    usernames: dict[str, str],
+    draft: PromptDraft | None = None,
+) -> PromptItem:
     default = registry.default_content(key, language)
     return PromptItem(
+        draft_content=draft.content if draft else None,
+        draft_updated_at=kst_iso(draft.updated_at) if draft else None,
+        draft_updated_by=usernames.get(draft.updated_by_id) if draft and draft.updated_by_id else None,
         key=key,
         language=language,
         version=row.version if row else 0,
@@ -87,9 +97,18 @@ async def list_prompts(
     modules = await registry.load_modules(db)
     keys = [m.key for m in modules]
     latest = {lang: await registry.latest_versions(db, keys, lang) for lang in Language}
-    usernames = await _usernames(db, {r.created_by_id for rows in latest.values() for r in rows.values() if r.created_by_id})
+    drafts = {(d.key, d.language): d for d in (await db.execute(select(PromptDraft))).scalars()}
+    usernames = await _usernames(
+        db,
+        {r.created_by_id for rows in latest.values() for r in rows.values() if r.created_by_id}
+        | {d.updated_by_id for d in drafts.values() if d.updated_by_id},
+    )
     return PromptOverview(
-        items=[_item(key, lang, latest[lang].get(key), usernames) for key in keys for lang in Language],
+        items=[
+            _item(key, lang, latest[lang].get(key), usernames, drafts.get((key, lang)))
+            for key in keys
+            for lang in Language
+        ],
         modules=[_module_item(m) for m in modules],
         deleted=await registry.deleted_keys(db),
         output_format=registry.default_content("system.output_json", Language.ZH),
@@ -268,6 +287,7 @@ async def delete_module(
     if row is not None:
         await db.delete(row)
     await db.execute(delete(PromptVersion).where(PromptVersion.key == key))
+    await db.execute(delete(PromptDraft).where(PromptDraft.key == key))
     if m.built_in:
         await registry.set_deleted_keys(db, [*await registry.deleted_keys(db), key])
     if m.is_stage:
@@ -345,6 +365,8 @@ async def save_prompt(
         created_by_id=admin.id,
     )
     db.add(row)
+    # Publishing what was set aside: the draft is now live, so drop it.
+    await db.execute(delete(PromptDraft).where(PromptDraft.key == key, PromptDraft.language == language))
     try:
         await db.commit()
     except IntegrityError:
@@ -353,6 +375,51 @@ async def save_prompt(
         raise HTTPException(status_code=409, detail="prompt was changed by someone else, reload and retry")
     await db.refresh(row)
     return _item(key, language, row, {admin.id: admin.username})
+
+
+async def _draft_row(db: AsyncSession, key: str, language: Language) -> PromptDraft | None:
+    return (
+        await db.execute(select(PromptDraft).where(PromptDraft.key == key, PromptDraft.language == language))
+    ).scalar_one_or_none()
+
+
+@router.put("/{key}/{language}/draft", response_model=PromptItem)
+async def save_draft(
+    key: str,
+    language: Language,
+    payload: PromptDraftRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin_required),
+) -> PromptItem:
+    """Sets an edit aside without publishing it ("暂存"): kept on the server,
+    never sent to the model until published through save_prompt."""
+
+    await _check_key(db, key)
+    draft = await _draft_row(db, key, language)
+    if draft is None:
+        draft = PromptDraft(key=key, language=language, content=payload.content, updated_by_id=admin.id)
+        db.add(draft)
+    else:
+        draft.content = payload.content
+        draft.updated_by_id = admin.id
+    await db.commit()
+    await db.refresh(draft)
+    row = (await registry.latest_versions(db, [key], language)).get(key)
+    usernames = await _usernames(db, {i for i in (admin.id, row.created_by_id if row else None) if i})
+    return _item(key, language, row, usernames, draft)
+
+
+@router.delete("/{key}/{language}/draft", status_code=204)
+async def delete_draft(
+    key: str,
+    language: Language,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_required),
+) -> Response:
+    await _check_key(db, key)
+    await db.execute(delete(PromptDraft).where(PromptDraft.key == key, PromptDraft.language == language))
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.post("/preview", response_model=PromptPreviewResponse)
@@ -374,8 +441,7 @@ async def preview_prompt(
     cfg = await flow_config.load(db)
     triggered = payload.stage in (cfg.stabilize_step, cfg.ending_step)
     system_prompt, versions = await build_prompt(
-        db, payload.stage, payload.language, overrides=payload.overrides, triggered=triggered,
-        card=cfg.card_for(payload.stage),
+        db, payload.stage, payload.language, overrides=payload.overrides, triggered=triggered
     )
     try:
         response = await generate_turn(

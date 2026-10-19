@@ -4,12 +4,11 @@ the step order and wording:
   - per step, the minimum user turns before the model's "this step is done"
     is accepted, and the maximum after which the step moves on regardless;
   - how many recent messages the model sees each turn;
-  - the rules that used to be fixed in code: how many things the user must
-    have said before the summary card may show, the shorter turn limits of
+  - the rules that used to be fixed in code: the shorter turn limits of
     self_kindness when self-criticism is weak, the crisis / "overwhelmed" /
-    self-criticism word lists, how self-criticism is scored, which step each
-    checkpoint card belongs to, where "tell me what to do" / "that's enough
-    for today" lead, and the crisis reply text and resources shown.
+    self-criticism word lists, how self-criticism is scored, where "tell me
+    what to do" / "that's enough for today" lead, and the crisis reply text
+    and resources shown.
 
 Stored as one JSON object in app_settings ("flow_config"); anything missing
 falls back to the defaults below, which follow the project lead's prompt
@@ -50,8 +49,6 @@ MAX_TURNS_CAP = 50
 DEFAULT_HISTORY = 12
 HISTORY_RANGE = (2, 60)
 
-DEFAULT_SUMMARY_MIN_TURNS = 3
-SUMMARY_MIN_RANGE = (1, 20)
 DEFAULT_WEAK_KINDNESS = (1, 2)
 
 KEYWORD_LISTS = ("crisis", "watch", "self_criticism")
@@ -82,13 +79,6 @@ MAX_CRISIS_REPLY = 1000
 # Self-criticism level, 0-100: each message with a self-criticism word adds
 # `up`, each without takes off `down`; at `strong` or more it counts as strong.
 DEFAULT_CRITICISM = {"up": 25, "down": 5, "strong": 50}
-# The checkpoint cards and the step each may show in (None = never).
-CARD_TYPES = ("seb_summary", "plan_form", "kindness_form")
-DEFAULT_CARD_STEPS: dict[str, str | None] = {
-    "seb_summary": stages.LISTEN,
-    "plan_form": stages.ACT,
-    "kindness_form": stages.SELF_KINDNESS,
-}
 # "Tell me what to do": the step it jumps to (None = ignored).
 DEFAULT_TO_ACTION = stages.ACT
 # Crisis resources shown: this country's ("" = all).
@@ -101,12 +91,10 @@ class FlowConfig:
     order: list[str]
     limits: dict[str, tuple[int, int]] = field(default_factory=dict)
     history_turns: int = DEFAULT_HISTORY
-    summary_min_turns: int = DEFAULT_SUMMARY_MIN_TURNS
     weak_kindness: tuple[int, int] = DEFAULT_WEAK_KINDNESS
     keywords: dict[str, list[str]] = field(default_factory=lambda: {k: list(v) for k, v in DEFAULT_KEYWORDS.items()})
     crisis_reply: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_CRISIS_REPLY))
     criticism: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_CRITICISM))
-    card_steps: dict[str, str | None] = field(default_factory=lambda: dict(DEFAULT_CARD_STEPS))
     to_action_step: str | None = DEFAULT_TO_ACTION
     # Steps where "tell me what to do" is not acted on (e.g. a step that
     # itself asks what help the user wants).
@@ -126,9 +114,6 @@ class FlowConfig:
     def usable(self, key: str | None) -> str | None:
         """`key` if it names a step that is on, else None."""
         return key if key and key not in self.disabled else None
-
-    def card_for(self, stage: str) -> str | None:
-        return next((c for c, k in self.card_steps.items() if k == stage), None)
 
     def crisis_text(self, language: Language) -> str:
         return (self.crisis_reply.get(language.value) or "").strip() or DEFAULT_CRISIS_REPLY[language.value]
@@ -163,16 +148,13 @@ def _rules_from(saved: dict[str, Any]) -> dict[str, Any]:
     if "crisis" not in keywords and keywords.get("crisis_extra"):
         # Saved when the built-in crisis words were fixed and only extras were set.
         keywords["crisis"] = [*DEFAULT_KEYWORDS["crisis"], *keywords["crisis_extra"]]
-    card_steps = saved.get("card_steps") if isinstance(saved.get("card_steps"), dict) else {}
     return {
         "criticism": {**DEFAULT_CRITICISM, **(saved.get("criticism") or {})},
-        "card_steps": {c: card_steps[c] if c in card_steps else DEFAULT_CARD_STEPS[c] for c in CARD_TYPES},
         "to_action_step": saved["to_action_step"] if "to_action_step" in saved else DEFAULT_TO_ACTION,
         "to_action_skip": list(saved["to_action_skip"]) if isinstance(saved.get("to_action_skip"), list) else [],
         "to_action_confirm": saved.get("to_action_confirm", True),
         "end_today_enabled": saved.get("end_today_enabled", True),
         "crisis_country": saved["crisis_country"] if "crisis_country" in saved else DEFAULT_CRISIS_COUNTRY,
-        "summary_min_turns": saved.get("summary_min_turns") or DEFAULT_SUMMARY_MIN_TURNS,
         "weak_kindness": tuple(weak) if isinstance(weak, list) and len(weak) == 2 else DEFAULT_WEAK_KINDNESS,
         "keywords": {k: list(keywords[k]) if k in keywords else list(DEFAULT_KEYWORDS[k]) for k in KEYWORD_LISTS},
         "crisis_reply": {**DEFAULT_CRISIS_REPLY, **(saved.get("crisis_reply") or {})},
@@ -204,7 +186,6 @@ async def forget(db: AsyncSession, key: str) -> None:
     limits = saved.get("limits") if isinstance(saved.get("limits"), dict) else {}
     limits.pop(key, None)
     saved["limits"] = limits
-    saved["card_steps"] = {c: None if v == key else v for c, v in rules["card_steps"].items()}
     saved["to_action_step"] = None if rules["to_action_step"] == key else rules["to_action_step"]
     saved["to_action_skip"] = [k for k in rules["to_action_skip"] if k != key]
     for r in ROLE_KEYS:
@@ -229,12 +210,10 @@ async def for_admin(db: AsyncSession) -> dict[str, Any]:
         "defaults": {
             "limits": {k: list(DEFAULT_LIMITS.get(k, (DEFAULT_MIN, DEFAULT_MAX))) for k in steps},
             "history_turns": DEFAULT_HISTORY,
-            "summary_min_turns": DEFAULT_SUMMARY_MIN_TURNS,
             "weak_kindness": DEFAULT_WEAK_KINDNESS,
             "keywords": DEFAULT_KEYWORDS,
             "crisis_reply": DEFAULT_CRISIS_REPLY,
             "criticism": DEFAULT_CRITICISM,
-            "card_steps": DEFAULT_CARD_STEPS,
             "to_action_step": DEFAULT_TO_ACTION,
             "to_action_skip": [],
             "to_action_confirm": True,
@@ -256,8 +235,6 @@ def validate(payload: dict[str, Any], stage_keys: set[str]) -> str | None:
             return f"bad limits for {key}"
     if not HISTORY_RANGE[0] <= payload["history_turns"] <= HISTORY_RANGE[1]:
         return "history_turns out of range"
-    if not SUMMARY_MIN_RANGE[0] <= payload["summary_min_turns"] <= SUMMARY_MIN_RANGE[1]:
-        return "summary_min_turns out of range"
     low, high = payload["weak_kindness"]
     if not 1 <= low <= high <= MAX_TURNS_CAP:
         return "bad weak_kindness limits"
@@ -270,11 +247,6 @@ def validate(payload: dict[str, Any], stage_keys: set[str]) -> str | None:
     c = payload["criticism"]
     if set(c) != set(DEFAULT_CRITICISM) or not all(0 <= v <= 100 for v in c.values()) or not 1 <= c["strong"]:
         return "bad criticism settings"
-    if set(payload["card_steps"]) != set(CARD_TYPES):
-        return "bad card_steps"
-    steps = [k for k in payload["card_steps"].values() if k]
-    if len(steps) != len(set(steps)) or any(k not in stage_keys or k in NO_LIMITS for k in steps):
-        return "bad card_steps"
     if payload["to_action_step"] and payload["to_action_step"] not in stage_keys:
         return "unknown to_action step"
     if any(k not in stage_keys for k in payload["to_action_skip"]):
@@ -297,12 +269,10 @@ async def save(db: AsyncSession, payload: dict[str, Any], admin_id: str | None) 
         {
             "limits": {k: list(v) for k, v in payload["limits"].items()},
             "history_turns": payload["history_turns"],
-            "summary_min_turns": payload["summary_min_turns"],
             "weak_kindness": list(payload["weak_kindness"]),
             "keywords": {k: payload["keywords"].get(k, []) for k in KEYWORD_LISTS},
             "crisis_reply": payload["crisis_reply"],
             "criticism": payload["criticism"],
-            "card_steps": payload["card_steps"],
             "to_action_step": payload["to_action_step"],
             "to_action_skip": list(dict.fromkeys(payload["to_action_skip"])),
             "to_action_confirm": payload["to_action_confirm"],

@@ -7,22 +7,19 @@ documents/01_研究资料/애플리케이션 플로우차트.png and the project
   listen → purpose → explore → self_check → self_kindness → regulate → act → closing
 
 Some built-in stages carry behaviour of their own, wherever they are placed:
-  - listen ends when the user confirms the summary, on the card or in their
-    own words (the model's stage_done, once the summary has been shown);
   - purpose ends on the user's answer;
   - self_check ends on the user's answer and sets a branch: strong → full
     self_kindness; weak / none → self_kindness kept brief. Regulate follows
     either way (the lead's STEP 4 A/B);
-  - act ends when the user confirms the plan card;
   - closing is always last; admins may turn it off (the conversation then
     stays in the last step).
 Every other stage (including stages admins add) ends when the model reports
 its goal reached (stage_done) after a minimum number of user turns, or at a
 maximum — both admin-set per step (app/services/flow_config.py). The toolbar "跳过" skips the current stage; "告诉我怎么办" / "今天先到这里"
-(reported by the model as user_request) jump to act / closing. Which step
-each checkpoint card belongs to and where those two requests lead are
-admin-set too (flow_config): the "listen" / "act" rules above follow the
-summary / plan card wherever it is placed.
+(reported by the model as user_request) jump to act / closing; where those
+two requests lead is admin-set too (flow_config). There are no cards inside
+the conversation any more — the conversation card comes from
+app/services/summary_card.py, at fixed times.
 
 A turn screened as overwhelmed (RiskLevel.WATCH) is answered with the
 stabilization prompt without changing the stage.
@@ -35,14 +32,13 @@ from app.models.session import ConversationSession
 from app.prompts import stages
 from app.services.flow_config import FlowConfig
 
-# Stages that end on something the user does, not on the model's stage_done
-# (plus whichever step shows the summary card, see _user_ended).
+# Stages that end on something the user does, not on the model's stage_done.
 _USER_ENDED = {stages.PURPOSE, stages.SELF_CHECK}
 
 
 def _user_ended(cfg: FlowConfig) -> set[str]:
     # The admin-chosen closing step waits for the user to leave.
-    return _USER_ENDED | {k for k in (cfg.card_steps.get("seb_summary"), cfg.closing_step) if k}
+    return _USER_ENDED | ({cfg.closing_step} if cfg.closing_step else set())
 
 
 
@@ -141,22 +137,14 @@ def before_reply(
     stage = s["stage"]
     _note(log, f"回复前所在步骤：{{k:{stage}}}（这一步已聊 {s.get('turns', 0)} 轮）", f"답하기 전 단계: {{k:{stage}}} (이 단계에서 {s.get('turns', 0)}번 대화함)")
 
-    # Dismissing a stage's checkpoint card counts as skipping the stage: the
-    # card is shown only once, so waiting for it would stall the conversation.
-    # Which checkpoint card (if any) belongs to each step is admin-set.
-    own_card = cfg.card_for(stage)
-    dismissed = card is not None and card == own_card and not (confirmation or {}).get("fields")
-    if card == "skip" or dismissed:
-        _note(log, "用户点了「跳过」或关掉了这一步的卡片", "사용자가 \"건너뛰기\"를 누르거나 이 단계의 카드를 닫았어요")
+    if card == "skip":
+        _note(log, "用户点了「跳过」", "사용자가 \"건너뛰기\"를 눌렀어요")
         if stage == stages.SELF_CHECK:
             s["branch"] = "none"
         if stage != cfg.closing_step:
             _advance(s, cfg, log)
         else:
             _note(log, "收尾步骤不能跳过，留在原地", "마무리 단계는 건너뛸 수 없어 그대로예요")
-    elif card is not None and card == own_card and (confirmation or {}).get("fields"):
-        _note(log, "用户填写并确认了这一步的卡片", "사용자가 이 단계의 카드를 작성하고 확인했어요")
-        _advance(s, cfg, log)
     elif stage == stages.PURPOSE and user_text:
         _note(log, "用户没有点选项，直接打字回答了目的", "사용자가 선택지 대신 직접 목적을 입력했어요")
         s["purpose"] = "other"
@@ -183,11 +171,9 @@ def before_reply(
 
 
 def after_reply(
-    session: ConversationSession, signals: dict[str, Any], cfg: FlowConfig, summary_shown: bool = False, log: Log = None
+    session: ConversationSession, signals: dict[str, Any], cfg: FlowConfig, log: Log = None
 ) -> None:
-    """Applies the model's progress signals for the next turn.
-    `summary_shown`: the listen summary was shown before this turn, so a
-    stage_done here means the user confirmed it in their own words."""
+    """Applies the model's progress signals for the next turn."""
 
     s = state(session, cfg)
     stage, turns = s["stage"], s.get("turns", 0)
@@ -206,24 +192,24 @@ def after_reply(
         _enter(s, closing)
     elif request == "to_action" and cfg.to_action_step and stage in cfg.to_action_skip:
         _note(log, "用户似乎想知道怎么办，但这一步设置为不跳转", "사용자가 방법을 원하는 것 같지만 이 단계에서는 이동하지 않도록 설정돼 있어요")
-        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+        _after_signals(s, stage, turns, signals, cfg, log)
     elif request == "to_action" and cfg.to_action_step and cfg.to_action_step not in _after(stage, cfg.order):
         _note(log, f"用户似乎想知道怎么办，但目标步骤（{{k:{cfg.to_action_step}}}）已停用或不在当前步骤后面，不跳转", f"사용자가 방법을 원하는 것 같지만 목표 단계({{k:{cfg.to_action_step}}})가 꺼져 있거나 현재 단계 뒤에 없어 이동하지 않아요")
-        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+        _after_signals(s, stage, turns, signals, cfg, log)
     elif request == "to_action" and cfg.to_action_step and cfg.to_action_confirm and not asked:
         _note(log, "用户似乎想知道怎么办：先不跳，下一轮让 AI 跟用户确认", "사용자가 방법을 원하는 것 같아요: 바로 이동하지 않고 다음 번에 AI가 확인해요")
         s["jump_asked"] = True
-        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+        _after_signals(s, stage, turns, signals, cfg, log)
     elif request == "to_action" and cfg.to_action_step:
         _note(log, f"用户想知道怎么办，跳到：{{k:{cfg.to_action_step}}}", f"사용자가 방법을 원해 이동: {{k:{cfg.to_action_step}}}")
         _enter(s, cfg.to_action_step)
     else:
-        _after_signals(s, stage, turns, signals, cfg, summary_shown, log)
+        _after_signals(s, stage, turns, signals, cfg, log)
     session.flow_state = s
 
 
 def _after_signals(
-    s: dict[str, Any], stage: str, turns: int, signals: dict[str, Any], cfg: FlowConfig, summary_shown: bool, log: Log
+    s: dict[str, Any], stage: str, turns: int, signals: dict[str, Any], cfg: FlowConfig, log: Log
 ) -> None:
     """The ordinary progress rules, when no user request moved the step."""
 
@@ -233,9 +219,6 @@ def _after_signals(
             _note(log, f"自我批评程度判断为：{_w(level, 0, ('', ''))}", f"자기비판 정도: {_w(level, 1, ('', ''))}")
             s["branch"] = level
             _advance(s, cfg, log)
-    elif stage == cfg.card_steps.get("seb_summary") and summary_shown and signals.get("stage_done") is True:
-        _note(log, "用户确认了总结", "사용자가 요약을 확인했어요")
-        _advance(s, cfg, log)
     elif stage not in _user_ended(cfg) and signals.get("stage_done") is True and turns >= _limits(s, cfg)[0]:
         _note(log, "AI 判断完成且已到最少轮数", "AI가 완료로 판단했고 최소 횟수도 채웠어요")
         _advance(s, cfg, log)

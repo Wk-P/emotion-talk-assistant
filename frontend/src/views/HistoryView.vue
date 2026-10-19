@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import SiteFooter from '@/components/SiteFooter.vue'
-import SiteHeader from '@/components/SiteHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -112,7 +110,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="history-view">
-    <SiteHeader />
     <main class="page-body">
     <div class="page-full">
 
@@ -204,7 +201,6 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </main>
-    <SiteFooter />
   </div>
 </template>
 

@@ -20,9 +20,10 @@ _CULTURE_TAGGED_TYPES = {"cause_interpretation"}
 
 
 def _owner_filter(user: User) -> ColumnElement[bool]:
-    """Same ownership rule as GET /api/session/history: the account."""
+    """The account — a record stays the user's after the conversation it
+    came from is deleted."""
 
-    return ConversationSession.user_id == user.id
+    return SavedRecord.user_id == user.id
 
 
 @router.get("", response_model=list[OwnRecordItem])
@@ -35,7 +36,7 @@ async def list_my_records(
 
     result = await db.execute(
         select(SavedRecord, ConversationSession.created_at)
-        .join(ConversationSession, ConversationSession.id == SavedRecord.session_id)
+        .outerjoin(ConversationSession, ConversationSession.id == SavedRecord.session_id)
         .where(_owner_filter(user))
         .order_by(SavedRecord.created_at.desc())
     )
@@ -47,6 +48,7 @@ async def list_my_records(
             created_at=r.created_at,
             session_id=r.session_id,
             session_created_at=session_created_at,
+            session_deleted=session_created_at is None,
         )
         for r, session_created_at in result.all()
     ]
@@ -75,6 +77,7 @@ async def save_record(
 
     record = SavedRecord(
         session_id=session.id,
+        user_id=user.id,
         record_type=payload.record_type,
         payload_encrypted=encrypt_json(payload.payload).decode("utf-8"),
         consented_category=category.value,
@@ -111,9 +114,7 @@ async def delete_record(
 ) -> None:
     # Only the owner can delete — a record id alone used to be enough.
     result = await db.execute(
-        select(SavedRecord)
-        .join(ConversationSession, ConversationSession.id == SavedRecord.session_id)
-        .where(SavedRecord.id == record_id, _owner_filter(user))
+        select(SavedRecord).where(SavedRecord.id == record_id, _owner_filter(user))
     )
     record = result.scalar_one_or_none()
     if record is None:

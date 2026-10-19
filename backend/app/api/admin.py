@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.enums import Language, UserRole
 from app.models.message import Message
 from app.models.record import SavedRecord
+from app.models.summary_card import SummaryCard
 from app.models.reflection import DailyReflection
 from app.models.session import ConversationSession
 from app.models.user import User
@@ -23,6 +24,7 @@ from app.schemas.admin import (
     AdminSessionExport,
     AdminSessionItem,
     AdminUserItem,
+    AdminUserRecordItem,
     CreateUserRequest,
     ResetPasswordRequest,
     SetActiveRequest,
@@ -213,6 +215,8 @@ async def _delete_user_data(db: AsyncSession, user_id: str) -> None:
     session_ids_subq = select(ConversationSession.id).where(ConversationSession.user_id == user_id).subquery()
     await db.execute(delete(Message).where(Message.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(select(session_ids_subq))))
+    await db.execute(delete(SavedRecord).where(SavedRecord.user_id == user_id))
+    await db.execute(delete(SummaryCard).where(SummaryCard.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(ConversationSession).where(ConversationSession.user_id == user_id))
     await db.execute(delete(DailyReflection).where(DailyReflection.user_id == user_id))
 
@@ -398,6 +402,45 @@ async def list_reflections(
     return [AdminReflectionItem(**_reflection_item(r).model_dump(), participant_label=_label(r.user_id, usernames)) for r in rows]
 
 
+@router.get("/records", response_model=list[AdminUserRecordItem])
+async def list_all_records(
+    participant: str | None = Query(default=None, max_length=255),
+    record_type: str | None = Query(default=None, max_length=64),
+    day_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    day_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_required),
+) -> list[AdminUserRecordItem]:
+    """Everything participants saved to "我的记录", newest first — also
+    records whose conversation the participant has since deleted."""
+
+    stmt = (
+        select(SavedRecord, ConversationSession.id)
+        .outerjoin(ConversationSession, ConversationSession.id == SavedRecord.session_id)
+        .order_by(SavedRecord.created_at.desc())
+    )
+    if participant and participant.strip():
+        stmt = stmt.where(_participant_condition(SavedRecord.user_id, participant))
+    if record_type:
+        stmt = stmt.where(SavedRecord.record_type == record_type)
+    rows = (await db.execute(stmt)).all()
+    usernames = await _usernames(db, {r.user_id for r, _ in rows})
+    out = []
+    for r, live_session in rows:
+        day = kst_iso(r.created_at)[:10]
+        if (day_from and day < day_from) or (day_to and day > day_to):
+            continue
+        out.append(
+            AdminUserRecordItem(
+                **_admin_record(r).model_dump(),
+                participant_label=_label(r.user_id, usernames),
+                session_id=r.session_id,
+                session_deleted=live_session is None,
+            )
+        )
+    return out
+
+
 @router.delete("/sessions/{session_id}", status_code=204)
 async def delete_admin_session(
     db: AsyncSession = Depends(get_db),
@@ -415,6 +458,7 @@ async def delete_admin_session(
 
     await db.execute(delete(Message).where(Message.session_id == session.id))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id == session.id))
+    await db.execute(delete(SummaryCard).where(SummaryCard.session_id == session.id))
     await db.execute(delete(ConversationSession).where(ConversationSession.id == session.id))
     await db.commit()
 

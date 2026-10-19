@@ -1,19 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { CandidateCard, ConfirmationPayload, Language } from '@/api/client'
+import type { CandidateCard, ConfirmationPayload, Language, SummaryCard } from '@/api/client'
 import {
+  decideCard,
   deleteSession,
   endSession,
   getSessionMessages,
   errorStatus,
-  saveRecord,
+  listCards,
+  requestFinalCard,
+  requestReviewCard,
   sendChat,
   updateSessionLanguage,
   startSession,
   syncSession,
   updateConsent,
 } from '@/api/client'
-import type { RecordDraft } from '@/utils/fieldLabels'
 
 export interface ChatTurn {
   // The stored message's id; a turn just typed has none until the reply
@@ -51,6 +53,12 @@ export const useSessionStore = defineStore('session', () => {
   // Set after the user ended a conversation and chose to delete it; the
   // chat page says so until a new conversation starts.
   const deletedNotice = ref(false)
+  // Conversation cards shown so far (backend app/services/summary_card.py).
+  const cards = ref<SummaryCard[]>([])
+  // After "结束对话": the final card's steps ('card'), then whether to keep
+  // the conversation ('conversation'); 'done' (or null for a conversation
+  // ended earlier) shows the ended panel.
+  const endFlow = ref<'card' | 'conversation' | 'done' | null>(null)
 
   function begin(lang: Language) {
     reset()
@@ -63,10 +71,10 @@ export const useSessionStore = defineStore('session', () => {
   // session_id unless the user ended it, so this only needs to rehydrate
   // local state from the stored history.
   // Replayed turns never carry candidate cards (history only stores
-  // role/content), so they render as plain bubbles, same as a live reply
-  // once its card has been confirmed.
+  // role/content), so they render as plain bubbles; the conversation cards
+  // come back separately.
   async function resume(id: string, lang: Language, isEnded = false) {
-    const messages = await getSessionMessages(id)
+    const [messages, shown] = await Promise.all([getSessionMessages(id), listCards(id).catch(() => [])])
     pending.value = false
     ended.value = isEnded
     sessionId.value = id
@@ -76,10 +84,44 @@ export const useSessionStore = defineStore('session', () => {
       .map((m) => ({ id: m.id, role: m.role, text: m.content }))
     serverCount.value = turns.value.length
     answeredTurnIndices.value = new Set()
-    recordDrafts.value = new Map()
-    savedTurns.value = new Set()
+    cards.value = shown
+    // Ended here earlier but the final card was never answered: pick up there.
+    const final = shown.find((c) => c.kind === 'final')
+    endFlow.value = isEnded && final && !final.decision ? 'card' : null
     error.value = null
     lastFailedSend.value = null
+    lastReviewCheck = 0
+    if (!isEnded) void checkReview()
+  }
+
+  // Coming back to a conversation: the backend decides whether a review
+  // card is due (4 hours since the last message, 4 rounds since the last
+  // card). Asked on opening it and whenever the page comes back into view.
+  let lastReviewCheck = 0
+  async function checkReview() {
+    const id = sessionId.value
+    if (!id || ended.value || sending.value || Date.now() - lastReviewCheck < 60_000) return
+    lastReviewCheck = Date.now()
+    const card = await requestReviewCard(id).catch(() => null)
+    if (card && sessionId.value === id && !cards.value.some((c) => c.id === card.id)) cards.value = [...cards.value, card]
+  }
+
+  // The final card, written by the backend the first time it's asked for.
+  async function loadFinalCard(): Promise<SummaryCard> {
+    const existing = cards.value.find((c) => c.kind === 'final')
+    if (existing) return existing
+    const card = await requestFinalCard(sessionId.value!)
+    if (!cards.value.some((c) => c.id === card.id)) cards.value = [...cards.value, card]
+    return card
+  }
+
+  async function decideFinalCard(save: boolean) {
+    const card = cards.value.find((c) => c.kind === 'final')
+    if (!card || !sessionId.value) return
+    await decideCard(sessionId.value, card.id, save)
+    cards.value = cards.value.map((c) =>
+      c.id === card.id ? { ...c, decision: save ? 'saved' : 'discarded', content: save ? c.content : { summary: '', plan: '', kindness: '' } } : c,
+    )
   }
 
   async function send(message?: string, confirmation?: ConfirmationPayload, opts?: { skipBubble?: boolean }) {
@@ -106,7 +148,10 @@ export const useSessionStore = defineStore('session', () => {
         riskLevel: res.risk_level,
       })
       lastFailedSend.value = null
-      if (confirmation?.card_type === 'end') ended.value = true
+      if (confirmation?.card_type === 'end') {
+        ended.value = true
+        endFlow.value = 'card'
+      }
       // This device already shows the turn; just catch up on the count
       // (a card confirmation may be stored as a user message too).
       void catchUp(sessionId.value, false)
@@ -183,32 +228,6 @@ export const useSessionStore = defineStore('session', () => {
     answeredTurnIndices.value = new Set(answeredTurnIndices.value).add(turnIndex)
   }
 
-  // Confirmed cards the user may keep in "my records", keyed by turn index,
-  // and which of them they actually saved. Nothing is saved unless the user
-  // taps save — records are never written implicitly.
-  const recordDrafts = ref<Map<number, RecordDraft>>(new Map())
-  const savedTurns = ref<Set<number>>(new Set())
-  const savingTurn = ref<number | null>(null)
-
-  function offerRecord(turnIndex: number, draft: RecordDraft) {
-    recordDrafts.value = new Map(recordDrafts.value).set(turnIndex, draft)
-  }
-
-  async function saveTurnRecord(turnIndex: number) {
-    const draft = recordDrafts.value.get(turnIndex)
-    if (!draft || !sessionId.value || savingTurn.value !== null || savedTurns.value.has(turnIndex)) return
-    savingTurn.value = turnIndex
-    try {
-      // Tapping "save" is the user's explicit consent to keep this record
-      // (the backend refuses to save without it).
-      if (!consent.value.emotion_records) await setConsent('emotion_records', true)
-      await saveRecord(sessionId.value, draft.recordType, draft.payload)
-      savedTurns.value = new Set(savedTurns.value).add(turnIndex)
-    } finally {
-      savingTurn.value = null
-    }
-  }
-
   async function setConsent(category: string, granted: boolean) {
     if (!sessionId.value) return
     const res = await updateConsent(sessionId.value, category, granted)
@@ -220,14 +239,15 @@ export const useSessionStore = defineStore('session', () => {
     await endSession(sessionId.value)
   }
 
-  // "结束对话": the AI writes a short closing reply (no question, no
-  // cards), then the conversation is locked. Never purges the turns.
+  // "结束对话": the AI writes a short closing reply, then the conversation
+  // is locked and the final card follows (endFlow). Never purges the turns.
   async function endConversation() {
     if (!sessionId.value || sending.value || ended.value) return
     await send(undefined, { card_type: 'end' })
   }
 
-  // "终止对话" → "删除": removes the whole conversation instead of keeping it.
+  // End flow → "不保存（删除对话）": removes the whole conversation (what
+  // was saved to "我的记录" stays).
   async function discardConversation() {
     if (sending.value) return
     if (sessionId.value) await deleteSession(sessionId.value)
@@ -245,8 +265,9 @@ export const useSessionStore = defineStore('session', () => {
     turns.value = []
     consent.value = {}
     answeredTurnIndices.value = new Set()
-    recordDrafts.value = new Map()
-    savedTurns.value = new Set()
+    cards.value = []
+    endFlow.value = null
+    lastReviewCheck = 0
     error.value = null
     lastFailedSend.value = null
     ended.value = false
@@ -274,11 +295,11 @@ export const useSessionStore = defineStore('session', () => {
     retry,
     markAnswered,
     setLanguage,
-    recordDrafts,
-    savedTurns,
-    savingTurn,
-    offerRecord,
-    saveTurnRecord,
+    cards,
+    endFlow,
+    checkReview,
+    loadFinalCard,
+    decideFinalCard,
     setConsent,
     finish,
     reset,

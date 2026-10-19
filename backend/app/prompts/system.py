@@ -6,7 +6,7 @@ here; app/prompts/router.py and app/services/dialogue_state.py decide when
 each one is sent.
 
 Some of these name JSON fields the program reads (reply_text, candidates,
-stage_done, user_request, self_criticism, seb_summary/plan_form fields).
+stage_done, user_request, self_criticism, the conversation card's summary/plan/kindness).
 Rewording is fine; renaming a field breaks what reads it. Placeholders in
 {curly braces} are filled in by the program.
 """
@@ -87,59 +87,11 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
         },
     ),
     (
-        "card_listen",
-        {Language.ZH: "小结卡片（听用户讲述困扰）", Language.KO: "정리 카드(고민 듣기)"},
-        {
-            Language.ZH: (
-                "- 只有在要给出上面说的那份总结时，才在 candidates 里放一条 type 为 'seb_summary' 的记录，"
-                "fields 固定用三个键：situation（发生了什么）、emotion（当时的感受）、behavior（当时怎么应对，没有就留空字符串）；"
-                "只写用户实际说过的内容。每次对话只生成一次。其余时候 candidates 一律给空数组。"
-            ),
-            Language.KO: (
-                "- 위에서 말한 정리를 보여 줄 때에만 candidates에 type 'seb_summary' 항목 하나를 넣으세요. "
-                "fields는 세 키로 고정: situation(무슨 일이 있었는지), emotion(그때의 감정), behavior(그때 어떻게 대처했는지, 없으면 빈 문자열). "
-                "사용자가 실제로 말한 내용만 쓰고, 대화당 한 번만 생성하세요. 그 외에는 candidates를 항상 빈 배열로 두세요."
-            ),
-        },
-    ),
-    (
-        "card_act",
-        {Language.ZH: "小计划卡片（小恢复行动）", Language.KO: "작은 계획 카드(작은 회복 행동)"},
-        {
-            Language.ZH: (
-                "- 只有在把整理好的小计划交给用户确认时，才在 candidates 里放一条 type 为 'plan_form' 的记录，"
-                "fields 固定用四个键：action（先做的行动）、when（实施时间）、support（需要的帮助）、backup（做不到时的备选方案）；"
-                "每次对话只生成一次。其余时候 candidates 一律给空数组。"
-            ),
-            Language.KO: (
-                "- 정리한 작은 계획을 사용자에게 확인받을 때에만 candidates에 type 'plan_form' 항목 하나를 넣으세요. "
-                "fields는 네 키로 고정: action(먼저 할 행동), when(실행 시점), support(필요한 도움), backup(어려울 경우의 대안). "
-                "대화당 한 번만 생성하세요. 그 외에는 candidates를 항상 빈 배열로 두세요."
-            ),
-        },
-    ),
-    (
-        "card_kindness",
-        {Language.ZH: "友善的话卡片（自我友善）", Language.KO: "따뜻한 말 카드(자기친절)"},
-        {
-            Language.ZH: (
-                "- 只有在和用户一起整理出一句他想对自己说的友善的话、请他确认时，才在 candidates 里放一条 type 为 'kindness_form' 的记录，"
-                "fields 固定用一个键：text（用户想对自己说的友善的话，尽量用用户自己的说法）；"
-                "每次对话只生成一次。其余时候 candidates 一律给空数组。"
-            ),
-            Language.KO: (
-                "- 사용자와 함께 자신에게 건네고 싶은 따뜻한 말 한마디를 정리해 확인받을 때에만 candidates에 type 'kindness_form' 항목 하나를 넣으세요. "
-                "fields는 한 키로 고정: text(사용자가 자신에게 건네고 싶은 따뜻한 말, 가능하면 사용자의 표현 그대로). "
-                "대화당 한 번만 생성하세요. 그 외에는 candidates를 항상 빈 배열로 두세요."
-            ),
-        },
-    ),
-    (
         "no_cards",
-        {Language.ZH: "其他步骤不出卡片", Language.KO: "다른 단계는 카드 없음"},
+        {Language.ZH: "对话中不出卡片", Language.KO: "대화 중에는 카드 없음"},
         {
-            Language.ZH: "- 本阶段 candidates 一律给空数组。",
-            Language.KO: "- 이 단계에서는 candidates를 항상 빈 배열로 두세요.",
+            Language.ZH: "- candidates 一律给空数组。",
+            Language.KO: "- candidates는 항상 빈 배열로 두세요.",
         },
     ),
     (
@@ -178,60 +130,6 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
         "note_header",
         {Language.ZH: "「当前进度」标题", Language.KO: "'현재 진행 상황' 제목"},
         {Language.ZH: "【当前进度】", Language.KO: "[현재 진행 상황]"},
-    ),
-    (
-        "note_summary_shown",
-        {Language.ZH: "进度：小结已给过", Language.KO: "진행: 정리를 이미 보여 줌"},
-        {
-            Language.ZH: "本次对话已经给用户看过「发生了什么—感受—应对」小结了，不要再整理小结，也不要在回复里提到小结。",
-            Language.KO: "이번 대화에서 '상황-감정-대처' 요약은 이미 보여 주었어요. 다시 요약하지 말고, 답변에서 요약을 언급하지도 마세요.",
-        },
-    ),
-    (
-        "note_plan_shown",
-        {Language.ZH: "进度：小计划已给过", Language.KO: "진행: 작은 계획을 이미 보여 줌"},
-        {
-            Language.ZH: "本次对话已经给用户看过整理好的小计划了，不要再生成计划，也不要在回复里说「下面是计划」。",
-            Language.KO: "이번 대화에서 정리한 작은 계획은 이미 보여 주었어요. 다시 만들지 말고, 답변에서 '아래 계획'이라고 말하지 마세요.",
-        },
-    ),
-    (
-        "note_kindness_shown",
-        {Language.ZH: "进度：友善的话已给过", Language.KO: "진행: 따뜻한 말을 이미 보여 줌"},
-        {
-            Language.ZH: "本次对话已经给用户看过整理好的友善的话了，不要再生成这张卡片。",
-            Language.KO: "이번 대화에서 정리한 따뜻한 말은 이미 보여 주었어요. 이 카드를 다시 만들지 마세요.",
-        },
-    ),
-    (
-        "note_listen_confirm",
-        {Language.ZH: "进度：等用户确认小结（下一步是确认目的）", Language.KO: "진행: 정리 확인 대기(다음은 목적 확인)"},
-        {
-            Language.ZH: (
-                "用户这句话如果是在确认小结（觉得准确、没有要补充），stage_done 给 true，回复只简短回应，"
-                "然后问用户现在最需要什么样的帮助。"
-                "如果用户在补充或修改，就按他的话更新理解，简短再确认一次，stage_done 给 false。"
-            ),
-            Language.KO: (
-                "사용자의 이번 말이 정리를 확인하는 것이라면(정확하고 덧붙일 것이 없다면) stage_done을 true로 하고, 짧게 반응한 뒤 "
-                "지금 가장 필요한 도움이 무엇인지 물어보세요. "
-                "사용자가 보충하거나 고치는 것이라면 그 말대로 이해를 고치고 짧게 다시 확인한 뒤 stage_done을 false로 하세요."
-            ),
-        },
-    ),
-    (
-        "note_listen_confirm_other",
-        {Language.ZH: "进度：等用户确认小结（下一步不是确认目的）", Language.KO: "진행: 정리 확인 대기(다음이 목적 확인이 아닐 때)"},
-        {
-            Language.ZH: (
-                "用户这句话如果是在确认小结（觉得准确、没有要补充），stage_done 给 true，回复只简短回应，然后进入下一步。"
-                "如果用户在补充或修改，就按他的话更新理解，简短再确认一次，stage_done 给 false。"
-            ),
-            Language.KO: (
-                "사용자의 이번 말이 정리를 확인하는 것이라면(정확하고 덧붙일 것이 없다면) stage_done을 true로 하고, 짧게 반응한 뒤 다음 단계로 넘어가세요. "
-                "사용자가 보충하거나 고치는 것이라면 그 말대로 이해를 고치고 짧게 다시 확인한 뒤 stage_done을 false로 하세요."
-            ),
-        },
     ),
     (
         "note_purpose",
@@ -276,6 +174,26 @@ _SECTIONS: list[tuple[str, dict[Language, str], dict[Language, str]]] = [
             Language.KO: (
                 "사용자가 앞선 말에서 바로 방법을 원했을 수 있어요. 이번에는 먼저 사용자의 말에 답한 뒤, 지금 바로 구체적인 방법을 이야기할지 짧게 물어보세요. "
                 "사용자가 이번 말에서 분명히 방법을 원할 때만 user_request를 \"to_action\"으로 주세요."
+            ),
+        },
+    ),
+    (
+        "summary_card",
+        {Language.ZH: "对话小卡（回顾 / 结束时）", Language.KO: "대화 카드(돌아왔을 때 / 끝낼 때)"},
+        {
+            Language.ZH: (
+                "你要根据下面的对话，为用户写一张对话小卡。只返回一个 JSON 对象，固定三个键：\n"
+                "- summary：对话小结，用两三句话写清楚发生了什么、用户有什么感受、当时怎么应对。只写用户实际说过的内容，不要推测。\n"
+                "- plan：对话里用户确认或提到的小计划、小行动；对话里没有谈到计划时给空字符串 \"\"，不要自己编。\n"
+                "- kindness：一句用户可以对自己说的友善的话。尽量用用户自己的说法；对话里没有时，根据对话内容写一句温和、不评判、不说教的话。\n"
+                "用第二人称「你」来写，语气温和、简短。全部用简体中文。"
+            ),
+            Language.KO: (
+                "아래 대화를 바탕으로 사용자에게 줄 대화 카드를 작성하세요. JSON 객체 하나만 반환하고, 키는 세 개로 고정이에요:\n"
+                "- summary: 대화 정리. 무슨 일이 있었는지, 사용자가 어떤 감정이었는지, 그때 어떻게 대처했는지 두세 문장으로 쓰세요. 사용자가 실제로 말한 내용만 쓰고 추측하지 마세요.\n"
+                "- plan: 대화에서 사용자가 확인했거나 말한 작은 계획·행동. 계획 이야기가 없었으면 빈 문자열 \"\"을 주고, 지어내지 마세요.\n"
+                "- kindness: 사용자가 자신에게 건넬 수 있는 따뜻한 말 한마디. 가능하면 사용자의 표현을 쓰고, 없으면 대화 내용에 맞게 부드럽고 평가하지 않는 말로 쓰세요.\n"
+                "2인칭(\"당신\" 대신 자연스러운 존댓말)으로 짧고 부드럽게 쓰세요. 모두 한국어로 쓰세요."
             ),
         },
     ),

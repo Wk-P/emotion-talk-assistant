@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -69,3 +69,25 @@ class ChatResponse(BaseModel):
     # own turn apart from ones a sync brings in (no duplicates).
     user_message_id: str | None = None
     assistant_message_id: str | None = None
+
+
+class SummaryCardContent(BaseModel):
+    summary: str = ""
+    plan: str = ""  # "" = no plan came up
+    kindness: str = ""
+
+
+class SummaryCardItem(BaseModel):
+    """A conversation card (app/services/summary_card.py)."""
+
+    id: str
+    kind: Literal["review", "final"]
+    content: SummaryCardContent
+    # Shown after this many user/assistant messages.
+    after_messages: int
+    # Final card: None until the user picks, then "saved" | "discarded".
+    decision: Literal["saved", "discarded"] | None = None
+
+
+class CardDecisionRequest(BaseModel):
+    save: bool

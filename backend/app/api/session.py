@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,8 +9,19 @@ from app.models.enums import MessageRole
 from app.models.message import Message
 from app.models.record import SavedRecord
 from app.models.session import ConversationSession
+from app.models.summary_card import SummaryCard
 from app.models.user import User
-from app.schemas.chat import HistoryMessageItem, SessionCreateRequest, SessionHistoryItem, SessionResponse, SessionSyncResponse
+from app.schemas.chat import (
+    CardDecisionRequest,
+    HistoryMessageItem,
+    SessionCreateRequest,
+    SessionHistoryItem,
+    SessionResponse,
+    SessionSyncResponse,
+    SummaryCardItem,
+)
+from app.services import summary_card
+from app.services.llm import LLMUnavailable
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
@@ -32,6 +43,7 @@ async def start_session(
     if blank:
         await db.execute(delete(Message).where(Message.session_id.in_(blank)))
         await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(blank)))
+        await db.execute(delete(SummaryCard).where(SummaryCard.session_id.in_(blank)))
         await db.execute(delete(ConversationSession).where(ConversationSession.id.in_(blank)))
 
     # There's no fixed opening message any more — the conversation is created
@@ -143,14 +155,17 @@ async def clear_history(
     user: User = Depends(get_current_user_required),
 ) -> None:
     """User-facing 'clear my records' control. Deletes everything owned by
-    this account: messages, saved records, and the sessions themselves.
+    this account: messages, cards, saved records (also those whose
+    conversation is already gone), and the sessions themselves.
     SQLite's ON DELETE CASCADE is not reliable via aiosqlite here, so each
     table is cleared explicitly rather than relying on FK cascade."""
 
     owner_filter = ConversationSession.user_id == user.id
     session_ids_subq = select(ConversationSession.id).where(owner_filter).subquery()
     await db.execute(delete(Message).where(Message.session_id.in_(select(session_ids_subq))))
+    await db.execute(delete(SummaryCard).where(SummaryCard.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(select(session_ids_subq))))
+    await db.execute(delete(SavedRecord).where(SavedRecord.user_id == user.id))
     await db.execute(delete(ConversationSession).where(owner_filter))
     await db.commit()
 
@@ -161,12 +176,13 @@ async def delete_session(
     db: AsyncSession = Depends(get_db),
     session: ConversationSession = Depends(get_owned_session),
 ) -> None:
-    """Delete one of the caller's own conversations — its messages and the
-    records saved from it go too. Same rule for every role: you can only
-    delete your own here (admins remove others' via /api/admin)."""
+    """Delete one of the caller's own conversations and its cards. What the
+    user saved to "我的记录" from it stays — they chose to keep that, and
+    delete it there. Same rule for every role: you can only delete your own
+    here (admins remove others' via /api/admin)."""
 
     await db.execute(delete(Message).where(Message.session_id == session.id))
-    await db.execute(delete(SavedRecord).where(SavedRecord.session_id == session.id))
+    await db.execute(delete(SummaryCard).where(SummaryCard.session_id == session.id))
     await db.execute(delete(ConversationSession).where(ConversationSession.id == session.id))
     await db.commit()
 
@@ -188,3 +204,74 @@ async def update_language(
     db.add(session)
     await db.commit()
     return SessionResponse(session_id=session.id, language=session.language)
+
+
+def _card_item(card: SummaryCard) -> SummaryCardItem:
+    return SummaryCardItem.model_validate(
+        {
+            "id": card.id,
+            "kind": card.kind,
+            "content": card.content or {},
+            "after_messages": card.after_messages,
+            "decision": card.decision,
+        }
+    )
+
+
+@router.get("/{session_id}/cards", response_model=list[SummaryCardItem])
+async def list_cards(
+    db: AsyncSession = Depends(get_db),
+    session: ConversationSession = Depends(get_owned_session),
+) -> list[SummaryCardItem]:
+    """The conversation cards shown so far, for reopening a conversation."""
+
+    return [_card_item(c) for c in await summary_card.list_cards(db, session.id)]
+
+
+@router.post("/{session_id}/review-card", response_model=SummaryCardItem | None)
+async def review_card(
+    db: AsyncSession = Depends(get_db),
+    session: ConversationSession = Depends(get_owned_session),
+) -> SummaryCardItem | None:
+    """Asked whenever the user opens or comes back to a conversation; the
+    program decides whether a review card is due (app/services/summary_card.py).
+    null when it isn't."""
+
+    try:
+        card = await summary_card.review_card(db, session)
+    except LLMUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"ai service unavailable: {e.reason}") from e
+    return _card_item(card) if card else None
+
+
+@router.post("/{session_id}/final-card", response_model=SummaryCardItem)
+async def final_card(
+    db: AsyncSession = Depends(get_db),
+    session: ConversationSession = Depends(get_owned_session),
+) -> SummaryCardItem:
+    """The card shown after the user ended the conversation (written once)."""
+
+    if not session.ended_at:
+        raise HTTPException(status_code=409, detail="session not ended")
+    try:
+        card = await summary_card.final_card(db, session)
+    except LLMUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"ai service unavailable: {e.reason}") from e
+    return _card_item(card)
+
+
+@router.post("/{session_id}/cards/{card_id}/decision", status_code=204)
+async def decide_card(
+    card_id: str,
+    payload: CardDecisionRequest,
+    db: AsyncSession = Depends(get_db),
+    session: ConversationSession = Depends(get_owned_session),
+) -> Response:
+    """The user's pick on the final card: keep it in "我的记录" or not."""
+
+    card = await db.get(SummaryCard, card_id)
+    if card is None or card.session_id != session.id or card.kind != "final":
+        raise HTTPException(status_code=404, detail="card not found")
+    if card.decision is None:
+        await summary_card.decide(db, session, card, payload.save)
+    return Response(status_code=204)

@@ -63,3 +63,22 @@ class PromptModule(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     created_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PromptDraft(Base):
+    """A saved but not yet published edit of one block ("暂存"): kept on the
+    server so it survives a reload or another device, but never sent to the
+    model. Publishing ("启用") turns it into the next PromptVersion and
+    removes it. One per (key, language), shared by all admins."""
+
+    __tablename__ = "prompt_drafts"
+    __table_args__ = (UniqueConstraint("key", "language", name="uq_prompt_draft_key_lang"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    language: Mapped[Language]
+    content: Mapped[str] = mapped_column(Text)
+    updated_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

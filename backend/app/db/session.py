@@ -27,6 +27,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_add_sessions_participated)
         await conn.run_sync(_add_sessions_flow_state)
+        await conn.run_sync(_add_saved_records_user_id)
         await conn.run_sync(_remap_retired_flow_keys)
         await conn.run_sync(_delete_unused_sessions)
 
@@ -66,6 +67,23 @@ def _add_sessions_flow_state(conn) -> None:
         conn.execute(text("ALTER TABLE sessions ADD COLUMN flow_state JSON NOT NULL DEFAULT '{}'"))
 
 
+def _add_saved_records_user_id(conn) -> None:
+    """One-off in-place migration: records are owned by the account, so they
+    stay in "我的记录" after the conversation they came from is deleted.
+    Backfilled from each record's conversation."""
+
+    from sqlalchemy import inspect, text
+
+    columns = {c["name"] for c in inspect(conn).get_columns("saved_records")}
+    if "user_id" in columns:
+        return
+    conn.execute(text("ALTER TABLE saved_records ADD COLUMN user_id VARCHAR(36)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_saved_records_user_id ON saved_records (user_id)"))
+    conn.execute(
+        text("UPDATE saved_records SET user_id = (SELECT user_id FROM sessions WHERE sessions.id = saved_records.session_id)")
+    )
+
+
 def _remap_retired_flow_keys(conn) -> None:
     """The four old flows became the flowchart stages (app/prompts/stages.py).
     Blocks admins had added under a retired flow move to the stage that
@@ -88,4 +106,5 @@ def _delete_unused_sessions(conn) -> None:
     unused = "SELECT id FROM sessions WHERE participated = 0 AND created_at < datetime('now', '-10 minutes')"
     conn.execute(text(f"DELETE FROM messages WHERE session_id IN ({unused})"))
     conn.execute(text(f"DELETE FROM saved_records WHERE session_id IN ({unused})"))
+    conn.execute(text(f"DELETE FROM summary_cards WHERE session_id IN ({unused})"))
     conn.execute(text(f"DELETE FROM sessions WHERE id IN ({unused})"))

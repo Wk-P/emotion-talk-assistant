@@ -163,13 +163,11 @@ const warnings = computed(() => {
 // Each switch turns a rule on (picking the first free step) or off (null).
 type StepRule = 'stabilize_step' | 'ending_step' | 'closing_step' | 'to_action_step'
 const ROLE_RULES = ['stabilize_step', 'ending_step', 'closing_step'] as const
-const CARD_TYPES = ['seb_summary', 'plan_form', 'kindness_form'] as const
-// A step may hold only one role and one card (the backend refuses doubles).
+// A step may hold only one role (the backend refuses doubles).
 function takenByOther(rule: string, key: string): boolean {
   const c = config.value
   if (!c) return false
   if ((ROLE_RULES as readonly string[]).includes(rule)) return ROLE_RULES.some((r) => r !== rule && c[r] === key)
-  if ((CARD_TYPES as readonly string[]).includes(rule)) return CARD_TYPES.some((o) => o !== rule && c.card_steps[o] === key)
   return false
 }
 function firstFree(rule: string): string | null {
@@ -177,9 +175,6 @@ function firstFree(rule: string): string | null {
 }
 function setRule(rule: StepRule, on: boolean) {
   if (config.value) config.value[rule] = on ? (config.value[rule] ?? firstFree(rule)) : null
-}
-function setCard(card: (typeof CARD_TYPES)[number], on: boolean) {
-  if (config.value) config.value.card_steps[card] = on ? (config.value.card_steps[card] ?? firstFree(card)) : null
 }
 function setNumber(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, Math.round(value) || low))
@@ -319,19 +314,6 @@ function resetRules() {
           <select v-if="config[r]" v-model="config[r]" :disabled="phone">
             <option v-for="k in order" :key="k" :value="k" :disabled="takenByOther(r, k)">{{ nameOf(k) }}</option>
           </select>
-        </div>
-        <div v-for="c in CARD_TYPES" :key="c" class="ctrl-row">
-          <label class="switch"><input type="checkbox" :checked="!!config.card_steps[c]" :disabled="phone" @change="setCard(c, ($event.target as HTMLInputElement).checked)" />{{ t(`flowUi.ctrl.${c}`) }}</label>
-          <template v-if="config.card_steps[c]">
-            <select v-model="config.card_steps[c]" :disabled="phone">
-              <option v-for="k in live" :key="k" :value="k" :disabled="takenByOther(c, k)">{{ nameOf(k) }}</option>
-            </select>
-            <span v-if="c === 'seb_summary'" class="ctrl-num">
-              {{ t('flowUi.ctrl.after') }}
-              <input type="number" min="1" max="20" :disabled="phone" :value="config.summary_min_turns" @change="config.summary_min_turns = setNumber(Number(($event.target as HTMLInputElement).value), 1, 20)" />
-              {{ t('flowUi.ctrl.afterUnit') }}
-            </span>
-          </template>
         </div>
         <div class="ctrl-row">
           <label class="switch"><input type="checkbox" :checked="!!config.to_action_step" :disabled="phone" @change="setRule('to_action_step', ($event.target as HTMLInputElement).checked)" />{{ t('flowUi.ctrl.to_action_step') }}</label>

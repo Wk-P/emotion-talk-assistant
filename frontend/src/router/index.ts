@@ -10,27 +10,40 @@ const router = createRouter({
     // notice dialog before every new conversation (components/ConsentDialog.vue).
     // Login is required for everything a participant does (no anonymous
     // use); help, privacy, contact and the auth pages stay public.
-    { path: '/', name: 'chat', component: () => import('@/views/ChatView.vue'), meta: { requiresAuth: true } },
-    { path: '/chat', redirect: '/' },
-    { path: '/records', name: 'records', component: () => import('@/views/RecordsView.vue'), meta: { requiresAuth: true } },
-    {
-      path: '/reflection',
-      name: 'reflection',
-      component: () => import('@/views/ReflectionView.vue'),
-      meta: { requiresAuth: true },
-    },
-    { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { requiresAuth: true } },
+    // Login / register stand alone; everything else sits in AppLayout
+    // (sidebar + content). Login is required for everything a participant
+    // does; help, privacy and contact stay public.
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
     { path: '/register', name: 'register', component: () => import('@/views/RegisterView.vue') },
-    { path: '/help', name: 'help', component: () => import('@/views/HelpView.vue') },
-    { path: '/privacy', name: 'privacy', component: () => import('@/views/PrivacyView.vue') },
-    // Help and contact are one page now; keep old /contact links working.
-    { path: '/contact', redirect: { path: '/help', hash: '#contact' } },
     {
-      path: '/admin',
-      name: 'admin',
-      component: () => import('@/views/AdminView.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      path: '/',
+      component: () => import('@/components/AppLayout.vue'),
+      children: [
+        // No separate landing page: '/' is the chat itself, with an informed-
+        // notice dialog before every new conversation (components/ConsentDialog.vue).
+        { path: '', name: 'chat', component: () => import('@/views/ChatView.vue'), meta: { requiresAuth: true } },
+        { path: 'chat', redirect: '/' },
+        { path: 'records', name: 'records', component: () => import('@/views/RecordsView.vue'), meta: { requiresAuth: true } },
+        {
+          path: 'reflection',
+          name: 'reflection',
+          component: () => import('@/views/ReflectionView.vue'),
+          meta: { requiresAuth: true },
+        },
+        { path: 'history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { requiresAuth: true } },
+        { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue') },
+        { path: 'privacy', name: 'privacy', component: () => import('@/views/PrivacyView.vue') },
+        // Help and contact are one page now; keep old /contact links working.
+        { path: 'contact', redirect: { path: '/help', hash: '#contact' } },
+        // Each admin section is its own address (/admin/users …), picked from the sidebar.
+        { path: 'admin', redirect: '/admin/conversations' },
+        {
+          path: 'admin/:tab(conversations|users|records|reflections|prompts|guide)',
+          name: 'admin',
+          component: () => import('@/views/AdminView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true },
+        },
+      ],
     },
   ],
 })

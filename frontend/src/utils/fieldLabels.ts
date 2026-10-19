@@ -1,5 +1,4 @@
-// Plain-language labels for the field keys inside summary / plan cards and
-// saved records. The keys are fixed by the backend's format rules
+// Plain-language labels for the field keys inside saved records. The keys are fixed by the backend's format rules
 // (backend/app/prompts/*.py FORMAT_RULES); a few older or alternative
 // spellings the model used before that are mapped too. Anything unknown
 // falls back to the key with underscores turned into spaces.
@@ -43,48 +42,4 @@ export function fieldText(value: unknown): string {
     return Object.values(value as Record<string, unknown>).map(fieldText).filter(Boolean).join('；')
   }
   return String(value)
-}
-
-// ---- Saving a confirmed card as a record ----
-
-export interface RecordDraft {
-  recordType: string
-  payload: Record<string, unknown>
-}
-
-interface ConfirmedCard {
-  type: string
-  items?: { id: string; label: string }[] | null
-}
-
-interface Confirmation {
-  selected_labels?: string[]
-  custom_text?: string
-  fields?: Record<string, unknown>
-}
-
-/**
- * What a confirmed card would be saved as, or null if that kind of card
- * isn't worth keeping as a record (e.g. the opening intent choice). Option
- * cards may report ids rather than labels, so they're looked up here.
- */
-export function recordFromConfirmation(card: ConfirmedCard, c: Confirmation): RecordDraft | null {
-  const labels = (c.selected_labels ?? []).map((v) => card.items?.find((i) => i.id === v)?.label ?? v)
-  const chosen = [...labels, ...(c.custom_text ? [c.custom_text] : [])].filter(Boolean)
-  const hasFields = c.fields && Object.values(c.fields).some((v) => fieldText(v))
-
-  switch (card.type) {
-    case 'seb_summary':
-      return hasFields ? { recordType: 'situation_emotion_behavior', payload: c.fields! } : null
-    case 'plan_form':
-      return hasFields ? { recordType: 'recovery_plan', payload: c.fields! } : null
-    case 'kindness_form':
-      return fieldText(c.fields?.text) ? { recordType: 'self_kindness', payload: { text: fieldText(c.fields?.text) } } : null
-    case 'self_kindness_options':
-      return chosen.length ? { recordType: 'self_kindness', payload: { text: chosen.join('\n') } } : null
-    case 'recovery_action_options':
-      return chosen.length ? { recordType: 'recovery_plan', payload: { action: chosen } } : null
-    default:
-      return null
-  }
 }

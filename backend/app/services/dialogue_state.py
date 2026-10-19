@@ -28,16 +28,6 @@ from app.services.llm import generate_turn
 from app.services.model_settings import current_effort, current_model
 
 
-# The only structured cards the model may attach, and only in their stage
-# (admin-set, flow_config.card_steps): the two flowchart checkpoints the user
-# confirms/edits and can save to their records. Enforced here rather than left to
-# the prompt, because the model kept attaching option cards to nearly every
-# reply. Options the user may pick from go in the reply text instead.
-# The minimum number of things the user has said before the summary may show
-# is admin-set (flow_config.summary_min_turns), as are the crisis reply text
-# and the screening word lists.
-
-
 @dataclass
 class TurnResult:
     reply_text: str
@@ -59,8 +49,6 @@ class TurnResult:
     prompt_versions: dict[str, int] | None = None
     # Which OpenAI model wrote this reply (None when no LLM call was made).
     model: str | None = None
-    # The listen summary was shown before this turn (flow.after_reply).
-    summary_shown: bool = False
     # What the program decided this turn, for the admin transcript:
     # [{"zh": ..., "ko": ...}] (see _format_log).
     flow_log: list[dict[str, str]] = field(default_factory=list)
@@ -68,9 +56,6 @@ class TurnResult:
 
 # Card names in the admin log.
 _CARD_NAMES = {
-    "seb_summary": ("总结卡片", "요약 카드"),
-    "plan_form": ("行动计划卡片", "행동 계획 카드"),
-    "kindness_form": ("友善的话卡片", "따뜻한 말 카드"),
     "skip": ("跳过", "건너뛰기"),
     "end": ("结束对话", "대화 끝내기"),
     "emotion_options": ("情绪选项", "감정 선택지"),
@@ -145,63 +130,15 @@ def _history_for_llm(messages: list[Message], current_text: str, turns: int) -> 
     return [{"role": m.role.value, "content": m.content} for m in recent]
 
 
-def _cards_already_shown(messages: list[Message]) -> set[str]:
-    return {
-        c.get("type")
-        for m in messages
-        if m.role == MessageRole.ASSISTANT
-        for c in (m.meta or {}).get("candidates", [])
-        if isinstance(c, dict)
-    }
-
-
-def _filter_candidates(
-    candidates: list[dict[str, Any]], messages: list[Message], stage: str, cfg: flow_config.FlowConfig
-) -> list[dict[str, Any]]:
-    """At most one card per reply, only the checkpoint of the current stage,
-    and each checkpoint at most once per conversation (shown once is enough
-    — if the user didn't confirm it, re-showing it every turn is just noise)."""
-
-    shown = _cards_already_shown(messages)
-    user_turns = sum(1 for m in messages if m.role == MessageRole.USER)
-    for card in candidates:
-        card_type = card.get("type") if isinstance(card, dict) else None
-        if card_type != cfg.card_for(stage) or card_type in shown:
-            continue
-        if card_type == "seb_summary" and user_turns < cfg.summary_min_turns:
-            continue
-        return [card]
-    return []
-
-
-# Tells the model which one-time checkpoints are already done, so it neither
-# re-offers them (they'd be filtered anyway) nor refers to a card the user
-# will never see. Wording: admin page "程序附加说明" (app/prompts/system.py).
-_SHOWN_CARD_NOTES = {
-    "seb_summary": "system.note_summary_shown",
-    "plan_form": "system.note_plan_shown",
-    "kindness_form": "system.note_kindness_shown",
-}
-
-
 def _progress_note(
-    messages: list[Message],
     state: dict[str, Any],
     cfg: flow_config.FlowConfig,
     language: Language,
     flow_key: str,
     sys: dict[str, str],
 ) -> str:
-    shown = _cards_already_shown(messages)
-    lines = [sys[key] for card_type, key in _SHOWN_CARD_NOTES.items() if card_type in shown]
-    if flow_key == cfg.card_steps.get("seb_summary") and "seb_summary" in shown:
-        # The user may confirm the summary by typing instead of using the
-        # card; the model reports it as stage_done and flow.after_reply moves on.
-        to_purpose = flow._after(flow_key, cfg.order)[:1] == [stages.PURPOSE]
-        lines.append(sys["system.note_listen_confirm" if to_purpose else "system.note_listen_confirm_other"])
-        if to_purpose:
-            lines.append(sys["system.note_no_purpose_buttons"])
-    elif flow_key == stages.PURPOSE:
+    lines: list[str] = []
+    if flow_key == stages.PURPOSE:
         # Prompts written when there were purpose buttons may still mention them.
         lines.append(sys["system.note_no_purpose_buttons"])
     lines += [flow.purpose_note(state, language, cfg, sys), flow.branch_note(state, sys), flow.jump_note(state, sys)]
@@ -225,18 +162,12 @@ def merge_confirmation(session: ConversationSession, confirmation: dict[str, Any
 
     if card_type == "emotion_options":
         ctx["emotions"] = list({*ctx.get("emotions", []), *values})
-    elif card_type == "kindness_form" and (confirmation.get("fields") or {}).get("text"):
-        ctx.setdefault("self_kindness_texts", []).append(confirmation["fields"]["text"])
     elif card_type == "self_kindness_options" and values:
         ctx.setdefault("self_kindness_texts", []).append(values[0])
     elif card_type == "stabilization_options" and values:
         ctx.setdefault("stabilization_log", []).append(values[0])
     elif card_type == "recovery_action_options":
         ctx["recovery_actions"] = list({*ctx.get("recovery_actions", []), *values})
-    elif card_type == "plan_form":
-        ctx["recovery_plan"] = confirmation.get("fields", ctx.get("recovery_plan"))
-    elif card_type == "seb_summary" and confirmation.get("fields"):
-        ctx.setdefault("seb_entries", []).append(confirmation["fields"])
 
     session.confirmed_context = ctx
 
@@ -339,7 +270,7 @@ async def handle_turn(
             f"함께 보낸 카드: {', '.join(_card_name(c.get('type'), 1) for c in result.candidates)}",
         ))
     if not ending and risk != RiskLevel.WATCH:
-        flow.after_reply(session, result.signals, cfg, summary_shown=result.summary_shown, log=log)
+        flow.after_reply(session, result.signals, cfg, log=log)
         nxt = (session.flow_state or {}).get("stage")
         if nxt:
             log.append((f"下一轮将从 {{k:{nxt}}} 开始", f"다음 차례는 {{k:{nxt}}}에서 시작해요"))
@@ -360,26 +291,25 @@ async def _continue_flow(
     ending: bool = False,
 ) -> TurnResult:
     system_prompt, prompt_versions = await build_prompt(
-        db, flow_key, session.language, triggered=flow_key != state["stage"], card=cfg.card_for(flow_key)
+        db, flow_key, session.language, triggered=flow_key != state["stage"]
     )
     messages = await _load_messages(db, session.id)
     sys = await registry.system_texts(db, session.language)
     # Progress notes are the program's: they go with its message, the first.
-    system_prompt[0] += _progress_note(messages, state, cfg, session.language, flow_key, sys)
+    system_prompt[0] += _progress_note(state, cfg, session.language, flow_key, sys)
     history = _history_for_llm(messages, synthetic_text, cfg.history_turns)
 
     model = await current_model(db)
     effort = await current_effort(db)
     params = await ai_params.load(db)
     llm_response = await generate_turn(system_prompt, history, synthetic_text, model, effort=effort, params=params)
-    candidates = [] if ending else _filter_candidates(llm_response.candidates, messages, flow_key, cfg)
+    # No cards inside the conversation: whatever the model attaches is
+    # dropped (the conversation card is app/services/summary_card.py's).
     return TurnResult(
         reply_text=llm_response.reply_text,
-        candidates=candidates,
         risk_level=risk,
         stage=flow_key,
         signals=llm_response.signals,
         prompt_versions=prompt_versions,
         model=model,
-        summary_shown="seb_summary" in _cards_already_shown(messages),
     )

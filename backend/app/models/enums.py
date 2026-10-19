@@ -36,6 +36,8 @@ class RecordType(str, enum.Enum):
     SELF_ENCOURAGEMENT = "self_encouragement"
     RECOVERY_PLAN = "recovery_plan"
     WEEKLY_REFLECTION = "weekly_reflection"
+    # The conversation card the user kept at the end (app/services/summary_card.py).
+    CONVERSATION_SUMMARY = "conversation_summary"
 
 
 class DialogueIntent(str, enum.Enum):
