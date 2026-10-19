@@ -23,9 +23,11 @@ export function formatDate(value: string | Date): string {
   return toDate(value).toLocaleDateString(undefined, { timeZone: DISPLAY_TIME_ZONE })
 }
 
-/** YYYY-MM-DD of the given moment in Korea time. */
+/** YYYY-MM-DD of the given moment in Korea time. Computed by hand (Korea has
+ * no DST): toLocaleDateString('en-CA') returns "10/19/2026" on some iPhones,
+ * which broke PUT /api/reflections/{day} with a 404. */
 export function displayDay(value: string | Date = new Date()): string {
-  return toDate(value).toLocaleDateString('en-CA', { timeZone: DISPLAY_TIME_ZONE })
+  return new Date(toDate(value).getTime() - DISPLAY_TZ_OFFSET * 60_000).toISOString().slice(0, 10)
 }
 
 /** The instant a Korea-time day (YYYY-MM-DD) starts, `addDays` later, as ISO. */
