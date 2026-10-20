@@ -6,21 +6,8 @@ import { useSessionStore } from '@/stores/session'
 const { t } = useI18n()
 const session = useSessionStore()
 
-// "终止对话" asks once before ending; what to keep is asked after the
-// AI's closing reply (components/cards/EndFlow.vue).
+// "终止对话" asks once before ending.
 const confirming = ref(false)
-
-function skipQuestion() {
-  if (session.sending) return
-  session.send(undefined, { card_type: 'skip' })
-}
-
-function anotherQuestion() {
-  if (session.sending) return
-  // Sent into the conversation, so it follows the conversation's language
-  // (zh/ko), not the interface language.
-  session.send(session.language === 'ko' ? '다른 질문으로 해주세요' : '换一个问题')
-}
 
 async function endConversation() {
   confirming.value = false
@@ -39,12 +26,6 @@ async function endConversation() {
     </div>
   </nav>
   <nav v-else class="toolbar">
-    <button type="button" class="btn-outline" :disabled="session.sending" @click="anotherQuestion">
-      {{ t('toolbar.another') }}
-    </button>
-    <button type="button" class="btn-outline" :disabled="session.sending" @click="skipQuestion">
-      {{ t('toolbar.skip') }}
-    </button>
     <button type="button" class="btn-outline end-btn" :disabled="session.sending" @click="confirming = true">
       {{ t('toolbar.end') }}
     </button>

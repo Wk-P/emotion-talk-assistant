@@ -28,10 +28,7 @@ import {
   type UserRole,
   USERNAME_PATTERN,
 } from '@/api/client'
-import AdminReflections from '@/components/admin/AdminReflections.vue'
 import AdminRecords from '@/components/admin/AdminRecords.vue'
-import PromptEditor from '@/components/admin/PromptEditor.vue'
-import AdminGuide from '@/components/admin/AdminGuide.vue'
 import { useAuthStore } from '@/stores/auth'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
 import { displayDay, displayDayStart, formatDate, formatDateTime } from '@/utils/time'
@@ -41,14 +38,11 @@ const auth = useAuthStore()
 
 // Which section is open comes from the address (/admin/users …); the
 // sidebar (components/admin/AdminSidebar.vue) switches between them.
-type AdminTab = 'conversations' | 'users' | 'records' | 'reflections' | 'prompts' | 'guide'
+type AdminTab = 'conversations' | 'users' | 'records'
 const TAB_LABELS: Record<AdminTab, string> = {
   conversations: 'admin.tabConversations',
   users: 'admin.tabUsers',
   records: 'admin.tabRecords',
-  reflections: 'admin.tabReflections',
-  prompts: 'admin.tabPrompts',
-  guide: 'admin.tabGuide',
 }
 const route = useRoute()
 const tab = computed(() => route.params.tab as AdminTab)
@@ -488,6 +482,9 @@ onMounted(load)
                       <span v-if="item.record_count > 0" class="record-badge">
                         {{ t('admin.recordCount', { n: item.record_count }) }}
                       </span>
+                      <span v-if="item.rated_count > 0" class="record-badge rating-badge">
+                        {{ t('admin.ratingSummary', { avg: item.avg_rating, n: item.rated_count }) }}
+                      </span>
                     </span>
                   </button>
                   <button
@@ -514,12 +511,9 @@ onMounted(load)
                       <div class="message" :class="m.role">
                         {{ m.content }}
                       </div>
-                      <details v-if="m.flow_log?.length" class="flow-log">
-                        <summary>{{ t('admin.flowLog') }}</summary>
-                        <ul>
-                          <li v-for="(line, j) in m.flow_log" :key="j">{{ locale === 'ko' ? line.ko : line.zh }}</li>
-                        </ul>
-                      </details>
+                      <span v-if="m.role === 'assistant' && m.rating != null" class="msg-rating">
+                        {{ t('admin.rating', { n: m.rating }) }}
+                      </span>
                     </template>
                     <div v-if="openRecords.length > 0" class="saved-records">
                       <div class="saved-records-title">{{ t('admin.savedRecords') }}</div>
@@ -549,12 +543,9 @@ onMounted(load)
                 <div class="message" :class="m.role">
                   {{ m.content }}
                 </div>
-                <details v-if="m.flow_log?.length" class="flow-log">
-                  <summary>{{ t('admin.flowLog') }}</summary>
-                  <ul>
-                    <li v-for="(line, j) in m.flow_log" :key="j">{{ locale === 'ko' ? line.ko : line.zh }}</li>
-                  </ul>
-                </details>
+                <span v-if="m.role === 'assistant' && m.rating != null" class="msg-rating">
+                  {{ t('admin.rating', { n: m.rating }) }}
+                </span>
               </template>
               <div v-if="openRecords.length > 0" class="saved-records">
                 <div class="saved-records-title">{{ t('admin.savedRecords') }}</div>
@@ -573,13 +564,6 @@ onMounted(load)
       </div>
     </template>
 
-    <template v-else-if="tab === 'prompts'">
-      <PromptEditor />
-    </template>
-
-    <AdminGuide v-else-if="tab === 'guide'" />
-
-    <AdminReflections v-else-if="tab === 'reflections'" />
     <AdminRecords v-else-if="tab === 'records'" />
 
     <template v-else>
@@ -1159,19 +1143,14 @@ onMounted(load)
   gap: 6px;
   background: var(--bg);
 }
-.flow-log {
+.msg-rating {
   align-self: flex-start;
-  max-width: 85%;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
   font-size: 12px;
-  color: var(--text-muted);
-}
-.flow-log summary {
-  cursor: pointer;
-}
-.flow-log ul {
-  margin: 4px 0 0;
-  padding-left: 18px;
-  line-height: 1.6;
+  font-weight: 600;
 }
 .conv-detail .messages {
   padding: 0;

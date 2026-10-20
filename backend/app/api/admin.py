@@ -11,11 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.timefmt import kst_iso, kst_iso_or_none
 from app.api.deps import get_current_admin_required, get_session_or_404
 from app.db.session import get_db
-from app.models.enums import Language, UserRole
+from app.models.enums import Language, MessageRole, UserRole
 from app.models.message import Message
 from app.models.record import SavedRecord
-from app.models.summary_card import SummaryCard
-from app.models.reflection import DailyReflection
 from app.models.session import ConversationSession
 from app.models.user import User
 from app.schemas.admin import (
@@ -31,8 +29,6 @@ from app.schemas.admin import (
     SetRoleRequest,
 )
 from app.services.auth import hash_password, normalize_username
-from app.api.reflections import to_item as _reflection_item
-from app.schemas.reflection import AdminReflectionItem
 from app.services import export_docs
 from app.services.crypto import decrypt_json
 
@@ -44,10 +40,9 @@ def _admin_message(m: Message) -> AdminMessageItem:
         role=m.role.value,
         content=m.content,
         created_at=kst_iso(m.created_at),
-        prompt_versions=(m.meta or {}).get("prompt_versions"),
         model=(m.meta or {}).get("model"),
-        stage=(m.meta or {}).get("stage"),
-        flow_log=(m.meta or {}).get("flow_log"),
+        persona=(m.meta or {}).get("persona"),
+        rating=(m.meta or {}).get("rating"),
     )
 
 
@@ -95,6 +90,24 @@ async def _record_counts(db: AsyncSession, session_ids: list[str]) -> dict[str, 
         .group_by(SavedRecord.session_id)
     )
     return dict(result.all())
+
+
+async def _ratings(db: AsyncSession, session_ids: list[str]) -> dict[str, list[int]]:
+    """The 0-5 ratings given beside AI replies, per session."""
+
+    if not session_ids:
+        return {}
+    result = await db.execute(
+        select(Message.session_id, Message.meta).where(
+            Message.session_id.in_(session_ids), Message.role == MessageRole.ASSISTANT
+        )
+    )
+    out: dict[str, list[int]] = {}
+    for session_id, meta in result.all():
+        rating = (meta or {}).get("rating")
+        if isinstance(rating, int):
+            out.setdefault(session_id, []).append(rating)
+    return out
 
 
 # Participants are shown by their account ID (username). Every conversation
@@ -216,9 +229,7 @@ async def _delete_user_data(db: AsyncSession, user_id: str) -> None:
     await db.execute(delete(Message).where(Message.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(SavedRecord).where(SavedRecord.user_id == user_id))
-    await db.execute(delete(SummaryCard).where(SummaryCard.session_id.in_(select(session_ids_subq))))
     await db.execute(delete(ConversationSession).where(ConversationSession.user_id == user_id))
-    await db.execute(delete(DailyReflection).where(DailyReflection.user_id == user_id))
 
 
 @router.get("/sessions", response_model=list[AdminSessionItem])
@@ -246,6 +257,7 @@ async def list_all_sessions(
     stmt = await _apply_session_filter(stmt, f, count_subq.c.message_count, db, admin)
     rows = (await db.execute(stmt)).all()
     record_counts = await _record_counts(db, [session.id for session, _ in rows])
+    ratings = await _ratings(db, [session.id for session, _ in rows])
     usernames = await _usernames(db, {session.user_id for session, _ in rows})
     return [
         AdminSessionItem(
@@ -256,6 +268,8 @@ async def list_all_sessions(
             ended_at=kst_iso_or_none(session.ended_at),
             message_count=message_count,
             record_count=record_counts.get(session.id, 0),
+            rated_count=len(ratings.get(session.id, [])),
+            avg_rating=round(sum(ratings[session.id]) / len(ratings[session.id]), 1) if ratings.get(session.id) else None,
         )
         for session, message_count in rows
     ]
@@ -375,32 +389,6 @@ async def export_sessions_file(
     )
 
 
-@router.get("/reflections", response_model=list[AdminReflectionItem])
-async def list_reflections(
-    participant: str | None = Query(default=None, max_length=255),
-    day_from: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    day_to: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(get_current_admin_required),
-) -> list[AdminReflectionItem]:
-    """每日省察 answers for research review, newest first. Participants are
-    shown by account ID, as in the conversation list."""
-
-    stmt = (
-        select(DailyReflection)
-        .join(User, User.id == DailyReflection.user_id)
-        .order_by(DailyReflection.day.desc(), DailyReflection.created_at.desc())
-    )
-    if participant and participant.strip():
-        stmt = stmt.where(_participant_condition(DailyReflection.user_id, participant))
-    if day_from:
-        stmt = stmt.where(DailyReflection.day >= day_from)
-    if day_to:
-        stmt = stmt.where(DailyReflection.day <= day_to)
-    rows = (await db.execute(stmt)).scalars().all()
-    usernames = await _usernames(db, {r.user_id for r in rows})
-    return [AdminReflectionItem(**_reflection_item(r).model_dump(), participant_label=_label(r.user_id, usernames)) for r in rows]
-
 
 @router.get("/records", response_model=list[AdminUserRecordItem])
 async def list_all_records(
@@ -458,7 +446,6 @@ async def delete_admin_session(
 
     await db.execute(delete(Message).where(Message.session_id == session.id))
     await db.execute(delete(SavedRecord).where(SavedRecord.session_id == session.id))
-    await db.execute(delete(SummaryCard).where(SummaryCard.session_id == session.id))
     await db.execute(delete(ConversationSession).where(ConversationSession.id == session.id))
     await db.commit()
 

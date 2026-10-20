@@ -34,7 +34,7 @@ function shortTime(value: string): string {
 
 async function openConversation(item: SessionHistoryItem) {
   // Already open: just go back to it (it may be open behind another page).
-  if (item.session_id !== session.sessionId) await session.resume(item.session_id, item.language, !!item.ended_at)
+  if (item.session_id !== session.sessionId) await session.resume(item.session_id, item.language, !!item.ended_at, item.persona ?? null)
   router.push('/')
 }
 
@@ -82,7 +82,7 @@ watch(
 
 // Keep the list current: a conversation started, ended or deleted here, a
 // different account signed in, or one continued on another device.
-watch(() => [session.sessionId, session.ended, session.deletedNotice, auth.user?.id], loadRecent)
+watch(() => [session.sessionId, session.ended, auth.user?.id], loadRecent)
 
 function onVisible() {
   if (document.visibilityState === 'visible') loadRecent()
@@ -153,7 +153,6 @@ onBeforeUnmount(() => {
     <nav class="side-nav">
       <RouterLink to="/history">{{ t('toolbar.history') }}</RouterLink>
       <RouterLink to="/records">{{ t('toolbar.records') }}</RouterLink>
-      <RouterLink to="/reflection">{{ t('reflection.title') }}</RouterLink>
       <RouterLink to="/help">{{ t('toolbar.help') }}</RouterLink>
       <RouterLink to="/privacy">{{ t('privacy.title') }}</RouterLink>
     </nav>

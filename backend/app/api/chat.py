@@ -1,96 +1,142 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.deps import get_current_user_required, get_owned_session
-from app.db.session import get_db
+from app.db.session import async_session_maker, get_db
 from app.models.enums import MessageRole
 from app.models.message import Message
+from app.models.session import ConversationSession
 from app.models.user import User
-from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.dialogue_state import handle_turn
+from app.schemas.chat import (
+    ChatStreamRequest,
+    PersonaChoice,
+    PersonaItem,
+    PersonaList,
+    RatingRequest,
+)
+from app.services import agent, agent_config
 from app.services.llm import LLMUnavailable
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
-@router.post("", response_model=ChatResponse)
-async def chat(
-    payload: ChatRequest,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user_required),
-) -> ChatResponse:
-    # Only the logged-in owner may continue a conversation — a session id
-    # alone used to be enough.
-    session = await get_owned_session(payload.session_id, db, user)
+async def _open_session(db: AsyncSession, session_id: str, user: User) -> ConversationSession:
+    session = await get_owned_session(session_id, db, user)
     if session.ended_at:
         # The user chose "结束对话"; an ended conversation is read-only.
         raise HTTPException(status_code=409, detail="session ended")
+    return session
 
-    confirmation = payload.confirmation.model_dump() if payload.confirmation else None
 
-    user_message_id: str | None = None
-    if payload.message:
-        user_message_id = str(uuid.uuid4())
-        db.add(Message(id=user_message_id, session_id=session.id, role=MessageRole.USER, content=payload.message))
-        session.participated = True
+def _add_user_message(db: AsyncSession, session: ConversationSession, text: str) -> str:
+    message_id = str(uuid.uuid4())
+    db.add(Message(id=message_id, session_id=session.id, role=MessageRole.USER, content=text))
+    session.participated = True
+    return message_id
 
-    try:
-        result = await handle_turn(db, session, payload.message, confirmation)
-    except LLMUnavailable as e:
-        # A clean 503 instead of an unhandled 500: it passes through the CORS
-        # middleware, so the browser shows the real reason rather than a
-        # misleading CORS error. Not 502: Cloudflare replaces an origin's
-        # 502/504 with its own error page, dropping the CORS headers and the
-        # reason. Nothing from this turn is saved; the client can retry.
-        await db.rollback()
-        raise HTTPException(status_code=503, detail=f"ai service unavailable: {e.reason}") from e
 
-    # A confirmation-only turn has no payload.message, but may have sent the
-    # LLM a plain-language description of what was confirmed (see
-    # dialogue_state._describe_confirmation). Persist that too so later turns'
-    # history reconstruction still shows what was picked, not just this reply.
-    if not payload.message and result.user_text_used:
-        user_message_id = str(uuid.uuid4())
-        db.add(Message(id=user_message_id, session_id=session.id, role=MessageRole.USER, content=result.user_text_used))
-        session.participated = True
-
-    assistant_message_id = str(uuid.uuid4())
-    db.add(
-        Message(
-            id=assistant_message_id,
-            session_id=session.id,
-            role=MessageRole.ASSISTANT,
-            content=result.reply_text,
-            meta={
-                "candidates": result.candidates,
-                "risk_level": result.risk_level.value,
-                "prompt_versions": result.prompt_versions,
-                "model": result.model,
-                "stage": result.stage,
-                "flow_log": result.flow_log,
-            },
-        )
-    )
-    if confirmation and confirmation.get("card_type") == "end":
-        # Only marks the conversation finished — the turns stay, exactly as
-        # for a conversation the user simply left (unlike consent.end_session,
-        # which also purges them without DIALOGUE_HISTORY consent).
+def _add_reply(db: AsyncSession, session: ConversationSession, text: str, turn: agent.Turn, end: bool) -> str:
+    message_id = str(uuid.uuid4())
+    db.add(Message(id=message_id, session_id=session.id, role=MessageRole.ASSISTANT, content=text, meta=turn.meta()))
+    if end:
+        # Only marks the conversation finished — the turns stay.
         session.ended_at = datetime.now(timezone.utc)
     db.add(session)
+    return message_id
+
+
+def _event(name: str, data: dict) -> str:
+    return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@router.post("/stream")
+async def chat_stream(
+    payload: ChatStreamRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user_required),
+) -> StreamingResponse:
+    """One turn, streamed as server-sent events: `delta` {text} as the reply
+    is written, then `done` {user_message_id, assistant_message_id,
+    risk_level}, or `error` {reason}. Nothing is saved unless the reply
+    finished, so the client can simply retry."""
+
+    if not payload.message and not payload.end:
+        raise HTTPException(status_code=422, detail="message or end required")
+    await _open_session(db, payload.session_id, user)
+
+    async def events():
+        # Its own database session: the request's closes when the response starts.
+        async with async_session_maker() as sdb:
+            session = await _open_session(sdb, payload.session_id, user)
+            user_message_id = _add_user_message(sdb, session, payload.message) if payload.message else None
+            parts: list[str] = []
+            try:
+                turn = await agent.prepare(sdb, session, payload.message, ending=payload.end)
+                async for piece in agent.stream_reply(turn):
+                    parts.append(piece)
+                    yield _event("delta", {"text": piece})
+            except LLMUnavailable as e:
+                await sdb.rollback()
+                yield _event("error", {"reason": e.reason})
+                return
+            assistant_message_id = _add_reply(sdb, session, "".join(parts).strip(), turn, payload.end)
+            await sdb.commit()
+            yield _event(
+                "done",
+                {
+                    "user_message_id": user_message_id,
+                    "assistant_message_id": assistant_message_id,
+                    "risk_level": turn.risk.value,
+                },
+            )
+
+    # No buffering by proxies (Cloudflare / nginx), so pieces arrive as written.
+    return StreamingResponse(
+        events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@router.put("/messages/{message_id}/rating", status_code=204)
+async def rate_reply(
+    message_id: str,
+    payload: RatingRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user_required),
+) -> None:
+    """The 0-5 rating beside an AI reply, kept on the reply (meta.rating)."""
+
+    message = await db.get(Message, message_id)
+    if not message or message.role != MessageRole.ASSISTANT:
+        raise HTTPException(status_code=404, detail="message not found")
+    await get_owned_session(message.session_id, db, user)
+    message.meta = {**(message.meta or {}), "rating": payload.rating, "rated_at": datetime.now(timezone.utc).isoformat()}
+    flag_modified(message, "meta")
     await db.commit()
 
-    # Design principle 8.2/8.5: Message rows are working memory for this
-    # session; they are only kept past session end if the user has opted in
-    # via ConsentCategory.DIALOGUE_HISTORY — enforced in app/api/consent.py's
-    # `end_session`, not here.
 
-    return ChatResponse(
-        reply_text=result.reply_text,
-        candidates=result.candidates,
-        risk_level=result.risk_level,
-        user_message_id=user_message_id,
-        assistant_message_id=assistant_message_id,
+@router.get("/personas", response_model=PersonaList)
+async def list_personas(_: User = Depends(get_current_user_required)) -> PersonaList:
+    return PersonaList(
+        personas=[PersonaItem(id=p["id"], name=p["name"], intro=p["intro"]) for p in agent_config.PERSONAS],
+        default=agent_config.DEFAULT_PERSONA,
     )
+
+
+@router.put("/sessions/{session_id}/persona", status_code=204)
+async def choose_persona(
+    payload: PersonaChoice,
+    db: AsyncSession = Depends(get_db),
+    session: ConversationSession = Depends(get_owned_session),
+) -> None:
+    """Later replies use this persona (None = the default)."""
+
+    if payload.persona and payload.persona not in {p["id"] for p in agent_config.PERSONAS}:
+        raise HTTPException(status_code=422, detail="unknown persona")
+    session.persona = payload.persona
+    await db.commit()

@@ -1,16 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { CandidateCard, ConfirmationPayload, Language, SummaryCard } from '@/api/client'
+import type { Language, Persona } from '@/api/client'
 import {
-  decideCard,
-  deleteSession,
   endSession,
   getSessionMessages,
   errorStatus,
-  listCards,
-  requestFinalCard,
-  requestReviewCard,
-  sendChat,
+  listPersonas,
+  rateReply,
+  setSessionPersona,
+  setAuthToken,
+  streamChat,
   updateSessionLanguage,
   startSession,
   syncSession,
@@ -23,8 +22,11 @@ export interface ChatTurn {
   id?: string
   role: 'user' | 'assistant'
   text: string
-  candidates?: CandidateCard[]
   riskLevel?: 'none' | 'watch' | 'crisis'
+  /** Assistant replies: the 0-5 rating given beside it. */
+  rating?: number | null
+  /** The reply is still being written. */
+  streaming?: boolean
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -37,28 +39,45 @@ export const useSessionStore = defineStore('session', () => {
   const turns = ref<ChatTurn[]>([])
   const sending = ref(false)
   const consent = ref<Record<string, boolean>>({})
-  // Indices into `turns` whose candidate card(s) have already been acted on —
-  // used to lock those cards so a second tap can't resend the same choice.
-  const answeredTurnIndices = ref<Set<number>>(new Set())
   // Set when the last send() failed (network/API error) so the UI can show a
   // retry affordance instead of silently doing nothing.
   const error = ref<string | null>(null)
-  const lastFailedSend = ref<{ message?: string; confirmation?: ConfirmationPayload } | null>(null)
+  const lastFailedSend = ref<{ message?: string; end?: boolean } | null>(null)
   // The user chose "结束对话" (or reopened one they had ended): the AI's
   // closing reply is shown and no further messages can be sent.
   const ended = ref(false)
   // How many user/assistant messages the backend has for this conversation
   // as far as we know — sync() asks only for what came after them.
   const serverCount = ref(0)
-  // Set after the user ended a conversation and chose to delete it; the
-  // chat page says so until a new conversation starts.
-  const deletedNotice = ref(false)
-  // Conversation cards shown so far (backend app/services/summary_card.py).
-  const cards = ref<SummaryCard[]>([])
-  // After "结束对话": the final card's steps ('card'), then whether to keep
-  // the conversation ('conversation'); 'done' (or null for a conversation
-  // ended earlier) shows the ended panel.
-  const endFlow = ref<'card' | 'conversation' | 'done' | null>(null)
+  // Speaking styles to pick from (backend app/services/agent_config.py) and
+  // the one this conversation uses (null = the default).
+  const personas = ref<Persona[]>([])
+  const defaultPersona = ref<string | null>(null)
+  const persona = ref<string | null>(null)
+
+  async function loadPersonas() {
+    if (personas.value.length) return
+    const res = await listPersonas().catch(() => null)
+    if (!res) return
+    personas.value = res.personas
+    defaultPersona.value = res.default
+  }
+
+  // Later replies use the new persona; a chat not started yet sends it on
+  // its first message.
+  async function choosePersona(id: string | null) {
+    persona.value = id
+    if (sessionId.value && !ended.value) await setSessionPersona(sessionId.value, id).catch(() => {})
+  }
+
+  async function rate(turn: ChatTurn, rating: number | null) {
+    if (!turn.id) return
+    const before = turn.rating
+    turn.rating = rating
+    await rateReply(turn.id, rating).catch(() => {
+      turn.rating = before
+    })
+  }
 
   function begin(lang: Language) {
     reset()
@@ -70,102 +89,80 @@ export const useSessionStore = defineStore('session', () => {
   // backend chat endpoint accepts further messages against an existing
   // session_id unless the user ended it, so this only needs to rehydrate
   // local state from the stored history.
-  // Replayed turns never carry candidate cards (history only stores
-  // role/content), so they render as plain bubbles; the conversation cards
-  // come back separately.
-  async function resume(id: string, lang: Language, isEnded = false) {
-    const [messages, shown] = await Promise.all([getSessionMessages(id), listCards(id).catch(() => [])])
+  async function resume(id: string, lang: Language, isEnded = false, personaId: string | null = null) {
+    const messages = await getSessionMessages(id)
     pending.value = false
     ended.value = isEnded
     sessionId.value = id
     language.value = lang
+    persona.value = personaId
     turns.value = messages
       .filter((m): m is typeof m & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ id: m.id, role: m.role, text: m.content }))
+      .map((m) => ({ id: m.id, role: m.role, text: m.content, rating: m.rating ?? null }))
     serverCount.value = turns.value.length
-    answeredTurnIndices.value = new Set()
-    cards.value = shown
-    // Ended here earlier but the final card was never answered: pick up there.
-    const final = shown.find((c) => c.kind === 'final')
-    endFlow.value = isEnded && final && !final.decision ? 'card' : null
     error.value = null
     lastFailedSend.value = null
-    lastReviewCheck = 0
-    if (!isEnded) void checkReview()
   }
 
-  // Coming back to a conversation: the backend decides whether a review
-  // card is due (4 hours since the last message, 4 rounds since the last
-  // card). Asked on opening it and whenever the page comes back into view.
-  let lastReviewCheck = 0
-  async function checkReview() {
-    const id = sessionId.value
-    if (!id || ended.value || sending.value || Date.now() - lastReviewCheck < 60_000) return
-    lastReviewCheck = Date.now()
-    const card = await requestReviewCard(id).catch(() => null)
-    if (card && sessionId.value === id && !cards.value.some((c) => c.id === card.id)) cards.value = [...cards.value, card]
-  }
-
-  // The final card, written by the backend the first time it's asked for.
-  async function loadFinalCard(): Promise<SummaryCard> {
-    const existing = cards.value.find((c) => c.kind === 'final')
-    if (existing) return existing
-    const card = await requestFinalCard(sessionId.value!)
-    if (!cards.value.some((c) => c.id === card.id)) cards.value = [...cards.value, card]
-    return card
-  }
-
-  async function decideFinalCard(save: boolean) {
-    const card = cards.value.find((c) => c.kind === 'final')
-    if (!card || !sessionId.value) return
-    await decideCard(sessionId.value, card.id, save)
-    cards.value = cards.value.map((c) =>
-      c.id === card.id ? { ...c, decision: save ? 'saved' : 'discarded', content: save ? c.content : { summary: '', plan: '', kindness: '' } } : c,
-    )
-  }
-
-  async function send(message?: string, confirmation?: ConfirmationPayload, opts?: { skipBubble?: boolean }) {
+  // `end`: the "结束对话" button — the AI's closing reply, then the
+  // conversation is locked.
+  async function send(message?: string, opts?: { skipBubble?: boolean; end?: boolean }) {
     if ((!sessionId.value && !pending.value) || sending.value || ended.value) return
+    if (!message && !opts?.end) return
     error.value = null
     syncSeq++
     let bubble: ChatTurn | undefined
     if (message && !opts?.skipBubble) turns.value.push({ role: 'user', text: message })
     if (message) bubble = [...turns.value].reverse().find((t) => t.role === 'user' && !t.id && t.text === message)
     sending.value = true
+    // Pushed on the first piece, so the typing dots show until then.
+    let reply: ChatTurn | undefined
+    // The reactive copy in `turns`, so writing to it updates the page.
+    const ensureReply = (): ChatTurn => {
+      if (!reply) {
+        turns.value.push({ role: 'assistant', text: '', streaming: true, rating: null })
+        reply = turns.value[turns.value.length - 1]!
+      }
+      return reply
+    }
     try {
       if (!sessionId.value) {
         const started = await startSession(language.value)
         sessionId.value = started.session_id
         pending.value = false
+        if (persona.value) await setSessionPersona(started.session_id, persona.value)
       }
-      const res = await sendChat(sessionId.value, message, confirmation)
-      if (bubble && res.user_message_id) bubble.id = res.user_message_id
-      turns.value.push({
-        id: res.assistant_message_id ?? undefined,
-        role: 'assistant',
-        text: res.reply_text,
-        candidates: res.candidates,
-        riskLevel: res.risk_level,
+      const res = await streamChat(sessionId.value, { message, end: opts?.end }, (piece) => {
+        ensureReply().text += piece
       })
+      if (bubble && res.user_message_id) bubble.id = res.user_message_id
+      const done = ensureReply()
+      done.id = res.assistant_message_id
+      done.text = done.text.trim()
+      done.riskLevel = res.risk_level
+      done.streaming = false
       lastFailedSend.value = null
-      if (confirmation?.card_type === 'end') {
-        ended.value = true
-        endFlow.value = 'card'
-      }
-      // This device already shows the turn; just catch up on the count
-      // (a card confirmation may be stored as a user message too).
+      if (opts?.end) ended.value = true
+      // This device already shows the turn; just catch up on the count.
       void catchUp(sessionId.value, false)
     } catch (e) {
+      // A half-written reply was not saved: drop it, the retry writes it again.
+      if (reply) turns.value = turns.value.filter((t) => t !== reply)
+      const status = errorStatus(e)
+      if (status === 401) {
+        setAuthToken(null)
+        window.location.assign(`/login?redirect=${encodeURIComponent(window.location.pathname)}`)
+        return
+      }
       // 409: this conversation was already ended (e.g. in another tab).
-      if (errorStatus(e) === 409) {
+      if (status === 409) {
         ended.value = true
         return
       }
-      // Keep the user's bubble (their intent was real) but surface a retry
-      // affordance instead of leaving the UI silently stuck on "...".
+      // Keep the user's bubble (their intent was real) but surface a retry.
       // 503 = the backend is fine but the AI provider call failed.
-      error.value = errorStatus(e) === 503 ? 'ai_unavailable' : 'send_failed'
-      lastFailedSend.value = { message, confirmation }
+      error.value = status === 503 ? 'ai_unavailable' : 'send_failed'
+      lastFailedSend.value = { message, end: opts?.end }
     } finally {
       sending.value = false
     }
@@ -198,7 +195,8 @@ export const useSessionStore = defineStore('session', () => {
       const known = new Set(turns.value.map((t) => t.id).filter(Boolean))
       for (const m of res.messages) {
         if (known.has(m.id)) continue
-        if (m.role === 'user' || m.role === 'assistant') turns.value.push({ id: m.id, role: m.role, text: m.content })
+        if (m.role === 'user' || m.role === 'assistant')
+          turns.value.push({ id: m.id, role: m.role, text: m.content, rating: m.rating ?? null })
       }
     }
     serverCount.value = res.total
@@ -207,11 +205,11 @@ export const useSessionStore = defineStore('session', () => {
 
   async function retry() {
     if (!lastFailedSend.value) return
-    const { message, confirmation } = lastFailedSend.value
+    const { message, end } = lastFailedSend.value
     lastFailedSend.value = null
     // The bubble for this message (if any) is already in `turns` from the
     // failed attempt — don't push a second copy.
-    await send(message, confirmation, { skipBubble: true })
+    await send(message, { skipBubble: true, end })
   }
 
   // The user switched the UI language. An ongoing conversation continues in
@@ -222,10 +220,6 @@ export const useSessionStore = defineStore('session', () => {
     if (language.value === lang) return
     language.value = lang
     if (sessionId.value && !ended.value) await updateSessionLanguage(sessionId.value, lang)
-  }
-
-  function markAnswered(turnIndex: number) {
-    answeredTurnIndices.value = new Set(answeredTurnIndices.value).add(turnIndex)
   }
 
   async function setConsent(category: string, granted: boolean) {
@@ -240,19 +234,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   // "结束对话": the AI writes a short closing reply, then the conversation
-  // is locked and the final card follows (endFlow). Never purges the turns.
+  // is locked. Never purges the turns.
   async function endConversation() {
     if (!sessionId.value || sending.value || ended.value) return
-    await send(undefined, { card_type: 'end' })
-  }
-
-  // End flow → "不保存（删除对话）": removes the whole conversation (what
-  // was saved to "我的记录" stays).
-  async function discardConversation() {
-    if (sending.value) return
-    if (sessionId.value) await deleteSession(sessionId.value)
-    reset()
-    deletedNotice.value = true
+    await send(undefined, { end: true })
   }
 
   // Drops the in-memory reference to the current session without calling the
@@ -262,17 +247,13 @@ export const useSessionStore = defineStore('session', () => {
   function reset() {
     sessionId.value = null
     pending.value = false
+    persona.value = null
     turns.value = []
     consent.value = {}
-    answeredTurnIndices.value = new Set()
-    cards.value = []
-    endFlow.value = null
-    lastReviewCheck = 0
     error.value = null
     lastFailedSend.value = null
     ended.value = false
     serverCount.value = 0
-    deletedNotice.value = false
   }
 
   return {
@@ -282,26 +263,23 @@ export const useSessionStore = defineStore('session', () => {
     turns,
     sending,
     consent,
-    answeredTurnIndices,
     error,
     ended,
     endConversation,
-    discardConversation,
-    deletedNotice,
     begin,
     resume,
     send,
     sync,
     retry,
-    markAnswered,
     setLanguage,
-    cards,
-    endFlow,
-    checkReview,
-    loadFinalCard,
-    decideFinalCard,
     setConsent,
     finish,
     reset,
+    personas,
+    defaultPersona,
+    persona,
+    loadPersonas,
+    choosePersona,
+    rate,
   }
 })

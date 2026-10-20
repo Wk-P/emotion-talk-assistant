@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { ConfirmationPayload, Language } from '@/api/client'
+import type { Language } from '@/api/client'
 import BottomToolbar from '@/components/BottomToolbar.vue'
-import CandidateCardView from '@/components/cards/CandidateCardView.vue'
-import ConversationCard from '@/components/cards/ConversationCard.vue'
-import EndFlow from '@/components/cards/EndFlow.vue'
 import ConsentDialog from '@/components/ConsentDialog.vue'
 import { useSessionStore } from '@/stores/session'
 import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
@@ -84,11 +81,8 @@ let syncTimer: number | undefined
 function syncNow() {
   if (document.visibilityState === 'visible') void session.sync()
 }
-// Back on the page: also the moment a review card may be due.
 function onReturn() {
-  if (document.visibilityState !== 'visible') return
-  void session.sync()
-  void session.checkReview()
+  if (document.visibilityState === 'visible') void session.sync()
 }
 onMounted(() => {
   syncTimer = window.setInterval(syncNow, SYNC_MS)
@@ -101,20 +95,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('focus', onReturn)
 })
 
-// Conversation cards shown inline after the message they followed: review
-// cards, and a final card once it was kept (while the end flow is still on
-// the card step, EndFlow shows it).
-function cardsAfter(idx: number) {
-  return session.cards.filter(
-    (c) =>
-      c.after_messages === idx + 1 &&
-      (c.kind === 'review' || (c.decision === 'saved' && session.endFlow !== 'card')),
-  )
-}
-const inEndFlow = computed(() => session.ended && (session.endFlow === 'card' || session.endFlow === 'conversation'))
-watch(() => session.cards.length, scrollToBottom)
-watch(() => session.endFlow, scrollToBottom)
-
 function submit() {
   const text = draft.value.trim()
   if (!text || session.sending) return
@@ -122,10 +102,21 @@ function submit() {
   session.send(text)
 }
 
-function onCardConfirm(idx: number, payload: ConfirmationPayload) {
-  session.markAnswered(idx)
-  session.send(undefined, payload)
+// Rating beside each AI reply: the local dev build only, for tuning.
+const showRating = import.meta.env.DEV
+const RATINGS = [0, 1, 2, 3, 4, 5]
+
+// Dots until the reply's first piece arrives; then the reply itself grows.
+const waiting = computed(() => session.sending && !session.turns[session.turns.length - 1]?.streaming)
+
+const personaId = computed({
+  get: () => session.persona ?? session.defaultPersona ?? '',
+  set: (id: string) => void session.choosePersona(id),
+})
+function personaName(p: { name: Partial<Record<Language, string>> }) {
+  return p.name[session.language] ?? p.name.zh ?? ''
 }
+onMounted(() => void session.loadPersonas())
 </script>
 
 <template>
@@ -137,6 +128,15 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
         </button>
         <span class="title">{{ t('app.title') }}</span>
         <div class="header-actions">
+          <select
+            v-if="session.personas.length && !session.ended && !needsAck"
+            v-model="personaId"
+            class="persona-select"
+            :aria-label="t('chat.persona')"
+            :title="t('chat.persona')"
+          >
+            <option v-for="p in session.personas" :key="p.id" :value="p.id">{{ personaName(p) }}</option>
+          </select>
           <button
             v-if="session.turns.length > 0"
             type="button"
@@ -149,9 +149,6 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
       </header>
 
       <div ref="scrollEl" class="turns" :lang="session.language === 'ko' ? 'ko' : 'zh-CN'">
-        <p v-if="session.deletedNotice && session.turns.length === 0" class="deleted-notice" role="status">
-          {{ t('chat.deletedNotice') }}
-        </p>
         <ConsentDialog v-if="needsAck" @start="onAcknowledge" />
         <div v-if="showEmptyHint" class="chat-empty">
           <!-- documents/02_内容与需求/首选提示题建议.md, verbatim and not edited: the welcome
@@ -162,21 +159,27 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
         <TransitionGroup name="turn" tag="div" class="turns-inner">
           <div v-for="(turn, idx) in session.turns" :key="idx" class="turn" :class="turn.role">
             <div class="bubble">{{ turn.text }}</div>
-            <CandidateCardView
-              v-for="(card, cIdx) in turn.candidates ?? []"
-              :key="cIdx"
-              :card="card"
-              :disabled="session.answeredTurnIndices.has(idx)"
-              @confirm="(payload) => onCardConfirm(idx, payload)"
-            />
-            <div v-for="c in cardsAfter(idx)" :key="c.id" class="inline-card">
-              <ConversationCard :card="c" plain />
+            <div
+              v-if="showRating && turn.role === 'assistant' && turn.id && !turn.streaming"
+              class="rating"
+              role="group"
+              :aria-label="t('chat.rate')"
+              :title="t('chat.rate')"
+            >
+              <button
+                v-for="n in RATINGS"
+                :key="n"
+                type="button"
+                :class="{ on: turn.rating === n }"
+                :aria-pressed="turn.rating === n"
+                @click="session.rate(turn, turn.rating === n ? null : n)"
+              >
+                {{ n }}
+              </button>
             </div>
           </div>
 
-          <EndFlow v-if="inEndFlow && !session.sending" key="end-flow" class="turn" />
-
-          <div v-if="session.sending" key="typing" class="turn assistant">
+          <div v-if="waiting" key="typing" class="turn assistant">
             <div class="bubble typing" role="status" :aria-label="t('chat.assistant')">
               <span class="dot" />
               <span class="dot" />
@@ -194,13 +197,12 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
       </div>
 
       <!-- No input until the notice is accepted, nothing to type into yet. -->
-      <div v-if="inEndFlow || needsAck" class="footer" />
+      <div v-if="needsAck" class="footer" />
       <div v-else-if="session.ended" class="footer ended-panel">
         <p class="ended-title">{{ t('chat.endedTitle') }}</p>
         <p class="ended-hint">{{ t('chat.endedHint') }}</p>
         <div class="ended-actions">
           <button type="button" class="btn-primary" @click="session.reset()">{{ t('chat.newChat') }}</button>
-          <RouterLink to="/reflection" class="btn-outline">{{ t('chat.writeReflection') }}</RouterLink>
         </div>
       </div>
 
@@ -274,12 +276,43 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   align-items: center;
   gap: 4px;
 }
+.persona-select {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  max-width: 140px;
+}
+.rating {
+  display: flex;
+  gap: 4px;
+}
+.rating button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.rating button.on {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
 .export-btn {
   font-size: 12.5px;
   padding: 6px 8px;
 }
 .turns {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px 16px 24px;
 }
@@ -291,15 +324,6 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   padding: 0 16px;
   text-align: center;
 }
-.deleted-notice {
-  margin: 12px auto 0;
-  padding: 8px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
-  background: var(--surface);
-  border-radius: 999px;
-  text-align: center;
-}
 .chat-empty-hint {
   margin: 0;
   font-size: 15px;
@@ -308,12 +332,6 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   /* keep the line breaks of the source text (the list of starters) */
   white-space: pre-line;
   text-align: left;
-}
-.inline-card {
-  align-self: flex-start;
-  width: 100%;
-  max-width: 520px;
-  margin-top: 6px;
 }
 .turns-inner {
   display: flex;
@@ -425,8 +443,17 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   background: var(--surface);
 }
 .footer {
+  flex-shrink: 0;
   background: var(--surface);
   padding: 0 12px env(safe-area-inset-bottom, 0px);
+}
+/* A soft top edge, so the footer reads as separate from the scrolling turns
+   (not on the empty placeholder footer). */
+.footer:not(:empty) {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
 }
 .composer {
   padding: 6px 0 10px;
@@ -463,17 +490,18 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   opacity: 0.6;
 }
 .ended-panel {
-  padding: 16px 16px 20px;
+  flex-shrink: 0;
+  padding: 16px 16px calc(28px + env(safe-area-inset-bottom, 0px));
   text-align: center;
 }
 .ended-title {
-  margin: 0 0 4px;
+  margin: 0 auto 4px;
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
 }
 .ended-hint {
-  margin: 0 0 12px;
+  margin: 0 auto 12px;
   font-size: 13px;
   color: var(--text-muted);
 }
@@ -543,6 +571,9 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   }
   .footer {
     padding: 0 24px;
+  }
+  .ended-panel {
+    padding: 20px 24px 32px;
   }
   .composer {
     padding-bottom: 16px;

@@ -39,19 +39,19 @@ class ConversationSession(Base):
     # and such a session was still a real conversation.
     participated: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
-    # Rolling self-criticism signal in [0, 1], used to prioritize acceptance support
-    # over exploration/action planning (design principle 4, 9.3).
-    self_criticism_level: Mapped[float] = mapped_column(Float, default=0.0)
-
     # {"situation": str|None, "emotions": [str], "needs": [str], "beliefs": [str],
     #  "acculturation_domains": [str], "values": [str], "goals": [...],
     #  "seb_entries": [...]}
     confirmed_context: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    # Where the conversation is in the flowchart, kept by app/services/flow.py:
-    # {"stage": "flow.listen"|…, "turns": int, "purpose": str|None,
-    #  "branch": "strong"|"weak"|"none"|None}. Decided in code, never by the model.
+    # No longer used (the old stage flow); kept because existing databases
+    # have these columns as NOT NULL.
+    self_criticism_level: Mapped[float] = mapped_column(Float, default=0.0)
     flow_state: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    # The speaking style the user picked (app/services/agent_config.py
+    # PERSONAS); None = the default.
+    persona: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Per-category booleans, see ConsentCategory. Defaults are all False (opt-in only).
     consent: Mapped[dict] = mapped_column(JSON, default=dict)

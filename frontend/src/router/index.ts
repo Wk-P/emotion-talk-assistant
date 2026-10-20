@@ -24,12 +24,6 @@ const router = createRouter({
         { path: '', name: 'chat', component: () => import('@/views/ChatView.vue'), meta: { requiresAuth: true } },
         { path: 'chat', redirect: '/' },
         { path: 'records', name: 'records', component: () => import('@/views/RecordsView.vue'), meta: { requiresAuth: true } },
-        {
-          path: 'reflection',
-          name: 'reflection',
-          component: () => import('@/views/ReflectionView.vue'),
-          meta: { requiresAuth: true },
-        },
         { path: 'history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { requiresAuth: true } },
         { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue') },
         { path: 'privacy', name: 'privacy', component: () => import('@/views/PrivacyView.vue') },
@@ -38,7 +32,7 @@ const router = createRouter({
         // Each admin section is its own address (/admin/users …), picked from the sidebar.
         { path: 'admin', redirect: '/admin/conversations' },
         {
-          path: 'admin/:tab(conversations|users|records|reflections|prompts|guide)',
+          path: 'admin/:tab(conversations|users|records)',
           name: 'admin',
           component: () => import('@/views/AdminView.vue'),
           meta: { requiresAuth: true, requiresAdmin: true },

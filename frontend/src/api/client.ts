@@ -45,36 +45,6 @@ api.interceptors.response.use(undefined, (error) => {
 
 export type Language = 'zh' | 'ko'
 
-export interface CandidateItem {
-  id: string
-  label: string
-  description?: string
-  contact?: string
-  url?: string
-  verified_at?: string
-}
-
-export interface CandidateCard {
-  type: string
-  items: CandidateItem[]
-  fields?: Record<string, unknown> | null
-}
-
-export interface ChatResponse {
-  reply_text: string
-  candidates: CandidateCard[]
-  risk_level: 'none' | 'watch' | 'crisis'
-  user_message_id: string | null
-  assistant_message_id: string | null
-}
-
-export interface ConfirmationPayload {
-  card_type: string
-  selected_labels?: string[]
-  custom_text?: string
-  fields?: Record<string, unknown>
-}
-
 export async function startSession(language: Language) {
   const { data } = await api.post<{ session_id: string; language: Language }>('/api/session/start', {
     language,
@@ -90,6 +60,8 @@ export interface SessionHistoryItem {
   message_count: number
   last_active_at: string
   title: string
+  /** The picked persona; null = the default. */
+  persona?: string | null
 }
 
 export interface HistoryMessageItem {
@@ -97,10 +69,10 @@ export interface HistoryMessageItem {
   role: 'user' | 'assistant' | 'system'
   content: string
   created_at: string
-  // Admin transcript only: the step that answered and what the program
-  // decided that turn (missing for older replies).
-  stage?: string | null
-  flow_log?: { zh: string; ko: string }[] | null
+  /** Assistant replies: the 0-5 rating given beside it. */
+  rating?: number | null
+  // Admin transcript only: the persona that wrote an AI reply.
+  persona?: string | null
 }
 
 /** Switch an ongoing conversation's language: later AI replies use it. */
@@ -139,49 +111,75 @@ export async function deleteSession(sessionId: string) {
   await api.delete(`/api/session/${sessionId}`)
 }
 
-// ---- Conversation cards (backend app/services/summary_card.py) ----
-
-export interface SummaryCard {
-  id: string
-  /** review: shown when coming back after a long break; final: after ending. */
-  kind: 'review' | 'final'
-  /** plan is '' when no plan came up. */
-  content: { summary: string; plan: string; kindness: string }
-  /** Shown after this many user/assistant messages. */
-  after_messages: number
-  /** Final card: null until the user picks. */
-  decision: 'saved' | 'discarded' | null
+export interface StreamDone {
+  user_message_id: string | null
+  assistant_message_id: string
+  risk_level: 'none' | 'watch' | 'crisis'
 }
 
-export async function listCards(sessionId: string) {
-  const { data } = await api.get<SummaryCard[]>(`/api/session/${sessionId}/cards`)
-  return data
+/** Thrown by streamChat; `status` as for an axios error (503 = AI unavailable). */
+export class StreamError extends Error {
+  constructor(public status: number | undefined, message: string) {
+    super(message)
+  }
 }
 
-/** The program decides whether a review card is due; null when it isn't. */
-export async function requestReviewCard(sessionId: string) {
-  const { data } = await api.post<SummaryCard | null>(`/api/session/${sessionId}/review-card`)
-  return data
-}
-
-/** The ended conversation's card (written the first time). */
-export async function requestFinalCard(sessionId: string) {
-  const { data } = await api.post<SummaryCard>(`/api/session/${sessionId}/final-card`)
-  return data
-}
-
-/** Keep the final card in "我的记录" or not. */
-export async function decideCard(sessionId: string, cardId: string, save: boolean) {
-  await api.post(`/api/session/${sessionId}/cards/${cardId}/decision`, { save })
-}
-
-export async function sendChat(sessionId: string, message?: string, confirmation?: ConfirmationPayload) {
-  const { data } = await api.post<ChatResponse>('/api/chat', {
-    session_id: sessionId,
-    message: message ?? null,
-    confirmation: confirmation ?? null,
+/**
+ * One turn with the reply streamed (backend POST /api/chat/stream):
+ * `onDelta` gets each piece as it is written. `end` = the "结束对话" button.
+ */
+export async function streamChat(
+  sessionId: string,
+  body: { message?: string; end?: boolean },
+  onDelta: (text: string) => void,
+): Promise<StreamDone> {
+  const token = getAuthToken()
+  const res = await fetch(`${api.defaults.baseURL}/api/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ session_id: sessionId, message: body.message ?? null, end: !!body.end }),
   })
+  if (!res.ok || !res.body) throw new StreamError(res.status, `stream failed: ${res.status}`)
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += value
+    let cut: number
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, cut)
+      buffer = buffer.slice(cut + 2)
+      const event = /^event: (.*)$/m.exec(block)?.[1]
+      const data = /^data: (.*)$/m.exec(block)?.[1]
+      if (!event || data === undefined) continue
+      const parsed = JSON.parse(data)
+      if (event === 'delta') onDelta(parsed.text)
+      else if (event === 'done') return parsed as StreamDone
+      else if (event === 'error') throw new StreamError(503, parsed.reason)
+    }
+  }
+  throw new StreamError(undefined, 'stream ended early')
+}
+
+/** The 0-5 rating beside an AI reply (null clears it). */
+export async function rateReply(messageId: string, rating: number | null) {
+  await api.put(`/api/chat/messages/${messageId}/rating`, { rating })
+}
+
+export interface Persona {
+  id: string
+  name: Partial<Record<Language, string>>
+  intro: Partial<Record<Language, string>>
+}
+
+export async function listPersonas() {
+  const { data } = await api.get<{ personas: Persona[]; default: string }>('/api/chat/personas')
   return data
+}
+
+export async function setSessionPersona(sessionId: string, persona: string | null) {
+  await api.put(`/api/chat/sessions/${sessionId}/persona`, { persona })
 }
 
 export async function updateConsent(sessionId: string, category: string, granted: boolean) {
@@ -229,65 +227,6 @@ export async function deleteRecord(recordId: string) {
   await api.delete(`/api/records/${recordId}`)
 }
 
-// ---- 每日省察 (daily reflection questionnaire, backend app/api/reflections.py) ----
-
-export interface ReflectionAnswers {
-  helpful: string
-  changed: string
-  improve: string
-}
-
-export interface Reflection {
-  id: string
-  day: string // the writer's local date, YYYY-MM-DD
-  language: Language
-  answers: ReflectionAnswers
-  created_at: string
-  updated_at: string | null
-}
-
-export async function listMyReflections() {
-  const { data } = await api.get<Reflection[]>('/api/reflections')
-  return data
-}
-
-export async function saveReflection(day: string, language: Language, answers: ReflectionAnswers) {
-  const { data } = await api.put<Reflection>(`/api/reflections/${day}`, {
-    language,
-    answers,
-  })
-  return data
-}
-
-export async function deleteReflection(id: string) {
-  await api.delete(`/api/reflections/${id}`)
-}
-
-export interface AdminReflection extends Reflection {
-  participant_label: string
-}
-
-export async function listAdminReflections(filter: { participant?: string; day_from?: string; day_to?: string } = {}) {
-  const { data } = await api.get<AdminReflection[]>('/api/admin/reflections', { params: filter })
-  return data
-}
-
-export interface Resource {
-  id: string
-  country: string
-  category: string
-  name: Record<string, string>
-  description: Record<string, string>
-  contact: string
-  url: string | null
-  verified_at: string
-}
-
-export async function listResources() {
-  const { data } = await api.get<Resource[]>('/api/resources')
-  return data
-}
-
 export type UserRole = 'user' | 'admin' | 'superadmin'
 
 // ID + password accounts — no email anywhere. A forgotten password is reset
@@ -319,6 +258,7 @@ export async function login(username: string, password: string) {
 
 /** HTTP status of a failed request, for picking a translated message. */
 export function errorStatus(e: unknown): number | undefined {
+  if (e instanceof StreamError) return e.status
   return (e as { response?: { status?: number } })?.response?.status
 }
 
@@ -335,6 +275,9 @@ export interface AdminSessionItem {
   ended_at: string | null
   message_count: number
   record_count: number
+  /** How many AI replies were rated (0-5), and the average. */
+  rated_count: number
+  avg_rating: number | null
 }
 
 export interface AdminRecordItem {
@@ -463,339 +406,4 @@ export async function setAdminUserActive(userId: string, isActive: boolean) {
 export async function setAdminUserRole(userId: string, role: UserRole) {
   const { data } = await api.patch<AdminUserItem>(`/api/admin/users/${userId}/role`, { role })
   return data
-}
-
-// ---- Advanced AI settings (backend app/api/ai_params.py) ----
-
-export type AiParamName =
-  | 'history_turns'
-  | 'temperature'
-  | 'top_p'
-  | 'max_tokens'
-  | 'presence_penalty'
-  | 'frequency_penalty'
-  | 'timeout_seconds'
-  | 'max_retries'
-
-/** `null` = not sent: the model's own default applies. */
-export type AiParamValues = Record<AiParamName, number | null>
-
-export interface AiParamsOverview {
-  values: AiParamValues
-  defaults: AiParamValues
-  ranges: Record<AiParamName, { min: number; max: number; integer: boolean; required: boolean }>
-  model: string
-  effort: ReasoningEffort | null
-}
-
-export interface AiParamsRecommendation {
-  values: AiParamValues
-  reasons: Partial<Record<AiParamName, string>>
-  /** false: the AI call failed and built-in values came back instead. */
-  from_ai: boolean
-}
-
-export async function getAiParams() {
-  const { data } = await api.get<AiParamsOverview>('/api/admin/ai-params')
-  return data
-}
-
-export async function setAiParams(values: AiParamValues) {
-  const { data } = await api.put<AiParamsOverview>('/api/admin/ai-params', values)
-  return data
-}
-
-export async function recommendAiParams(language: string) {
-  const { data } = await api.post<AiParamsRecommendation>('/api/admin/ai-params/recommend', { language })
-  return data
-}
-
-// ---- AI model choice (backend app/api/ai_model.py) ----
-
-export interface ModelCandidate {
-  id: string
-  released: string // YYYY-MM-DD
-  usable: boolean
-  error: string | null
-  supports_effort: boolean
-  /** Plain-language traits, translated under admin model.tags.* */
-  tags: string[]
-}
-
-export type ReasoningEffort = 'low' | 'medium' | 'high'
-
-export interface ModelOverview {
-  current: string
-  default: string
-  chosen_here: boolean
-  updated_at: string | null
-  updated_by: string | null
-  candidates: ModelCandidate[]
-  checked_at: string
-  recent_days: number
-  /** `null` = OpenAI's default for the model. */
-  effort: ReasoningEffort | null
-}
-
-export async function getModelOverview(refresh = false) {
-  const { data } = await api.get<ModelOverview>('/api/admin/model', { params: refresh ? { refresh: true } : {} })
-  return data
-}
-
-/** `null` goes back to the server's default model. */
-export async function setModel(model: string | null) {
-  const { data } = await api.put<ModelOverview>('/api/admin/model', { model })
-  return data
-}
-
-/** `null` goes back to OpenAI's default for the model. */
-export async function setEffort(effort: ReasoningEffort | null) {
-  const { data } = await api.put<ModelOverview>('/api/admin/model/effort', { effort })
-  return data
-}
-
-// ---- Prompt editing (see backend app/api/prompts.py) ----
-
-export interface PromptItem {
-  key: string
-  language: Language
-  version: number // 0 = code default, nothing saved yet
-  content: string
-  default_content: string
-  updated_at: string | null
-  updated_by: string | null
-  // A saved-but-not-applied edit ("暂存"), if any.
-  draft_content: string | null
-  draft_updated_at: string | null
-  draft_updated_by: string | null
-}
-
-export type PromptGroup = 'rules' | 'flow' | 'other' | 'system'
-
-// One block on the admin page: built-in (rename / disable only) or added by
-// an admin (also deletable). See backend app/prompts/registry.load_modules.
-export interface PromptModuleItem {
-  key: string
-  group: PromptGroup
-  built_in: boolean
-  enabled: boolean
-  names: Partial<Record<Language, string>>
-  flow_key: string | null
-  /** A conversation step (built-in or added as a step of its own), not a block attached to one. */
-  is_stage: boolean
-}
-
-export interface PromptOverview {
-  items: PromptItem[]
-  modules: PromptModuleItem[]
-  output_format: string
-  // Built-in components admins deleted (can be restored).
-  deleted: string[]
-  // Most characters one block may hold.
-  max_content_length: number
-}
-
-export interface PromptVersionItem {
-  version: number
-  content: string
-  note: string | null
-  created_at: string
-  created_by: string | null
-}
-
-export interface PromptPreviewRequest {
-  language: Language
-  /** The stage to test: a built-in flow key, e.g. 'flow.explore'. */
-  stage: string
-  overrides: Record<string, string>
-  history: { role: 'user' | 'assistant'; content: string }[]
-  message: string
-}
-
-export interface PromptPreviewResponse {
-  reply_text: string
-  candidates: CandidateCard[]
-  system_prompt: string
-  prompt_versions: Record<string, number>
-}
-
-export async function listPrompts() {
-  const { data } = await api.get<PromptOverview>('/api/admin/prompts')
-  return data
-}
-
-export async function listPromptVersions(key: string, language: Language) {
-  const { data } = await api.get<PromptVersionItem[]>(`/api/admin/prompts/${key}/${language}/versions`)
-  return data
-}
-
-export async function savePrompt(key: string, language: Language, content: string, note?: string) {
-  const { data } = await api.post<PromptItem>(`/api/admin/prompts/${key}/${language}`, { content, note: note || null })
-  return data
-}
-
-export async function savePromptDraft(key: string, language: Language, content: string) {
-  const { data } = await api.put<PromptItem>(`/api/admin/prompts/${key}/${language}/draft`, { content })
-  return data
-}
-
-export async function deletePromptDraft(key: string, language: Language) {
-  await api.delete(`/api/admin/prompts/${key}/${language}/draft`)
-}
-
-export async function previewPrompt(payload: PromptPreviewRequest) {
-  const { data } = await api.post<PromptPreviewResponse>('/api/admin/prompts/preview', payload)
-  return data
-}
-
-export async function createPromptModule(group: PromptGroup, name: string, flowKey?: string) {
-  const { data } = await api.post<PromptModuleItem>('/api/admin/prompts/modules', {
-    group,
-    name,
-    flow_key: flowKey ?? null,
-  })
-  return data
-}
-
-export async function updatePromptModule(
-  key: string,
-  change: { language?: Language; name?: string; enabled?: boolean },
-) {
-  const { data } = await api.patch<PromptModuleItem>(`/api/admin/prompts/modules/${key}`, change)
-  return data
-}
-
-/** Admin-set flow settings (backend app/services/flow_config.py). */
-export interface FlowConfig {
-  /** Per step: [minimum, maximum] user turns. */
-  limits: Record<string, [number, number]>
-  /** How many recent messages the AI sees each turn. */
-  history_turns: number
-  /** [min, max] turns of the self-kindness step when self-criticism is weak. */
-  weak_kindness: [number, number]
-  /** Extra crisis words (built-ins always apply), "overwhelmed" words, self-criticism words. */
-  keywords: Record<KeywordList, string[]>
-  /** Reply shown with the crisis resources, by language; empty = built-in. */
-  crisis_reply: Partial<Record<Language, string>>
-  /** Self-criticism scoring, 0-100. */
-  criticism: { up: number; down: number; strong: number }
-  /** "Tell me what to do" jumps here (null = ignored). */
-  to_action_step: string | null
-  /** Steps where "tell me what to do" is not acted on. */
-  to_action_skip: string[]
-  /** Check with the user for one turn before jumping. */
-  to_action_confirm: boolean
-  end_today_enabled: boolean
-  /** Crisis resources of this country are shown ('' = all). */
-  crisis_country: string
-  /** Which step "enough for today" leads to / answers an overwhelmed user /
-   * answers the end button (null = none). The last two aren't walked through. */
-  closing_step: string | null
-  stabilize_step: string | null
-  ending_step: string | null
-  /** Steps marked safety-related (a warning on the admin pages). */
-  safety_steps: string[]
-}
-
-export type KeywordList = 'crisis' | 'watch' | 'self_criticism'
-
-export async function getFlowConfig() {
-  const { data } = await api.get<FlowConfig & { defaults: FlowConfig }>('/api/admin/prompts/flow-config')
-  return data
-}
-
-export async function saveFlowConfig(config: FlowConfig) {
-  const { data } = await api.put<FlowConfig & { defaults: FlowConfig }>('/api/admin/prompts/flow-config', config)
-  return data
-}
-
-/** The order conversations go through the steps (closing is always last). */
-export async function saveFlowOrder(order: string[]) {
-  const { data } = await api.put<{ order: string[] }>('/api/admin/prompts/flow-order', { order })
-  return data
-}
-
-export async function deletePromptModule(key: string) {
-  await api.delete(`/api/admin/prompts/modules/${key}`)
-}
-
-export async function restorePromptModule(key: string) {
-  await api.post(`/api/admin/prompts/modules/${key}/restore`)
-}
-
-// ---- prompt tools (backend app/api/prompt_tools.py) ----
-
-export interface PromptConflict {
-  where: string
-  problem: string
-  suggestion: string
-}
-
-export async function checkPromptConflicts(language: Language) {
-  const { data } = await api.post<PromptConflict[]>('/api/admin/prompt-tools/check', { language })
-  return data
-}
-
-export interface TestScript {
-  id: string
-  name: string
-  language: Language
-  lines: string[]
-}
-
-export async function fetchTestScripts() {
-  const { data } = await api.get<TestScript[]>('/api/admin/prompt-tools/scripts')
-  return data
-}
-
-export async function saveTestScripts(scripts: TestScript[]) {
-  const { data } = await api.put<TestScript[]>('/api/admin/prompt-tools/scripts', scripts)
-  return data
-}
-
-export interface RunState {
-  flow_state: Record<string, unknown>
-  confirmed_context: Record<string, unknown>
-  self_criticism_level: number
-}
-
-export interface RunMessage {
-  role: 'user' | 'assistant'
-  content: string
-  meta?: Record<string, unknown>
-}
-
-export async function runTestTurn(payload: { language: Language; message: string; history: RunMessage[]; state?: RunState }) {
-  const { data } = await api.post<{ reply_text: string; candidates: CandidateCard[]; stage: string | null; state: RunState }>(
-    '/api/admin/prompt-tools/run-turn',
-    payload,
-  )
-  return data
-}
-
-/** Verified crisis/support contacts (backend app/api/resources.py). */
-export interface CrisisResourceItem {
-  id: string
-  country: string
-  category: string
-  name: Partial<Record<Language, string>>
-  description: Partial<Record<Language, string>>
-  contact: string
-  url: string | null
-  verified_at: string
-}
-export type CrisisResourceInput = Omit<CrisisResourceItem, 'id'>
-
-export async function listCrisisResources() {
-  const { data } = await api.get<CrisisResourceItem[]>('/api/admin/resources')
-  return data
-}
-
-export async function saveCrisisResource(item: CrisisResourceInput, id?: string) {
-  if (id) await api.put(`/api/admin/resources/${id}`, item)
-  else await api.post('/api/admin/resources', item)
-}
-
-export async function deleteCrisisResource(id: string) {
-  await api.delete(`/api/admin/resources/${id}`)
 }

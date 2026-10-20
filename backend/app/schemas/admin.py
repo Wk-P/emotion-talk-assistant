@@ -14,21 +14,20 @@ class AdminSessionItem(BaseModel):
     ended_at: str | None
     message_count: int
     record_count: int = 0
+    # The 0-5 ratings given beside AI replies: how many, and their average.
+    rated_count: int = 0
+    avg_rating: float | None = None
 
 
 class AdminMessageItem(BaseModel):
     role: str
     content: str
     created_at: str
-    # {prompt key: version} an assistant reply was generated with — see
-    # app/models/prompt.py. None for user messages and older replies.
-    prompt_versions: dict[str, int] | None = None
-    # The OpenAI model that wrote an assistant reply (None for older ones).
+    # Assistant replies (None for user messages): the model and persona that
+    # wrote it, and the 0-5 rating the user gave beside it.
     model: str | None = None
-    # The step that answered, and what the program decided that turn
-    # ([{"zh": ..., "ko": ...}]); None for user messages and older replies.
-    stage: str | None = None
-    flow_log: list[dict[str, str]] | None = None
+    persona: str | None = None
+    rating: int | None = None
 
 
 class AdminRecordItem(BaseModel):

@@ -16,9 +16,6 @@ const sections = [
   { tab: 'conversations', label: 'admin.tabConversations' },
   { tab: 'users', label: 'admin.tabUsers' },
   { tab: 'records', label: 'admin.tabRecords' },
-  { tab: 'reflections', label: 'admin.tabReflections' },
-  { tab: 'prompts', label: 'admin.tabPrompts' },
-  { tab: 'guide', label: 'admin.tabGuide' },
 ]
 
 function logout() {
@@ -41,6 +38,7 @@ function logout() {
       <RouterLink v-for="s in sections" :key="s.tab" :to="`/admin/${s.tab}`">{{ t(s.label) }}</RouterLink>
     </nav>
 
+    <!-- Pushed to the bottom, just above the account block. -->
     <LanguageSwitch class="sidebar-lang" show-label />
 
     <div class="account">
@@ -105,7 +103,6 @@ function logout() {
   font-weight: 600;
 }
 .account {
-  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--border);
   display: flex;
@@ -128,6 +125,6 @@ function logout() {
   padding: 0 2px;
 }
 .sidebar-lang {
-  margin: 12px 0 4px;
+  margin: auto 0 4px;
 }
 </style>

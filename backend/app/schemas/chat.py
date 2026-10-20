@@ -1,8 +1,6 @@
-from typing import Any, Literal
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel
-
-from app.models.enums import Language, RiskLevel
+from app.models.enums import Language
 
 
 class SessionCreateRequest(BaseModel):
@@ -25,6 +23,8 @@ class SessionHistoryItem(BaseModel):
     last_active_at: str
     # The user's first message, cut short — a recognisable name for the list.
     title: str
+    # The picked persona (app/services/agent_config.py); None = default.
+    persona: str | None = None
 
 
 class HistoryMessageItem(BaseModel):
@@ -32,6 +32,8 @@ class HistoryMessageItem(BaseModel):
     role: str
     content: str
     created_at: str
+    # Assistant replies: the 0-5 rating given beside it, if any.
+    rating: int | None = None
 
 
 class SessionSyncResponse(BaseModel):
@@ -42,52 +44,28 @@ class SessionSyncResponse(BaseModel):
     ended: bool
 
 
-class ConfirmationPayload(BaseModel):
-    card_type: str
-    selected_labels: list[str] = []
-    custom_text: str | None = None
-    fields: dict[str, Any] | None = None
-
-
-class ChatRequest(BaseModel):
+class ChatStreamRequest(BaseModel):
     session_id: str
     message: str | None = None
-    confirmation: ConfirmationPayload | None = None
+    # True for the "结束对话" button (no message): the closing reply, then
+    # the conversation is locked.
+    end: bool = False
 
 
-class CandidateCard(BaseModel):
-    type: str
-    items: list[dict[str, Any]] = []
-    fields: dict[str, Any] | None = None
+class RatingRequest(BaseModel):
+    rating: int | None = Field(default=None, ge=0, le=5)  # None clears it
 
 
-class ChatResponse(BaseModel):
-    reply_text: str
-    candidates: list[CandidateCard] = []
-    risk_level: RiskLevel = RiskLevel.NONE
-    # Ids of the stored messages for this turn, so the client can tell its
-    # own turn apart from ones a sync brings in (no duplicates).
-    user_message_id: str | None = None
-    assistant_message_id: str | None = None
-
-
-class SummaryCardContent(BaseModel):
-    summary: str = ""
-    plan: str = ""  # "" = no plan came up
-    kindness: str = ""
-
-
-class SummaryCardItem(BaseModel):
-    """A conversation card (app/services/summary_card.py)."""
-
+class PersonaItem(BaseModel):
     id: str
-    kind: Literal["review", "final"]
-    content: SummaryCardContent
-    # Shown after this many user/assistant messages.
-    after_messages: int
-    # Final card: None until the user picks, then "saved" | "discarded".
-    decision: Literal["saved", "discarded"] | None = None
+    name: dict[str, str]
+    intro: dict[str, str]
 
 
-class CardDecisionRequest(BaseModel):
-    save: bool
+class PersonaList(BaseModel):
+    personas: list[PersonaItem]
+    default: str
+
+
+class PersonaChoice(BaseModel):
+    persona: str | None = None

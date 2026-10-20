@@ -177,7 +177,6 @@ textarea::placeholder {
 .history-view,
 .help-view,
 .privacy-view,
-.reflection-view,
 .admin-view {
   display: flex;
   flex-direction: column;

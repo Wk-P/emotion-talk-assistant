@@ -17,7 +17,7 @@ from app.schemas.admin import AdminSessionExport
 
 LABELS: dict[str, dict[str, str]] = {
     "zh": {
-        "title": "对话数据导出",
+        "title": "对话记录数据导出",
         "exported_at": "导出时间",
         "count": "对话数",
         "conversation": "对话",
