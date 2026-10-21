@@ -67,12 +67,11 @@ def _can_manage(actor: User, target: User) -> None:
 
 def _can_view(actor: User, target: User) -> None:
     """Read-only counterpart of _can_manage, for per-user export: the same
-    accounts an admin sees in GET /users (plus their own)."""
+    accounts an admin sees in GET /users (plus their own). Superadmins'
+    conversations are readable by every admin; they just can't be managed."""
 
-    if target.id == actor.id:
+    if target.id == actor.id or target.role == UserRole.SUPERADMIN:
         return
-    if target.role == UserRole.SUPERADMIN:
-        raise HTTPException(status_code=403, detail="cannot act on a superadmin account")
     if actor.role != UserRole.SUPERADMIN and target.role != UserRole.USER:
         raise HTTPException(status_code=403, detail="admin access required")
 
@@ -471,13 +470,15 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin_required),
 ) -> list[AdminUserItem]:
-    """A plain admin only ever sees plain-user accounts; a superadmin sees
-    every account, superadmins listed first — shown read-only, since no one
+    """A plain admin sees plain users and superadmins; a superadmin sees
+    every account. Superadmins are listed first — shown read-only, since no one
     can manage a superadmin here (see _can_manage). The filters only ever
     narrow that visible set."""
 
     visible_roles = (
-        [UserRole.SUPERADMIN, UserRole.USER, UserRole.ADMIN] if admin.role == UserRole.SUPERADMIN else [UserRole.USER]
+        [UserRole.SUPERADMIN, UserRole.USER, UserRole.ADMIN]
+        if admin.role == UserRole.SUPERADMIN
+        else [UserRole.SUPERADMIN, UserRole.USER]
     )
     if role is not None:
         visible_roles = [r for r in visible_roles if r == role]
