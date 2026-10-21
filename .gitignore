@@ -3,12 +3,6 @@
 .claude/
 chat.md
 program-price.md
-<<<<<<< HEAD
 
 # dev-local for dev/dev2 branch
-=======
-docs/
-
-# dev-local
->>>>>>> dev
 dev-local.sh
