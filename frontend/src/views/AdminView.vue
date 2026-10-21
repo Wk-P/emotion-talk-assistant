@@ -711,7 +711,7 @@ onMounted(load)
               </template>
               <template v-else>
                 <button
-                  v-if="user.session_count > 0 && (user.role !== 'superadmin' || user.id === auth.user?.id)"
+                  v-if="user.session_count > 0"
                   type="button"
                   class="btn-outline"
                   :disabled="exportingKey !== null"
@@ -761,7 +761,7 @@ onMounted(load)
           </div>
           <div class="user-actions">
             <button
-              v-if="user.session_count > 0 && (user.role !== 'superadmin' || user.id === auth.user?.id)"
+              v-if="user.session_count > 0"
               type="button"
               class="btn-outline"
               :disabled="exportingKey !== null"
