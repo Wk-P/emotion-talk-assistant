@@ -463,17 +463,18 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   opacity: 0.6;
 }
 .ended-panel {
-  padding: 16px 16px 20px;
+  flex-shrink: 0;
+  padding: 16px 16px calc(28px + env(safe-area-inset-bottom, 0px));
   text-align: center;
 }
 .ended-title {
-  margin: 0 0 4px;
+  margin: 0 auto 4px;
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
 }
 .ended-hint {
-  margin: 0 0 12px;
+  margin: 0 auto 12px;
   font-size: 13px;
   color: var(--text-muted);
 }
@@ -543,6 +544,9 @@ function onCardConfirm(idx: number, payload: ConfirmationPayload) {
   }
   .footer {
     padding: 0 24px;
+  }
+  .ended-panel {
+    padding: 20px 24px 32px;
   }
   .composer {
     padding-bottom: 16px;
