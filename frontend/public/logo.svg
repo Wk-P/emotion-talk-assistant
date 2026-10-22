@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>心语</title>
+  <defs>
+    <!-- Nord Frost: nord10 → nord8 -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5e81ac"/>
+      <stop offset="1" stop-color="#88c0d0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <!-- 语: a speech bubble with a tail at the lower left -->
+  <path d="M184 120h144a72 72 0 0 1 72 72v96a72 72 0 0 1-72 72H250l-78 52a8 8 0 0 1-12.3-7.6L168 358.5A72 72 0 0 1 112 288v-96a72 72 0 0 1 72-72z" fill="#eceff4"/>
+  <!-- 心: a heart inside it -->
+  <path d="M256 306c-52-34-78-62-78-92 0-22 17-38 38-38 17 0 31 9 40 24 9-15 23-24 40-24 21 0 38 16 38 38 0 30-26 58-78 92z" fill="#5e81ac"/>
+</svg>
