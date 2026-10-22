@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { deleteSession, listHistory, type SessionHistoryItem } from '@/api/client'
-import LanguageSwitch from '@/components/LanguageSwitch.vue'
+import ThemeSwitch from '@/components/ThemeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 import { displayDay, formatDateTime, toDate, DISPLAY_TIME_ZONE } from '@/utils/time'
@@ -104,7 +104,7 @@ onBeforeUnmount(() => {
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <img class="logo" src="/emotion-talk.png" :alt="t('app.title')" />
+      <img class="logo" src="/logo.svg" :alt="t('app.title')" />
       <span>{{ t('app.title') }}</span>
     </div>
 
@@ -157,7 +157,9 @@ onBeforeUnmount(() => {
       <RouterLink to="/privacy">{{ t('privacy.title') }}</RouterLink>
     </nav>
 
-    <LanguageSwitch class="sidebar-lang" show-label />
+    <div class="sidebar-prefs">
+      <ThemeSwitch />
+    </div>
 
     <div class="account">
       <button v-if="!auth.user" type="button" class="btn-outline" @click="router.push('/login')">
@@ -181,7 +183,7 @@ onBeforeUnmount(() => {
   gap: 16px;
   padding: 20px 16px;
   border-right: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--sidebar);
 }
 .brand {
   display: flex;
@@ -277,7 +279,7 @@ onBeforeUnmount(() => {
 }
 .recent-yes {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
 }
 .recent-no {
   background: var(--surface);
@@ -363,7 +365,10 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   padding: 0 2px;
 }
-.sidebar-lang {
+.sidebar-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin: 12px 0 4px;
 }
 </style>

@@ -29,11 +29,12 @@ import {
   USERNAME_PATTERN,
 } from '@/api/client'
 import AdminRecords from '@/components/admin/AdminRecords.vue'
+import AppSelect from '@/components/AppSelect.vue'
 import { useAuthStore } from '@/stores/auth'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
 import { displayDay, displayDayStart, formatDate, formatDateTime } from '@/utils/time'
 
-const { t, te, locale } = useI18n()
+const { t, te } = useI18n()
 const auth = useAuthStore()
 
 // Which section is open comes from the address (/admin/users …); the
@@ -139,7 +140,11 @@ interface ParticipantGroup {
 const stats = computed(() => {
   const participants = new Set(items.value.map((i) => i.participant_label))
   const messageCount = items.value.reduce((sum, i) => sum + i.message_count, 0)
-  return { participantCount: participants.size, sessionCount: items.value.length, messageCount }
+  // Average over every rated reply (not over conversations).
+  const ratedCount = items.value.reduce((sum, i) => sum + i.rated_count, 0)
+  const ratingSum = items.value.reduce((sum, i) => sum + (i.avg_rating ?? 0) * i.rated_count, 0)
+  const avgRating = ratedCount ? (ratingSum / ratedCount).toFixed(1) : '—'
+  return { participantCount: participants.size, sessionCount: items.value.length, messageCount, ratedCount, avgRating }
 })
 
 const selectedSession = computed(() => items.value.find((i) => i.session_id === openId.value) ?? null)
@@ -218,7 +223,7 @@ function download(blob: Blob, name: string, ext: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `emotion-ai-${name}-${displayDay()}.${ext}`
+  a.download = `xinyu-${name}-${displayDay()}.${ext}`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -236,7 +241,7 @@ async function runExport(key: string, filter: AdminSessionFilter, name: string) 
       const data = await exportAdminSessions(filter)
       download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), name, 'json')
     } else {
-      download(await exportAdminFile(filter, format, locale.value as 'zh' | 'ko' | 'en'), name, format)
+      download(await exportAdminFile(filter, format, 'zh'), name, format)
     }
   } finally {
     exportingKey.value = null
@@ -381,14 +386,6 @@ onMounted(load)
           <input v-model="convFilter.participant" type="search" :placeholder="t('admin.filter.participantPlaceholder')" />
         </label>
         <label class="filter-field">
-          <span>{{ t('admin.filter.language') }}</span>
-          <select v-model="convFilter.language">
-            <option value="">{{ t('admin.filter.all') }}</option>
-            <option value="zh">中文</option>
-            <option value="ko">한국어</option>
-          </select>
-        </label>
-        <label class="filter-field">
           <span>{{ t('admin.filter.dateFrom') }}</span>
           <input v-model="convFilter.dateFrom" type="date" :max="convFilter.dateTo || undefined" />
         </label>
@@ -418,14 +415,20 @@ onMounted(load)
           <div class="stat-value">{{ stats.messageCount }}</div>
           <div class="stat-label">{{ t('admin.statMessages') }}</div>
         </div>
+        <div class="stat stat-rating">
+          <div class="stat-value">★ {{ stats.avgRating }}</div>
+          <div class="stat-label">{{ t('admin.statRating', { n: stats.ratedCount }) }}</div>
+        </div>
       </div>
 
       <div v-if="!loading && items.length > 0" class="export-row">
       <label class="export-format">
         <span>{{ t('admin.exportFormat') }}</span>
-        <select v-model="exportFormat">
-          <option v-for="f in EXPORT_FORMATS" :key="f" :value="f">{{ t(`admin.formats.${f}`) }}</option>
-        </select>
+        <AppSelect
+          v-model="exportFormat"
+          :aria-label="t('admin.exportFormat')"
+          :options="EXPORT_FORMATS.map((f) => ({ value: f, label: t(`admin.formats.${f}`) }))"
+        />
       </label>
       <button
         type="button"
@@ -482,8 +485,8 @@ onMounted(load)
                       <span v-if="item.record_count > 0" class="record-badge">
                         {{ t('admin.recordCount', { n: item.record_count }) }}
                       </span>
-                      <span v-if="item.rated_count > 0" class="record-badge rating-badge">
-                        {{ t('admin.ratingSummary', { avg: item.avg_rating, n: item.rated_count }) }}
+                      <span v-if="item.rated_count > 0" class="record-badge rating-badge" :title="t('admin.ratingSummary', { avg: item.avg_rating, n: item.rated_count })">
+                        ★ {{ item.avg_rating }}
                       </span>
                     </span>
                   </button>
@@ -511,8 +514,9 @@ onMounted(load)
                       <div class="message" :class="m.role">
                         {{ m.content }}
                       </div>
-                      <span v-if="m.role === 'assistant' && m.rating != null" class="msg-rating">
-                        {{ t('admin.rating', { n: m.rating }) }}
+                      <span v-if="m.role === 'assistant' && m.rating != null" class="msg-rating" :class="{ low: m.rating <= 2 }" :title="t('admin.rating', { n: m.rating })">
+                        <span class="stars" aria-hidden="true">{{ '★'.repeat(m.rating) }}<span class="off">{{ '★'.repeat(5 - m.rating) }}</span></span>
+                        {{ m.rating }}/5
                       </span>
                     </template>
                     <div v-if="openRecords.length > 0" class="saved-records">
@@ -543,8 +547,9 @@ onMounted(load)
                 <div class="message" :class="m.role">
                   {{ m.content }}
                 </div>
-                <span v-if="m.role === 'assistant' && m.rating != null" class="msg-rating">
-                  {{ t('admin.rating', { n: m.rating }) }}
+                <span v-if="m.role === 'assistant' && m.rating != null" class="msg-rating" :class="{ low: m.rating <= 2 }" :title="t('admin.rating', { n: m.rating })">
+                  <span class="stars" aria-hidden="true">{{ '★'.repeat(m.rating) }}<span class="off">{{ '★'.repeat(5 - m.rating) }}</span></span>
+                  {{ m.rating }}/5
                 </span>
               </template>
               <div v-if="openRecords.length > 0" class="saved-records">
@@ -602,10 +607,14 @@ onMounted(load)
           </label>
           <label v-if="isSuperadmin" class="filter-field">
             <span>{{ t('admin.colRole') }}</span>
-            <select v-model="newUser.role">
-              <option value="user">{{ t('admin.role.user') }}</option>
-              <option value="admin">{{ t('admin.role.admin') }}</option>
-            </select>
+            <AppSelect
+              v-model="newUser.role"
+              :aria-label="t('admin.colRole')"
+              :options="[
+                { value: 'user', label: t('admin.role.user') },
+                { value: 'admin', label: t('admin.role.admin') },
+              ]"
+            />
           </label>
           <button type="submit" class="btn-primary create-submit" :disabled="creating">
             {{ creating ? t('admin.account.creating') : t('admin.account.submit') }}
@@ -621,20 +630,28 @@ onMounted(load)
         </label>
         <label v-if="isSuperadmin" class="filter-field">
           <span>{{ t('admin.colRole') }}</span>
-          <select v-model="userFilter.role">
-            <option value="">{{ t('admin.filter.all') }}</option>
-            <option value="user">{{ t('admin.role.user') }}</option>
-            <option value="admin">{{ t('admin.role.admin') }}</option>
-            <option v-if="isSuperadmin" value="superadmin">{{ t('admin.role.superadmin') }}</option>
-          </select>
+          <AppSelect
+            v-model="userFilter.role"
+            :aria-label="t('admin.colRole')"
+            :options="[
+              { value: '', label: t('admin.filter.all') },
+              { value: 'user', label: t('admin.role.user') },
+              { value: 'admin', label: t('admin.role.admin') },
+              ...(isSuperadmin ? [{ value: 'superadmin', label: t('admin.role.superadmin') }] : []),
+            ]"
+          />
         </label>
         <label class="filter-field">
           <span>{{ t('admin.colStatus') }}</span>
-          <select v-model="userFilter.status">
-            <option value="">{{ t('admin.filter.all') }}</option>
-            <option value="active">{{ t('admin.filter.statusActive') }}</option>
-            <option value="disabled">{{ t('admin.disabled') }}</option>
-          </select>
+          <AppSelect
+            v-model="userFilter.status"
+            :aria-label="t('admin.colStatus')"
+            :options="[
+              { value: '', label: t('admin.filter.all') },
+              { value: 'active', label: t('admin.filter.statusActive') },
+              { value: 'disabled', label: t('admin.disabled') },
+            ]"
+          />
         </label>
         <button v-if="usersFiltered" type="button" class="btn-text filter-reset" @click="resetUserFilter">
           {{ t('admin.filter.reset') }}
@@ -834,7 +851,23 @@ onMounted(load)
   padding: 10px 6px;
   border-radius: var(--radius-md);
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
+}
+.stat {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.stat:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat:hover {
+    transform: none;
+  }
 }
 .stat-value {
   font-size: 20px;
@@ -860,14 +893,6 @@ onMounted(load)
   font-size: 12px;
   color: var(--text-muted);
 }
-.export-format select {
-  padding: 9px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  font-size: 13.5px;
-  color: var(--text);
-}
 .export-btn {
   flex: 1;
   min-width: 200px;
@@ -886,7 +911,7 @@ onMounted(load)
 .account-flash {
   font-size: 13px;
   font-weight: 600;
-  color: #1c8a4a;
+  color: var(--success);
 }
 .create-form {
   padding: 14px;
@@ -955,8 +980,11 @@ onMounted(load)
   min-width: 0;
   width: 110px;
 }
-.filter-field input,
-.filter-field select {
+.filter-field .app-select,
+.export-format .app-select {
+  width: 100%;
+}
+.filter-field input {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -993,11 +1021,12 @@ onMounted(load)
     gap: 20px;
   }
   .conv-list {
-    width: 360px;
+    width: 440px;
     flex-shrink: 0;
     max-height: 72vh;
     overflow-y: auto;
-    padding-right: 4px;
+    /* Room for a hovered row's lift and glow inside the scroll box. */
+    padding: 6px 8px 8px 6px;
   }
   /* The detail pane renders the same transcript instead — showing it twice
      would just be confusing, not "using the space". */
@@ -1093,9 +1122,29 @@ onMounted(load)
   gap: 8px;
 }
 .entry {
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+.entry {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.entry:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .entry:hover {
+    transform: none;
+  }
+}
+/* The open conversation keeps the accent border. */
+.entry.selected {
+  border-color: var(--accent);
 }
 .entry-row {
   display: flex;
@@ -1106,19 +1155,41 @@ onMounted(load)
 .entry-head {
   width: 100%;
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 10px 12px;
   background: var(--surface);
   border: none;
   font-size: 13px;
   color: var(--text);
 }
+.entry-head > span:first-child {
+  white-space: nowrap;
+}
+/* A quiet text button: a red block on every row was too loud. */
 .entry-delete {
   border-radius: 0;
-  border-left: 1px solid var(--danger-border);
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0 14px;
+  font-size: 12.5px;
+}
+.entry-delete:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
   color: var(--text-muted);
+}
+.count .record-badge {
+  margin-left: 0;
 }
 .confirm-row {
   display: flex;
@@ -1145,12 +1216,35 @@ onMounted(load)
 }
 .msg-rating {
   align-self: flex-start;
-  padding: 1px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: -4px;
+  padding: 2px 10px;
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--star-bg);
+  color: var(--star-fg);
   font-size: 12px;
   font-weight: 600;
+}
+.msg-rating .stars {
+  color: var(--star);
+  letter-spacing: 1px;
+}
+.msg-rating .stars .off {
+  color: var(--star-off);
+}
+/* 0-2: worth a look, so it stands out. */
+.msg-rating.low {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.rating-badge {
+  background: var(--star-bg);
+  color: var(--star-fg);
+}
+.stat-rating .stat-value {
+  color: var(--star);
 }
 .conv-detail .messages {
   padding: 0;
@@ -1346,8 +1440,8 @@ tr.protected,
   color: var(--accent);
 }
 .badge.warn {
-  background: #fff4e0;
-  color: #a15c00;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
 }
 .badge.danger {
   background: var(--danger-soft);

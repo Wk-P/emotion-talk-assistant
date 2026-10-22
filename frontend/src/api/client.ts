@@ -75,11 +75,6 @@ export interface HistoryMessageItem {
   persona?: string | null
 }
 
-/** Switch an ongoing conversation's language: later AI replies use it. */
-export async function updateSessionLanguage(sessionId: string, language: Language) {
-  await api.put(`/api/session/${sessionId}/language`, { language })
-}
-
 export async function listHistory() {
   const { data } = await api.get<SessionHistoryItem[]>('/api/session/history')
   return data

@@ -1,46 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { CONTACT } from '@/content/contact'
 
-// Help & contact in one page: about the tool, emergency resources (first, so
-// they're never buried), FAQ, and how to reach the research team. The old
-// /contact address redirects to the #contact section here.
-const { t, locale } = useI18n()
-const lang = computed(() => (locale.value === 'ko' || locale.value === 'en' ? locale.value : 'zh'))
+// What 心语 is and how to use it, what to do in an emergency, and FAQ.
+const { t } = useI18n()
 
-const SECTIONS = ['about', 'resources', 'faq', 'contact'] as const
-const FAQ = ['password', 'data', 'language', 'research', 'ai'] as const
-const TOPICS = ['research', 'account', 'privacy'] as const
+const SECTIONS = ['about', 'resources', 'faq'] as const
+const HOW = ['start', 'style', 'end', 'history'] as const
+const FAQ = ['ai', 'data', 'research', 'style', 'password'] as const
 
-// 釜山地区心理支持资源指南 (documents/釜山地区心里支持资源指南.pdf), shown as
-// page images with the original PDF to open or download. To update it,
-// replace the files in public/guide/ (images are rendered from the PDF).
-const GUIDE_PDF = '/guide/busan-support-guide.pdf'
-const GUIDE_PAGES = [1, 2, 3].map((n) => `/guide/busan-guide-${n}.png`)
-
-// Only channels that are actually filled in (src/content/contact.ts).
-const channels = computed(() =>
-  [
-    { key: 'email', value: CONTACT.email, href: `mailto:${CONTACT.email}` },
-    { key: 'wechat', value: CONTACT.wechat },
-    { key: 'kakao', value: CONTACT.kakao },
-    { key: 'phone', value: CONTACT.phone, href: `tel:${CONTACT.phone}` },
-  ].filter((c) => c.value),
-)
-
-const copied = ref<string | null>(null)
-async function copy(key: string, value: string) {
-  try {
-    await navigator.clipboard.writeText(value)
-    copied.value = key
-    setTimeout(() => {
-      if (copied.value === key) copied.value = null
-    }, 2000)
-  } catch {
-    // clipboard unavailable — the value is still visible to select by hand
-  }
-}
 </script>
 
 <template>
@@ -59,34 +26,24 @@ async function copy(key: string, value: string) {
         <div class="sections">
           <section id="about" class="section">
             <h2><span class="sec-no">1</span>{{ t('help.sections.about') }}</h2>
-            <p>{{ t('help.roleText') }}</p>
+            <p>{{ t('help.aboutIntro') }}</p>
+            <h3>{{ t('help.howTitle') }}</h3>
+            <ol class="how">
+              <li v-for="h in HOW" :key="h">
+                <strong>{{ t(`help.how.${h}.title`) }}</strong>
+                <span>{{ t(`help.how.${h}.body`) }}</span>
+              </li>
+            </ol>
+            <p class="role">{{ t('help.roleText') }}</p>
             <p class="muted">{{ t('help.aboutPrivacy') }} <RouterLink to="/privacy">{{ t('privacy.title') }}</RouterLink></p>
           </section>
 
           <section id="resources" class="section">
             <h2><span class="sec-no">2</span>{{ t('help.sections.resources') }}</h2>
             <div class="urgent" role="note">
-              <strong>{{ t('contact.topics.urgent.title') }}</strong>
-              {{ t('contact.topics.urgent.body') }}
-            </div>
-            <div class="guide-head">
-              <div>
-                <h3>{{ t('help.guideTitle') }}</h3>
-                <p class="muted">{{ t('help.guideIntro') }}</p>
-              </div>
-              <div class="guide-actions">
-                <a class="btn-outline" :href="GUIDE_PDF" target="_blank" rel="noopener">{{ t('help.openPdf') }}</a>
-                <a class="btn-outline" :href="GUIDE_PDF" download="釜山地区心理支持资源指南.pdf">{{ t('help.downloadPdf') }}</a>
-              </div>
-            </div>
-            <div class="guide-pages">
-              <img
-                v-for="(src, i) in GUIDE_PAGES"
-                :key="src"
-                :src="src"
-                :alt="t('help.guidePage', { n: i + 1, total: GUIDE_PAGES.length })"
-                loading="lazy"
-              />
+              <strong>{{ t('help.urgentTitle') }}</strong>
+              <p>{{ t('help.urgentBody') }}</p>
+              <p class="numbers">{{ t('help.urgentNumbers') }}</p>
             </div>
           </section>
 
@@ -100,51 +57,6 @@ async function copy(key: string, value: string) {
             </dl>
           </section>
 
-          <section id="contact" class="section">
-            <h2><span class="sec-no">4</span>{{ t('help.sections.contact') }}</h2>
-            <p>{{ t('contact.lead') }}</p>
-            <div class="contact-layout">
-              <table class="topics">
-                <thead>
-                  <tr>
-                    <th>{{ t('help.topicCol') }}</th>
-                    <th>{{ t('help.howCol') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="topic in TOPICS" :key="topic">
-                    <th scope="row">{{ t(`contact.topics.${topic}.title`) }}</th>
-                    <td>{{ t(`contact.topics.${topic}.body`) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <aside class="card">
-                <h3>{{ t('contact.channelsTitle') }}</h3>
-                <dl class="channels">
-                  <div v-for="c in channels" :key="c.key" class="channel">
-                    <dt>{{ t(`contact.channels.${c.key}`) }}</dt>
-                    <dd>
-                      <a v-if="c.href" :href="c.href">{{ c.value }}</a>
-                      <span v-else>{{ c.value }}</span>
-                      <button type="button" class="btn-text copy" @click="copy(c.key, c.value)">
-                        {{ copied === c.key ? t('contact.copied') : t('contact.copy') }}
-                      </button>
-                    </dd>
-                  </div>
-                  <div class="channel">
-                    <dt>{{ t('contact.person') }}</dt>
-                    <dd>{{ CONTACT.person[lang] }}</dd>
-                  </div>
-                  <div class="channel">
-                    <dt>{{ t('contact.org') }}</dt>
-                    <dd>{{ CONTACT.org[lang] }}</dd>
-                  </div>
-                </dl>
-                <p class="muted">{{ t('contact.replyNote') }}</p>
-              </aside>
-            </div>
-          </section>
         </div>
       </div>
     </main>
@@ -246,47 +158,72 @@ p {
 }
 .urgent strong {
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   color: var(--danger);
 }
-.guide-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px 20px;
-  margin-bottom: 12px;
+.urgent p {
+  margin: 0 0 8px;
+  font-size: 14px;
 }
-.guide-head h3 {
-  margin-bottom: 4px;
-}
-.guide-head .muted {
+.urgent .numbers {
   margin: 0;
+  white-space: pre-line;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-.guide-actions {
-  display: flex;
-  gap: 8px;
+.how {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  counter-reset: how;
+  display: grid;
+  gap: 10px;
 }
-.guide-actions a {
-  padding: 7px 14px;
-  font-size: 13px;
-  text-decoration: none;
+@media (min-width: 720px) {
+  .how {
+    grid-template-columns: 1fr 1fr;
+  }
 }
-.guide-pages {
+.how li {
+  counter-increment: how;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
-  overflow: hidden;
-  background: #fff;
+  background: var(--bg);
+  font-size: 13.5px;
+  line-height: 1.7;
 }
-.guide-pages img {
-  display: block;
-  width: 100%;
-  height: auto;
+.how li {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
-.guide-pages img + img {
-  border-top: 1px solid var(--border);
+.how li:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .how li:hover {
+    transform: none;
+  }
+}
+.how strong {
+  font-size: 14px;
+}
+.how strong::before {
+  content: counter(how) '. ';
+  color: var(--accent);
+}
+.role {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 13.5px;
 }
 .faq {
   margin: 0;
@@ -307,74 +244,5 @@ p {
   font-size: 14px;
   line-height: 1.75;
   color: var(--text);
-}
-.contact-layout {
-  display: grid;
-  gap: 20px;
-  margin-top: 6px;
-}
-@media (min-width: 1024px) {
-  .contact-layout {
-    grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
-    align-items: start;
-  }
-}
-.topics {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13.5px;
-}
-.topics th,
-.topics td {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: top;
-  line-height: 1.65;
-}
-.topics thead th {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-muted);
-  background: var(--bg);
-}
-.topics tbody th {
-  width: 30%;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.card {
-  padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-}
-.channels {
-  margin: 0 0 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.channel dt {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 2px;
-}
-.channel dd {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  font-size: 14px;
-  word-break: break-all;
-}
-.copy {
-  font-size: 12.5px;
-}
-@media (max-width: 639px) {
-  .topics tbody th {
-    white-space: normal;
-  }
 }
 </style>

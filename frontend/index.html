@@ -1,13 +1,24 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
+    <link rel="icon" href="/logo.svg" type="image/svg+xml">
+    <link rel="icon" href="/favicon.ico" sizes="64x64">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="陪伴留学生活的自我共情对话工具：整理情绪、理解自己、练习自我友善。">
-    <meta name="theme-color" content="#6c5ce7">
-    <link rel="apple-touch-icon" href="/emotion-talk.png">
-    <title>自我共情对话</title>
+    <meta name="description" content="陪你聊聊心事的 AI 伙伴：倾诉、整理情绪、想清楚下一步。">
+    <meta name="theme-color" content="#2e3440">
+    <script>
+      // Before anything renders, so a light-theme user never sees a dark flash.
+      // Dark is the default; components/ThemeSwitch.vue saves the choice.
+      try {
+        if (localStorage.getItem('theme') === 'light') {
+          document.documentElement.dataset.theme = 'light'
+          document.querySelector('meta[name="theme-color"]').content = '#5e81ac'
+        }
+      } catch (e) {}
+    </script>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <title>心语</title>
   </head>
   <body>
     <div id="app"></div>

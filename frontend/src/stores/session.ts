@@ -10,7 +10,6 @@ import {
   setSessionPersona,
   setAuthToken,
   streamChat,
-  updateSessionLanguage,
   startSession,
   syncSession,
   updateConsent,
@@ -212,16 +211,6 @@ export const useSessionStore = defineStore('session', () => {
     await send(message, { skipBubble: true, end })
   }
 
-  // The user switched the UI language. An ongoing conversation continues in
-  // the new language from the next reply on (nothing already said is
-  // re-translated); a chat that hasn't started yet just remembers the choice
-  // for when the user does send something.
-  async function setLanguage(lang: Language) {
-    if (language.value === lang) return
-    language.value = lang
-    if (sessionId.value && !ended.value) await updateSessionLanguage(sessionId.value, lang)
-  }
-
   async function setConsent(category: string, granted: boolean) {
     if (!sessionId.value) return
     const res = await updateConsent(sessionId.value, category, granted)
@@ -271,7 +260,6 @@ export const useSessionStore = defineStore('session', () => {
     send,
     sync,
     retry,
-    setLanguage,
     setConsent,
     finish,
     reset,

@@ -34,7 +34,7 @@ const auth = useAuthStore()
   align-items: center;
   justify-content: center;
   gap: 18px;
-  background: rgba(246, 246, 251, 0.82);
+  background: var(--glass);
   backdrop-filter: blur(10px);
 }
 .badge {
@@ -50,7 +50,7 @@ const auth = useAuthStore()
   transition: background 0.3s ease;
 }
 .badge.done {
-  background: var(--accent);
+  background: var(--accent-fill);
   animation: pop 0.35s ease;
 }
 .ring {
@@ -65,7 +65,7 @@ const auth = useAuthStore()
   width: 30px;
   height: 30px;
   fill: none;
-  stroke: #fff;
+  stroke: var(--on-accent-fill);
   stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;

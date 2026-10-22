@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import type { Language } from '@/api/client'
 import BottomToolbar from '@/components/BottomToolbar.vue'
 import ConsentDialog from '@/components/ConsentDialog.vue'
+import AppSelect from '@/components/AppSelect.vue'
 import { useSessionStore } from '@/stores/session'
 import { buildTranscriptMarkdown, downloadTextFile } from '@/utils/transcript'
 import { displayDay } from '@/utils/time'
@@ -116,6 +117,13 @@ const personaId = computed({
 function personaName(p: { name: Partial<Record<Language, string>> }) {
   return p.name[session.language] ?? p.name.zh ?? ''
 }
+const personaOptions = computed(() =>
+  session.personas.map((p) => ({
+    value: p.id,
+    label: personaName(p),
+    hint: p.intro[session.language] ?? p.intro.zh,
+  })),
+)
 onMounted(() => void session.loadPersonas())
 </script>
 
@@ -128,15 +136,10 @@ onMounted(() => void session.loadPersonas())
         </button>
         <span class="title">{{ t('app.title') }}</span>
         <div class="header-actions">
-          <select
-            v-if="session.personas.length && !session.ended && !needsAck"
-            v-model="personaId"
-            class="persona-select"
-            :aria-label="t('chat.persona')"
-            :title="t('chat.persona')"
-          >
-            <option v-for="p in session.personas" :key="p.id" :value="p.id">{{ personaName(p) }}</option>
-          </select>
+          <div v-if="session.personas.length && !session.ended && !needsAck" class="persona-pick">
+            <span class="persona-label">{{ t('chat.persona') }}</span>
+            <AppSelect v-model="personaId" :options="personaOptions" variant="pill" :aria-label="t('chat.persona')" />
+          </div>
           <button
             v-if="session.turns.length > 0"
             type="button"
@@ -165,7 +168,9 @@ onMounted(() => void session.loadPersonas())
               role="group"
               :aria-label="t('chat.rate')"
               :title="t('chat.rate')"
+              :class="{ rated: turn.rating != null }"
             >
+              <span class="rating-label">{{ t('chat.rateShort') }}</span>
               <button
                 v-for="n in RATINGS"
                 :key="n"
@@ -276,35 +281,61 @@ onMounted(() => void session.loadPersonas())
   align-items: center;
   gap: 4px;
 }
-.persona-select {
-  font: inherit;
-  font-size: 12.5px;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  max-width: 140px;
+.persona-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
+.persona-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+@media (max-width: 600px) {
+  .persona-label {
+    display: none;
+  }
+}
+/* Dev builds only. Faded until hovered or rated, so it doesn't compete
+   with the reply itself. */
 .rating {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 3px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.rating:hover,
+.rating:focus-within,
+.rating.rated {
+  opacity: 1;
+}
+.rating-label {
+  margin-right: 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
 }
 .rating button {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  font-size: 12px;
+  font-size: 11.5px;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--surface);
   color: var(--text-muted);
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.rating button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .rating button.on {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--surface);
+  background: var(--accent-fill);
+  border-color: var(--accent);
+  color: var(--on-accent-fill);
 }
 .export-btn {
   font-size: 12.5px;
@@ -453,7 +484,7 @@ onMounted(() => void session.loadPersonas())
   position: relative;
   z-index: 1;
   border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-top);
 }
 .composer {
   padding: 6px 0 10px;
@@ -470,6 +501,9 @@ onMounted(() => void session.loadPersonas())
 }
 .composer-box:focus-within {
   border-color: var(--accent);
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 3px var(--accent-soft);
 }
 .composer textarea {
   flex: 1;
@@ -485,6 +519,11 @@ onMounted(() => void session.loadPersonas())
   color: var(--text);
   resize: none;
   max-height: 160px;
+}
+/* The box around it is the visible field (see .composer-box:focus-within);
+   the global input focus ring would draw a second, tight one inside it. */
+.composer textarea:focus {
+  box-shadow: none;
 }
 .composer textarea:disabled {
   opacity: 0.6;

@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { UiLang } from '@/i18n/langPreference'
 import { PRIVACY } from '@/content/privacy'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
-const doc = computed(() => PRIVACY[locale.value as UiLang] ?? PRIVACY.zh)
+const doc = PRIVACY
 </script>
 
 <template>
@@ -44,9 +42,25 @@ const doc = computed(() => PRIVACY[locale.value as UiLang] ?? PRIVACY.zh)
 }
 .section {
   padding: 16px 18px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
+}
+.section {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.section:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .section:hover {
+    transform: none;
+  }
 }
 h2 {
   font-size: 14.5px;

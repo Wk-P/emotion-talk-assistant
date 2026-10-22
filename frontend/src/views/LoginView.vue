@@ -45,13 +45,13 @@ async function submit() {
 
     <div class="auth-split">
       <aside class="auth-intro">
-        <img class="auth-intro-logo" src="/emotion-talk.png" alt="" />
+        <img class="auth-intro-logo" src="/logo.svg" alt="" />
         <div class="auth-intro-app">{{ t('app.title') }}</div>
         <h2>{{ t('welcome.title') }}</h2>
         <p>{{ t('welcome.body') }}</p>
       </aside>
       <div class="auth-card">
-      <img class="logo" src="/emotion-talk.png" :alt="t('app.title')" />
+      <img class="logo" src="/logo.svg" :alt="t('app.title')" />
       <h1>{{ t('auth.loginTitle') }}</h1>
       <p class="login-required">{{ t('auth.loginRequired') }}</p>
 

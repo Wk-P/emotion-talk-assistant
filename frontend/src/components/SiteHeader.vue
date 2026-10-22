@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import LanguageSwitch from '@/components/LanguageSwitch.vue'
 
 // Top bar of the login / register pages only — every other page is inside
 // AppLayout, whose sidebar has the navigation.
@@ -10,10 +9,9 @@ const { t } = useI18n()
 <template>
   <header class="site-header">
     <RouterLink to="/" class="site-brand">
-      <img src="/emotion-talk.png" alt="" />
+      <img src="/logo.svg" alt="" />
       <span>{{ t('app.title') }}</span>
     </RouterLink>
-    <LanguageSwitch class="site-lang" />
   </header>
 </template>
 
@@ -27,7 +25,7 @@ const { t } = useI18n()
   gap: 24px;
   height: var(--site-header-h);
   padding: 0 16px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--glass);
   backdrop-filter: saturate(1.4) blur(10px);
   border-bottom: 1px solid var(--border);
 }

@@ -98,14 +98,14 @@ watch(
   justify-content: center;
   gap: 4px 12px;
   padding: 7px 16px;
-  background: #e3f4f1;
-  color: #0b5f56;
+  background: var(--admin-hint-bg);
+  color: var(--admin-hint-fg);
   font-size: 13px;
   text-align: center;
   flex-shrink: 0;
 }
 .admin-hint a {
-  color: #0b7569;
+  color: var(--admin-hint-link);
   font-weight: 600;
 }
 .layout-topbar {
@@ -117,15 +117,15 @@ watch(
   gap: 8px;
   min-height: 52px;
   padding: 8px 16px 8px 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--glass);
   backdrop-filter: saturate(1.4) blur(10px);
   border-bottom: 1px solid var(--border);
 }
 .topbar-badge {
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent-fill);
   font-size: 11px;
   font-weight: 600;
 }
@@ -151,7 +151,7 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--overlay);
 }
 @media (prefers-reduced-motion: reduce) {
   .layout-sidebar {

@@ -1,46 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Language } from '@/api/client'
-import { detectChatLang, detectLang, saveChatLang, saveLang, type UiLang } from '@/i18n/langPreference'
 
 // Informed-notice gate shown before every new conversation (replaces the
 // old landing page). A card in the middle of the chat, not a pop-up: the
-// sidebar stays usable, and the chat's input appears once it's accepted. Nothing is stored until the user then sends their
-// first message — see stores/session.ts.
-const emit = defineEmits<{ start: [lang: Language] }>()
+// sidebar stays usable, and the chat's input appears once it's accepted.
+// Nothing is stored until the user then sends their first message — see
+// stores/session.ts. Conversations are in Chinese.
+const emit = defineEmits<{ start: [lang: 'zh'] }>()
 
-const { t, locale } = useI18n()
-
-const UI_LANGS: { id: UiLang; label: string }[] = [
-  { id: 'zh', label: '中文' },
-  { id: 'ko', label: '한국어' },
-  { id: 'en', label: 'English' },
-]
-
-const selected = ref<UiLang>(detectLang())
-// Conversations are in Chinese or Korean; with the English interface the
-// user picks which one separately.
-const chatLang = ref<Language>(detectChatLang())
-locale.value = selected.value
-
-function choose(lang: UiLang) {
-  selected.value = lang
-  locale.value = lang
-  saveLang(lang)
-  if (lang !== 'en') chatLang.value = lang
-}
-
-function chooseChat(lang: Language) {
-  chatLang.value = lang
-  saveChatLang(lang)
-}
+const { t } = useI18n()
 </script>
 
 <template>
   <section class="welcome" aria-labelledby="consent-title">
     <div class="head">
-      <img class="logo" src="/emotion-talk.png" alt="" />
+      <img class="logo" src="/logo.svg" alt="" />
       <h2 id="consent-title">{{ t('app.title') }}</h2>
     </div>
 
@@ -54,36 +28,7 @@ function chooseChat(lang: Language) {
     </div>
     <p class="note">{{ t('onboarding.consentNote') }}</p>
 
-    <div class="lang-row">
-      <span class="lang-label">{{ t('onboarding.chooseLanguage') }}</span>
-      <div class="segmented" role="radiogroup" :aria-label="t('onboarding.chooseLanguage')">
-        <button
-          v-for="l in UI_LANGS"
-          :key="l.id"
-          type="button"
-          role="radio"
-          :aria-checked="selected === l.id"
-          :class="{ on: selected === l.id }"
-          @click="choose(l.id)"
-        >
-          {{ l.label }}
-        </button>
-      </div>
-    </div>
-    <div v-if="selected === 'en'" class="lang-row">
-      <span class="lang-label">{{ t('onboarding.chatLanguage') }}</span>
-      <div class="segmented" role="radiogroup" :aria-label="t('onboarding.chatLanguage')">
-        <button type="button" role="radio" :aria-checked="chatLang === 'zh'" :class="{ on: chatLang === 'zh' }" @click="chooseChat('zh')">
-          中文
-        </button>
-        <button type="button" role="radio" :aria-checked="chatLang === 'ko'" :class="{ on: chatLang === 'ko' }" @click="chooseChat('ko')">
-          한국어
-        </button>
-      </div>
-      <p class="lang-hint">{{ t('onboarding.chatLanguageHint') }}</p>
-    </div>
-
-    <button type="button" class="btn-primary start" @click="emit('start', chatLang)">
+    <button type="button" class="btn-primary start" @click="emit('start', 'zh')">
       {{ t('onboarding.acknowledge') }}
     </button>
   </section>
@@ -94,11 +39,25 @@ function chooseChat(lang: Language) {
   max-width: 560px;
   margin: clamp(16px, 6vh, 64px) auto 24px;
   padding: 28px 24px 24px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-md);
   animation: fade-up 0.25s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.welcome:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome:hover {
+    transform: none;
+  }
 }
 .head {
   display: flex;
@@ -151,13 +110,6 @@ h2 {
   font-size: 13px;
   line-height: 1.6;
   color: var(--accent);
-}
-.lang-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  margin-bottom: 14px;
 }
 .lang-label {
   font-size: 13px;

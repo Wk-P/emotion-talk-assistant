@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listAdminRecords, type AdminUserRecord } from '@/api/client'
+import AppSelect from '@/components/AppSelect.vue'
 import { fieldLabel, fieldText, recordTypeLabel } from '@/utils/fieldLabels'
 import { displayDay, formatDateTime } from '@/utils/time'
 
@@ -46,7 +47,7 @@ function reset() {
 const CARD_FIELDS = ['summary', 'plan', 'kindness']
 function lines(r: AdminUserRecord) {
   if (r.record_type === 'conversation_summary')
-    return CARD_FIELDS.map((key) => ({ key, label: fieldLabel(t, te, key), text: fieldText(r.payload[key]) || t('chat.card.empty') }))
+    return CARD_FIELDS.map((key) => ({ key, label: fieldLabel(t, te, key), text: fieldText(r.payload[key]) || t('records.blankField') }))
   return Object.entries(r.payload)
     .map(([key, value]) => ({ key, label: fieldLabel(t, te, key), text: fieldText(value) }))
     .filter((l) => l.text)
@@ -56,7 +57,7 @@ function download(content: string, type: string, ext: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
   const a = document.createElement('a')
   a.href = url
-  a.download = `emotion-ai-records-${displayDay()}.${ext}`
+  a.download = `xinyu-records-${displayDay()}.${ext}`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -96,10 +97,11 @@ onMounted(load)
       </label>
       <label class="filter-field">
         <span>{{ t('admin.records.type') }}</span>
-        <select v-model="filter.type">
-          <option value="">{{ t('admin.records.allTypes') }}</option>
-          <option v-for="ty in types" :key="ty" :value="ty">{{ recordTypeLabel(t, te, ty) }}</option>
-        </select>
+        <AppSelect
+          v-model="filter.type"
+          :aria-label="t('admin.records.type')"
+          :options="[{ value: '', label: t('admin.records.allTypes') }, ...types.map((ty) => ({ value: ty, label: recordTypeLabel(t, te, ty) }))]"
+        />
       </label>
       <label class="filter-field">
         <span>{{ t('admin.filter.dateFrom') }}</span>
@@ -171,8 +173,11 @@ onMounted(load)
 .filter-field.grow {
   flex: 1 1 200px;
 }
-.filter-field input,
-.filter-field select {
+.filter-field .app-select,
+.export-format .app-select {
+  width: 100%;
+}
+.filter-field input {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -206,9 +211,25 @@ onMounted(load)
 .card {
   min-width: 0;
   padding: 14px 16px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
+}
+.card {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card:hover {
+    transform: none;
+  }
 }
 .card-head {
   display: flex;

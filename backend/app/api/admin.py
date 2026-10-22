@@ -111,7 +111,7 @@ async def _ratings(db: AsyncSession, session_ids: list[str]) -> dict[str, list[i
 
 
 # Participants are shown by their account ID (username). Every conversation
-# and reflection belongs to an account — there is no anonymous use.
+# belongs to an account — there is no anonymous use.
 
 
 async def _usernames(db: AsyncSession, user_ids: set[str | None]) -> dict[str, str]:
@@ -381,7 +381,7 @@ async def export_sessions_file(
     sessions = await export_all_sessions(f=f, db=db, admin=admin)
     render, media_type, ext = _EXPORT_FORMATS[format]
     content = render(sessions, lang, tz_offset)
-    filename = f"emotion-ai-{name}-{(datetime.now(UTC) - timedelta(minutes=tz_offset)).strftime('%Y-%m-%d')}.{ext}"
+    filename = f"xinyu-{name}-{(datetime.now(UTC) - timedelta(minutes=tz_offset)).strftime('%Y-%m-%d')}.{ext}"
     return Response(
         content=content.encode("utf-8") if isinstance(content, str) else content,
         media_type=media_type,

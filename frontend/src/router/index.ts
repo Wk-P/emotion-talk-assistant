@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  // Jump to #section anchors (e.g. /help#contact); otherwise start at the top.
+  // Jump to #section anchors (e.g. /help#faq); otherwise start at the top.
   scrollBehavior: (to) => (to.hash ? { el: to.hash, top: 72 } : { top: 0 }),
   routes: [
     // No separate landing page: '/' is the chat itself, with an informed-
@@ -27,8 +27,8 @@ const router = createRouter({
         { path: 'history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { requiresAuth: true } },
         { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue') },
         { path: 'privacy', name: 'privacy', component: () => import('@/views/PrivacyView.vue') },
-        // Help and contact are one page now; keep old /contact links working.
-        { path: 'contact', redirect: { path: '/help', hash: '#contact' } },
+        // The contact page is gone; keep old /contact links landing on help.
+        { path: 'contact', redirect: '/help' },
         // Each admin section is its own address (/admin/users …), picked from the sidebar.
         { path: 'admin', redirect: '/admin/conversations' },
         {

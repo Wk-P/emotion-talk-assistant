@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import LanguageSwitch from '@/components/LanguageSwitch.vue'
+import ThemeSwitch from '@/components/ThemeSwitch.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionStore } from '@/stores/session'
 
@@ -29,7 +29,7 @@ function logout() {
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <img class="logo" src="/emotion-talk.png" alt="" />
+      <img class="logo" src="/logo.svg" alt="" />
       <span>{{ t('app.title') }}</span>
       <span class="badge">{{ t('admin.badge') }}</span>
     </div>
@@ -39,7 +39,9 @@ function logout() {
     </nav>
 
     <!-- Pushed to the bottom, just above the account block. -->
-    <LanguageSwitch class="sidebar-lang" show-label />
+    <div class="sidebar-prefs">
+      <ThemeSwitch />
+    </div>
 
     <div class="account">
       <RouterLink to="/" class="btn-outline to-user">{{ t('admin.toUserSite') }}</RouterLink>
@@ -56,7 +58,7 @@ function logout() {
   gap: 16px;
   padding: 20px 16px;
   border-right: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--sidebar);
   overflow-y: auto;
 }
 .brand {
@@ -75,8 +77,8 @@ function logout() {
 .badge {
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent-fill);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -124,7 +126,10 @@ function logout() {
   white-space: nowrap;
   padding: 0 2px;
 }
-.sidebar-lang {
+.sidebar-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin: auto 0 4px;
 }
 </style>

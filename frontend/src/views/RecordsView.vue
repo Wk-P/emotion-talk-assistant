@@ -26,7 +26,7 @@ function recordLines(record: OwnRecord) {
     return CARD_FIELDS.map((key) => ({
       key,
       label: fieldLabel(t, te, key),
-      text: fieldText(record.payload[key]) || t('chat.card.empty'),
+      text: fieldText(record.payload[key]) || t('records.blankField'),
     }))
   return Object.entries(record.payload)
     .map(([key, value]) => ({ key, label: fieldLabel(t, te, key), text: fieldText(value) }))
@@ -148,9 +148,9 @@ onMounted(load)
   font-size: 12.5px;
 }
 .chip.on {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent-fill);
 }
 .record-grid {
   display: grid;

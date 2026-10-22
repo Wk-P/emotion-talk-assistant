@@ -1,28 +1,60 @@
+/* Colours: the Nord palette (https://www.nordtheme.com) — Polar Night
+   nord0–3, Snow Storm nord4–6, Frost nord7–10, Aurora nord11–15. Light
+   theme = Snow Storm with Frost blue; dark (default) = Polar Night with
+   Frost blue. Where Nord has no exact shade (soft tints, text dark enough to
+   read on white), the value is a mix of two Nord colours, noted as such. */
 :root {
-  /* Brand */
-  --accent: #6c5ce7;
-  --accent-hover: #5c4cd6;
-  --accent-soft: #f1eefe;
+  /* Brand — nord10 */
+  --accent: #5e81ac;
+  --accent-hover: #4c6d96; /* nord10 darkened */
+  --accent-soft: #dfe7f1; /* nord10 tint */
 
-  /* Neutrals — softer than pure black/white, reads calmer at this app's
-     size (short bursts of reading, not a dense data app). */
-  --surface: #ffffff;
-  --bg: #f6f6fb;
-  --border: #e6e3f0;
-  --text: #1f2333;
-  --text-muted: #71758c;
+  /* Neutrals. --surface is the main content area; --bg is one step away
+     from it, used for the sidebar and every soft fill (user bubble, table
+     rows, segmented controls). */
+  --surface: #f8f9fb; /* nord6 lifted */
+  --bg: #eceff4; /* nord6 */
+  --border: #d8dee9; /* nord4 */
+  --text: #2e3440; /* nord0 */
+  --text-muted: #4c566a; /* nord3 */
 
-  --danger: #e0335f;
-  --danger-soft: #fdedf1;
-  --danger-border: #f5c6d3;
+  --danger: #bf616a; /* nord11 */
+  --danger-soft: #f5e4e6;
+  --danger-border: #e6bcc0;
+
+  /* Text/icons on an accent-filled button. */
+  --on-accent: #ffffff;
+  --success: #6b8f52; /* nord14 darkened to read on white */
+  --warn-bg: #f7efdc; /* nord13 tint */
+  --warn-fg: #8a6a1e;
+  /* Ratings (admin) — nord13. */
+  --star: #d9ac4c;
+  --star-off: #d8dee9;
+  --star-bg: #f7efdc;
+  --star-fg: #8a6a1e;
+  /* Translucent bars over scrolling content, and dimmed backdrops. */
+  --glass: rgba(248, 249, 251, 0.9);
+  --overlay: rgba(46, 52, 64, 0.35);
+  --shadow-top: 0 -4px 12px rgba(46, 52, 64, 0.06);
+  /* A card under the pointer (see .section / .how li / .stat). */
+  --shadow-hover: 0 12px 28px rgba(46, 52, 64, 0.16), 0 0 0 3px var(--accent-soft);
+  --admin-hint-bg: #e3ecdc; /* nord14 tint */
+  --admin-hint-fg: #4f6b3c;
+  --admin-hint-link: #6b8f52;
+  /* The left sidebar, and filled buttons (which may need a stronger colour
+     than accent text does). */
+  --sidebar: #e5e9f0; /* nord5 */
+  --accent-fill: var(--accent);
+  --accent-fill-hover: var(--accent-hover);
+  --on-accent-fill: var(--on-accent);
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 20px;
 
-  --shadow-sm: 0 1px 3px rgba(31, 35, 51, 0.06);
-  --shadow-md: 0 8px 24px rgba(31, 35, 51, 0.08);
-  --shadow-lg: 0 20px 56px rgba(76, 60, 140, 0.16);
+  --shadow-sm: 0 1px 3px rgba(46, 52, 64, 0.08);
+  --shadow-md: 0 8px 24px rgba(46, 52, 64, 0.1);
+  --shadow-lg: 0 20px 56px rgba(46, 52, 64, 0.18);
 
   /* Font stacks per language. Apple devices use their system fonts
      (PingFang). Everywhere else Chinese uses the site's own Noto Sans SC
@@ -41,17 +73,73 @@
   --site-header-h: 60px;
 }
 
-/* Admin pages (/admin/…): same look, teal instead of purple, so it's always
-   clear which side you're on. Set by AppLayout. */
+/* Admin pages (/admin/…): same look, Aurora green (nord14) instead of
+   Frost blue, so it's always clear which side you're on. Set by AppLayout. */
 html.admin-area {
-  --accent: #0e8a7d;
-  --accent-hover: #0b7569;
-  --accent-soft: #e3f4f1;
-  --bg: #f3f8f7;
-  --border: #dbe9e6;
+  --accent: #6b8f52; /* nord14 darkened */
+  --accent-hover: #587a43;
+  --accent-soft: #e3ecdc;
 }
 html.admin-area .btn-primary {
-  box-shadow: 0 2px 6px rgba(14, 138, 125, 0.22);
+  box-shadow: 0 2px 6px rgba(107, 143, 82, 0.25);
+}
+
+/* Night theme — the default (index.html sets data-theme before the page
+   renders; ThemeSwitch changes it). Polar Night: content on nord0, the soft
+   fills (--bg) a step lighter on nord1 so the sidebar, bubbles and rows
+   read as raised. Frost blue accent; Aurora green on the admin pages. */
+:root[data-theme='dark'] {
+  --accent: #88c0d0; /* nord8 */
+  --accent-hover: #8fbcbb; /* nord7 */
+  --accent-soft: #3b4c5a; /* nord8 over nord1 */
+  --surface: #2e3440; /* nord0 */
+  --bg: #3b4252; /* nord1 */
+  --border: #434c5e; /* nord2 */
+  --text: #eceff4; /* nord6 */
+  --text-muted: #b4bccb; /* nord4 dimmed (nord3 is too dark for text) */
+  --danger: #bf616a; /* nord11 */
+  --danger-soft: #4a3a44;
+  --danger-border: #6b4952;
+  --on-accent: #2e3440; /* nord0 */
+  --success: #a3be8c; /* nord14 */
+  --warn-bg: #4b4a43;
+  --warn-fg: #ebcb8b; /* nord13 */
+  --star: #ebcb8b; /* nord13 */
+  --star-off: #4c566a; /* nord3 */
+  --star-bg: #4b4a43;
+  --star-fg: #ebcb8b;
+  --glass: rgba(46, 52, 64, 0.9);
+  --overlay: rgba(25, 29, 36, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 20px 56px rgba(0, 0, 0, 0.45);
+  --shadow-top: 0 -6px 18px rgba(0, 0, 0, 0.25);
+  /* Black shadows barely show on Polar Night: add an accent glow. */
+  --shadow-hover: 0 14px 32px rgba(0, 0, 0, 0.5), 0 0 0 3px var(--accent-soft);
+  --admin-hint-bg: #414b47;
+  --admin-hint-fg: #d5e4c8;
+  --admin-hint-link: #a3be8c;
+  /* Sidebar a step darker than the content, like an editor's side bar. */
+  --sidebar: #272c36; /* nord0 darkened */
+  /* Filled buttons: nord10 with light text — the pale nord8 looked
+     washed-out / disabled as a fill. */
+  --accent-fill: #5e81ac; /* nord10 */
+  --accent-fill-hover: #6d8fb8;
+  --on-accent-fill: #eceff4; /* nord6 */
+  color-scheme: dark;
+}
+html.admin-area[data-theme='dark'] {
+  --accent: #a3be8c; /* nord14 */
+  --accent-hover: #b6cca3;
+  --accent-soft: #414b47; /* nord14 over nord1 */
+  --accent-fill: #6b8f52;
+  --accent-fill-hover: #7a9d60;
+}
+:root[data-theme='dark'] .btn-primary {
+  box-shadow: none;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 * {
@@ -299,14 +387,14 @@ textarea::placeholder {
   padding: 13px 18px;
   border-radius: var(--radius-md);
   border: none;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent-fill);
   font-size: 15px;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(108, 92, 231, 0.22);
+  box-shadow: 0 2px 6px rgba(94, 129, 172, 0.25);
 }
 .btn-primary:not(:disabled):hover {
-  background: var(--accent-hover);
+  background: var(--accent-fill-hover);
 }
 .btn-primary:disabled {
   opacity: 0.5;
@@ -327,8 +415,8 @@ textarea::placeholder {
   color: var(--accent);
 }
 .btn-outline.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent-fill);
   border-color: var(--accent);
 }
 /* Must win over the plain :hover rule above (same specificity order,
@@ -337,7 +425,7 @@ textarea::placeholder {
    active language in a picker) sets text color to purple while the
    background stays purple from .active, making the label unreadable. */
 .btn-outline.active:hover {
-  color: #fff;
+  color: var(--on-accent-fill);
 }
 .btn-outline:disabled {
   opacity: 0.55;
@@ -368,7 +456,7 @@ textarea::placeholder {
 }
 .btn-danger:not(:disabled):hover {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-accent-fill);
   border-color: var(--danger);
 }
 
