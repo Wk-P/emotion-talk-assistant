@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +12,8 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
 
-    openai_api_key: str = ""
+    # Local dev reads DEV_OPENAI_API_KEY first; servers without it fall back to OPENAI_API_KEY.
+    openai_api_key: str = Field("", validation_alias=AliasChoices("DEV_OPENAI_API_KEY", "OPENAI_API_KEY"))
     openai_model: str = "gpt-4o-mini"
 
     # Fernet key for encrypting saved records at rest. Generate with:
