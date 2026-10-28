@@ -2,9 +2,11 @@ import json
 import logging
 from typing import Any
 
+import httpx2
 from openai import APIError, AsyncOpenAI, BadRequestError
 
 from app.core.config import get_settings
+from app.core.tls_pinning import openai_ssl_context
 from app.services import ai_params
 
 
@@ -35,6 +37,13 @@ class LLMResponse:
         self.signals = signals or {}
 
 
+# Pinned to the CA that actually anchors api.openai.com's certificate chain
+# (see app/core/tls_pinning.py): defense-in-depth against a certificate
+# forged via an unrelated, compromised CA that the OS trust store would
+# otherwise still accept.
+_HTTP_CLIENT = httpx2.AsyncClient(verify=openai_ssl_context())
+
+
 def _client(params: dict[str, Any] | None = None) -> AsyncOpenAI:
     settings = get_settings()
     params = params or {}
@@ -42,6 +51,7 @@ def _client(params: dict[str, Any] | None = None) -> AsyncOpenAI:
         api_key=settings.openai_api_key,
         timeout=params.get("timeout_seconds") or ai_params.FIELDS["timeout_seconds"][3],
         max_retries=params.get("max_retries", ai_params.FIELDS["max_retries"][3]),
+        http_client=_HTTP_CLIENT,
     )
 
 
