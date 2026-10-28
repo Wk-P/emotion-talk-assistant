@@ -4,5 +4,10 @@
 chat.md
 program-price.md
 
+<<<<<<< HEAD
 # dev-local for dev/dev2 branch
 dev-local.sh
+=======
+# local-only scripts (dev / dev2 / prod), not tracked
+scripts/
+>>>>>>> dev
