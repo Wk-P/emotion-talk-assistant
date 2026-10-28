@@ -1,4 +1,4 @@
-"""Local development only (scripts/dev.sh start): makes sure the test
+"""Local development only (scripts/dev/dev.sh start): makes sure the test
 accounts exist, with the passwords dev.sh prints. Each run resets their
 password and role so what dev.sh shows always works.
 

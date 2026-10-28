@@ -5,5 +5,5 @@ chat.md
 program-price.md
 docs/
 
-# dev-local
-dev-local.sh
+# local-only scripts (dev / dev2 / prod), not tracked
+scripts/
